@@ -1,10 +1,14 @@
 """Pack OpenStreetMap detail for the Taipei street circuit into data/taipei_osm.json.
 
-Input: a directory of raw OSM XML tiles (api.openstreetmap.org/api/0.6/map) covering the map,
-TWD97 E 299000-304600 / N 2766400-2770600. Output coordinates are decimetres east / north of
-TWD97 E 299000 / N 2766400, the same frame as data/taipei.json.
+Input: a directory of OSM XML files covering the map, TWD97 E 299000-304600 / N 2766400-2770600.
+Output coordinates are decimetres east / north of TWD97 E 299000 / N 2766400, the same frame as data/taipei.json.
 
-  python3 tools/prep_taipei_osm.py <tile dir>
+Recommended source, the daily Geofabrik extract of Taiwan (ODbL), cut to the map with osmium-tool:
+  curl -LO https://download.geofabrik.de/asia/taiwan-latest.osm.pbf
+  osmium extract -b 121.48346,25.00303,121.54309,25.04435 -s smart -o area.osm.pbf taiwan-latest.osm.pbf
+  mkdir xml && osmium cat area.osm.pbf -o xml/area.osm
+  python3 tools/prep_taipei_osm.py xml
+Overlapping tiles from api.openstreetmap.org/api/0.6/map also work.
 """
 import glob, json, math, random, sys, xml.etree.ElementTree as ET
 from pyproj import Transformer
@@ -18,7 +22,7 @@ LANE_W, CURB_W = 3.2, 1.5  # Taipei arterial lanes ~3.0-3.5 m; outside lane has 
 GREEN = {'park', 'garden', 'grass', 'forest', 'wood', 'pitch', 'playground', 'recreation_ground', 'village_green', 'meadow', 'scrub', 'golf_course'}
 WOODED = {'forest', 'wood', 'park'}
 
-nodes, ways, rels = {}, {}, []
+nodes, ways, rels = {}, {}, {}
 for fn in sorted(glob.glob(sys.argv[1] + '/*.osm')):
     for ev, el in ET.iterparse(fn, events=('end',)):
         if el.tag == 'node':
@@ -27,7 +31,7 @@ for fn in sorted(glob.glob(sys.argv[1] + '/*.osm')):
         elif el.tag == 'way':
             ways[el.get('id')] = ([n.get('ref') for n in el.findall('nd')], {t.get('k'): t.get('v') for t in el.findall('tag')}); el.clear()
         elif el.tag == 'relation':
-            rels.append(([(m.get('type'), m.get('ref'), m.get('role')) for m in el.findall('member')], {t.get('k'): t.get('v') for t in el.findall('tag')})); el.clear()
+            rels[el.get('id')] = ([(m.get('type'), m.get('ref'), m.get('role')) for m in el.findall('member')], {t.get('k'): t.get('v') for t in el.findall('tag')}); el.clear()  # by id: overlapping tiles repeat relations
 print('osm', len(nodes), 'nodes', len(ways), 'ways', len(rels), 'relations')
 
 proj = {}
@@ -102,7 +106,7 @@ def add_green(r, kind):
 for wid, (nds, t) in ways.items():
     kind = t.get('leisure') if t.get('leisure') in GREEN else t.get('landuse') if t.get('landuse') in GREEN else t.get('natural') if t.get('natural') in GREEN else None
     if kind and nds and nds[0] == nds[-1]: add_green(ring_of(nds), kind)
-for members, t in rels:
+for members, t in rels.values():
     kind = t.get('leisure') if t.get('leisure') in GREEN else t.get('landuse') if t.get('landuse') in GREEN else None
     if kind and t.get('type') == 'multipolygon':
         for typ, ref, role in members:
