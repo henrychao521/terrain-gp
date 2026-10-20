@@ -266,7 +266,7 @@ function finishCity(M) {
 function loadTaipei() {
   if (CITY.taipei) return Promise.resolve(CITY.taipei);
   const get = u => fetch(u).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
-  return Promise.all([get('data/taipei.json'), get('data/taipei_osm.json').catch(() => null), get('models/taipei/tiles.json').catch(() => null)]).then(([d, o, tl]) => {
+  return Promise.all([get('data/taipei.json'), get('data/taipei_osm.json').catch(() => null), get('models/taipei/tiles.json').catch(() => null), loadProps()]).then(([d, o, tl]) => {
     const sx = d.nx * d.d, sz = d.ny * d.d, cell = 10, nx = sx / cell + 1, nz = sz / cell + 1;
     const zr = atob(d.z), mr = atob(d.mask), dz = new Float32Array(d.nx * d.ny), dm = new Uint8Array(d.nx * d.ny);
     for (let k = 0; k < dz.length; k++) { let v = zr.charCodeAt(2 * k) | (zr.charCodeAt(2 * k + 1) << 8); if (v > 32767) v -= 65536; dz[k] = v / 100; dm[k] = mr.charCodeAt(k); }
@@ -892,7 +892,7 @@ function taipeiScenery(grp) {
       const lampG = new THREE.CircleGeometry(0.13, 12), lamps = new THREE.InstancedMesh(lampG, new THREE.MeshBasicMaterial({ color: 0xffffff }), sig.length * 3);
       const sp = [], su = [], si = [];
       const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3();
-      const lampCol = [lin(0x401010), lin(0x40300a), lin(0x30ff80)];
+      const lampCol = [lin(0x401010), lin(0x40300a), lin(0x30ff80)], m4h = new THREE.Matrix4();
       sig.forEach((o, i) => {
         const k = o.k, hr = W.hwR[k], reach = Math.min(hr + W.hwL[k] * (W.two[k] ? 0 : 1), 9), bx = X_(k) - W.lx[k] * (hr + 1.3), bz = W.z[k] - W.lz[k] * (hr + 1.3), by = Hq(bx, bz);
         const yaw = Math.atan2(W.lx[k], W.lz[k]) - Math.PI / 2, fx = -W.lz[k], fz = W.lx[k]; // arm points left (+lateral), signals face oncoming (-forward)
@@ -910,6 +910,11 @@ function taipeiScenery(grp) {
       });
       const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); sg.setAttribute('uv', new THREE.Float32BufferAttribute(su, 2)); sg.setIndex(si); sg.computeVertexNormals();
       poles.castShadow = arms.castShadow = heads.castShadow = true;
+      if (PROPS && PROPS.signal_head) { // Blender head with visors; its lenses face local +z, so turn it to face oncoming traffic
+        const flip = new THREE.Matrix4().makeRotationY(Math.PI);
+        for (const { g, m } of PROPS.signal_head) { const im = new THREE.InstancedMesh(g, m, sig.length); for (let i = 0; i < sig.length; i++) { heads.getMatrixAt(i, m4h); m4h.multiply(flip); im.setMatrixAt(i, m4h); } im.castShadow = true; im.userData.keep = true; grp.add(im); }
+        heads.visible = false;
+      }
       grp.add(poles, arms, heads, lamps, new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ map: atlas, roughness: 0.5, side: THREE.DoubleSide })));
     }
   }
@@ -960,8 +965,10 @@ function waterBarriers(grp) {
   { const p = g.attributes.position; for (let i = 0; i < p.count; i++) if (p.getY(i) > 0.5) p.setZ(i, p.getZ(i) * 0.55); g.computeVertexNormals(); } // narrower at the top
   const im = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ roughness: 0.55 }), spots.length);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1), red = lin(0xc4212a), wht = lin(0xf2f0ea);
-  spots.forEach(([k, sd, off], i) => { const t = off * sd, x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t; p.set(x, Hq(x, z), z); e.set(0, Math.atan2(W.lx[k], W.lz[k]) + Math.PI / 2, 0); q.setFromEuler(e); m.compose(p, q, sc); im.setMatrixAt(i, m); im.setColorAt(i, i & 1 ? wht : red); });
+  const items = [];
+  spots.forEach(([k, sd, off], i) => { const t = off * sd, x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t; p.set(x, Hq(x, z), z); e.set(0, Math.atan2(W.lx[k], W.lz[k]) + Math.PI / 2, 0); q.setFromEuler(e); m.compose(p, q, sc); im.setMatrixAt(i, m); im.setColorAt(i, i & 1 ? wht : red); items.push({ m: m.clone(), kind: 'water_barrier', c: i & 1 ? wht : red }); });
   im.castShadow = im.receiveShadow = true; grp.add(im);
+  if (PROPS && PROPS.water_barrier) nearLod(grp, im, items, { water_barrier: PROPS.water_barrier }, COARSE ? 300 : 900, COARSE ? 80 : 140);
 }
 const TILE_CACHE = new Map();
 // repeated street parts of the Blender tiles, drawn as instances: geometry origin at the base, local x along the wall
@@ -990,7 +997,13 @@ function tileInstances(js, M) {
   }
   return grp;
 }
-const inTile = (M, x, z) => !!(M.tiles && M.tiles.some(t => x >= t.x0 && x <= t.x1 && z >= t.z0 && z <= t.z1));
+// tiles in use for the current circuit (set by buildMeshes); everything else keeps the generated buildings
+const inTile = (M, x, z) => !!(W.activeTiles && W.activeTiles.some(t => x >= t.x0 && x <= t.x1 && z >= t.z0 && z <= t.z1));
+function pickTiles(M, maxD = 1200) {
+  if (!M.tiles || !M.tiles.length) return [];
+  const step = Math.max(1, Math.round(50 / W.ds));
+  return M.tiles.filter(t => { for (let k = 0; k < W.n; k += step) { const dx = Math.max(t.x0 - W.x[k], 0, W.x[k] - t.x1), dz = Math.max(t.z0 - W.z[k], 0, W.z[k] - t.z1); if (dx * dx + dz * dz < maxD * maxD) return true; } return false; });
+}
 function loadTile(file, M) {
   if (!TILE_CACHE.has(file)) TILE_CACHE.set(file, Promise.all([new Promise((ok, fail) => {
     const L = new THREE.GLTFLoader();
@@ -1009,17 +1022,66 @@ function loadTile(file, M) {
   }));
   return TILE_CACHE.get(file);
 }
+// Blender street props (models/props): trees, water barrier, street lamp, signal head; parts = [{ g, m }] per prop
+let PROPS = null;
+function gltfLoader() {
+  const L = new THREE.GLTFLoader();
+  if (THREE.DRACOLoader) {
+    if (!loadTile.draco) { loadTile.draco = new THREE.DRACOLoader(); loadTile.draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/'); loadTile.draco.setWorkerLimit(2); }
+    L.setDRACOLoader(loadTile.draco);
+  }
+  return L;
+}
+function loadProps() {
+  if (!window.THREE.GLTFLoader) return Promise.resolve(null);
+  return new Promise(ok => gltfLoader().load('models/props/props.gltf', g => {
+    const P = {};
+    for (const node of g.scene.children) { const parts = []; node.traverse(o => { if (o.isMesh) { o.material.userData.prop = true; parts.push({ g: o.geometry, m: o.material }); } }); P[node.name] = parts; }
+    ok(PROPS = P);
+  }, undefined, () => ok(null)));
+}
+// near the camera an instanced item shows its Blender model; the cheap stand-in (far mesh) keeps the rest
+const LODS = [];
+function nearLod(grp, far, items, kinds, cap, radius) {
+  // items: [{ m: Matrix4 model transform, kind, c?: Color }]; kinds: { name: parts }
+  const meshes = {};
+  const tinted = items.some(it => it.c); // the colour buffer must exist before the first draw, or the shader is built without it
+  for (const [k, parts] of Object.entries(kinds)) meshes[k] = parts.map(({ g, m }) => { const im = new THREE.InstancedMesh(g, m, cap); if (tinted) im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3); im.count = 0; im.castShadow = im.receiveShadow = true; im.frustumCulled = false; im.userData.keep = true; grp.add(im); return im; });
+  const L = { far, items, meshes, cap, r2: radius * radius, farOrig: far.instanceMatrix.array.slice(), shown: new Set(), at: new THREE.Vector3(1e9, 0, 0), grp };
+  LODS.push(L); return L;
+}
+const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
+function updateLods() {
+  for (let li = LODS.length - 1; li >= 0; li--) {
+    const L = LODS[li];
+    if (L.grp !== W.group) { LODS.splice(li, 1); continue; }
+    if (L.at.distanceToSquared(camera.position) < 25) continue; L.at.copy(camera.position);
+    const cx = camera.position.x, cz = camera.position.z, near = [];
+    L.items.forEach((it, i) => { const e = it.m.elements, d = (e[12] - cx) ** 2 + (e[14] - cz) ** 2; if (d < L.r2) near.push([d, i]); });
+    near.sort((a, b) => a[0] - b[0]); if (near.length > L.cap) near.length = L.cap;
+    const now = new Set(near.map(n => n[1])), arr = L.far.instanceMatrix.array, cnt = {};
+    for (const i of L.shown) if (!now.has(i)) for (let j = 0; j < 16; j++) arr[i * 16 + j] = L.farOrig[i * 16 + j];
+    for (const i of now) ZERO.toArray(arr, i * 16);
+    L.far.instanceMatrix.needsUpdate = true; L.shown = now;
+    for (const k in L.meshes) cnt[k] = 0;
+    for (const i of now) { const it = L.items[i], j = cnt[it.kind]++; for (const im of L.meshes[it.kind]) { im.setMatrixAt(j, it.m); if (it.c) im.setColorAt(j, it.c); } }
+    for (const k in L.meshes) for (const im of L.meshes[k]) { im.count = cnt[k]; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
+  }
+}
 let tileT = 0;
 function updateTiles(dt) {
-  if (!W.tiles || !W.tiles.length || (tileT -= dt) > 0) return; tileT = 0.3;
+  if ((tileT -= dt) > 0) return; tileT = 0.3;
+  updateLods();
+  if (!W.tiles || !W.tiles.length) return;
   for (const T of W.tiles) {
     const near = Math.hypot(camera.position.x - T.cx, camera.position.z - T.cz) - T.r < 450;
     if (near !== T.near) { T.near = near; for (const o of T.sc.userData.detail) o.visible = near; }
   }
 }
 function buildMeshes() {
-  if (W.group) { scene.remove(W.group); W.group.traverse(o => { if (o.userData.tile) return; if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => m.dispose()); }); }
+  if (W.group) { scene.remove(W.group); W.group.traverse(o => { if (o.userData.tile || o.userData.keep) return; if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => m.dispose()); }); }
   const grp = W.group = new THREE.Group(); scene.add(grp);
+  W.activeTiles = W.real ? pickTiles(W.M) : [];
   const M = W.M, NX = W.nx, NZ = W.nz, cx = W.sx / (NX - 1), cz = W.sz / (NZ - 1), H = W.H, D = W.dist, hw = setup.width / 2, n = W.n, X = W.x, Z = W.z;
   const nrm = new THREE.Vector3();
   // --- ground
@@ -1226,7 +1288,7 @@ function buildMeshes() {
     W.bldKept = kept;
     // nearest tiles to the start line first; window cages, signs and other street detail only on tiles near the camera
     W.tiles = [];
-    const order = (M.tiles || []).map(t => ({ t, d: Math.hypot((t.x0 + t.x1) / 2 - X[0], (t.z0 + t.z1) / 2 - Z[0]) })).sort((a, b) => a.d - b.d);
+    const order = W.activeTiles.map(t => ({ t, d: Math.hypot((t.x0 + t.x1) / 2 - X[0], (t.z0 + t.z1) / 2 - Z[0]) })).sort((a, b) => a.d - b.d);
     for (const { t } of order) loadTile(t.file, M).then(sc => { if (W.group !== grp) return; grp.add(sc); W.tiles.push({ sc, cx: (t.x0 + t.x1) / 2, cz: (t.z0 + t.z1) / 2, r: Math.hypot(t.x1 - t.x0, t.z1 - t.z0) / 2, near: null }); }).catch(e => console.warn('tile', t.file, e));
     const inst = (list, geo, mat, set) => { if (!list.length) return; const im = new THREE.InstancedMesh(geo, mat, list.length), mm = new THREE.Matrix4(), qq = new THREE.Quaternion(), vv = new THREE.Vector3(), ss = new THREE.Vector3(), ee = new THREE.Euler(); list.forEach((it, i) => { set(it, vv, ee, ss); qq.setFromEuler(ee); mm.compose(vv, qq, ss); im.setMatrixAt(i, mm); }); im.castShadow = im.receiveShadow = true; grp.add(im); };
     const tankG = new THREE.CylinderGeometry(0.75, 0.75, 1.4, 12); tankG.translate(0, 1.6, 0);
@@ -1249,7 +1311,7 @@ function buildMeshes() {
       sc.set(wid, hgt, wid); ps.set(x, Hq(x, z) - 0.3, z); eu.set(0, tr() * Math.PI, 0); q4.setFromEuler(eu); m4.compose(ps, q4, sc);
       trees.setMatrixAt(i, m4); tc.setHSL(0.22 + tr() * 0.08, 0.25, 0.42 + tr() * 0.2); trees.setColorAt(i, tc);
     });
-    q4.identity(); trees.castShadow = true; trees.receiveShadow = true; grp.add(trees);
+    q4.identity(); trees.castShadow = true; trees.receiveShadow = true; grp.add(trees); return trees;
   };
   if (!W.city && qLevel !== 'low') { // grass tufts in the verges, kept out of the gravel and off the asphalt
     const cnt = qLevel === 'high' ? 18000 : 8000, tufts = new THREE.InstancedMesh(crossGeo(0.85), frontLit(new THREE.MeshLambertMaterial({ map: TEX.tuft, alphaTest: 0.5, side: THREE.DoubleSide })), cnt);
@@ -1272,7 +1334,15 @@ function buildMeshes() {
       if (gridSample(D, x, z) < gridSample(HWg, x, z) + 1.4) continue; // keep the carriageway and barrier line clear
       (pk ? park : street).push([x, z, pk ? 0.9 + tr() * 0.5 : 0.75 + tr() * 0.35]);
     }
-    placeTrees(street, true); placeTrees(park, true);
+    const fs = placeTrees(street, true), fp = placeTrees(park, true);
+    if (PROPS && PROPS.tree_camphor) {
+      const lr = mulberry32(8), kinds = { tree_camphor: PROPS.tree_camphor, tree_banyan: PROPS.tree_banyan, tree_luan: PROPS.tree_luan }, mk = (x, z, s) => { eu.set(0, lr() * Math.PI * 2, 0); q4.setFromEuler(eu); return new THREE.Matrix4().compose(new THREE.Vector3(x, Hq(x, z) - 0.2, z), q4.clone(), new THREE.Vector3(s, s * (0.9 + lr() * 0.2), s)); };
+      const tint = () => new THREE.Color().setHSL(0.25, 0.1, 0.45 + lr() * 0.1).multiplyScalar(2.1);
+      const cap = COARSE ? 350 : 1200, R = COARSE ? 110 : 220;
+      if (fs) nearLod(grp, fs, street.map(([x, z, s]) => { const u = lr(); return { m: mk(x, z, s), kind: u < 0.45 ? 'tree_camphor' : u < 0.8 ? 'tree_luan' : 'tree_banyan', c: tint() }; }), kinds, cap, R);
+      if (fp) nearLod(grp, fp, park.map(([x, z, s]) => ({ m: mk(x, z, s), kind: lr() < 0.5 ? 'tree_banyan' : 'tree_camphor', c: tint() })), kinds, cap >> 1, R);
+      q4.identity();
+    }
     taipeiScenery(grp);
   }
   if (W.city && !W.real) {
@@ -1301,7 +1371,10 @@ function buildMeshes() {
     const heads = new THREE.InstancedMesh(headG, new THREE.MeshStandardMaterial({ color: lin(0x4a4d52), roughness: 0.5, metalness: 0.5, emissive: lin(0x333020) }), lamps.length);
     const e = new THREE.Euler();
     lamps.forEach(([k, sd], i) => { const off = W.real ? (sd > 0 ? W.hwL[k] : W.hwR[k]) + 2.4 : (isFinite(W.wall) ? W.wall : (sd > 0 ? W.hwL[k] : W.hwR[k])) + 1.6, x = X[k] + W.lx[k] * off * sd, z = Z[k] + W.lz[k] * off * sd; ps.set(x, Hq(x, z), z); e.set(0, Math.atan2(W.lz[k] * sd, -W.lx[k] * sd), 0); q4.setFromEuler(e); sc.set(1, 1, 1); m4.compose(ps, q4, sc); poles.setMatrixAt(i, m4); heads.setMatrixAt(i, m4); });
-    poles.castShadow = heads.castShadow = true; grp.add(poles, heads); q4.identity();
+    poles.castShadow = heads.castShadow = true; q4.identity();
+    if (PROPS && PROPS.street_lamp) { // Blender lamp: same transforms, arm along local +x over the road
+      for (const { g, m } of PROPS.street_lamp) { const im = new THREE.InstancedMesh(g, m, lamps.length); for (let i = 0; i < lamps.length; i++) { poles.getMatrixAt(i, m4); im.setMatrixAt(i, m4); } im.castShadow = true; im.userData.keep = true; grp.add(im); }
+    } else grp.add(poles, heads);
   } else {
     const spots = [];
     for (let tries = 0; tries < 40000 && spots.length < (qLevel === 'low' ? 1500 : 3200); tries++) {
