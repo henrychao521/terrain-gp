@@ -1,6 +1,11 @@
 """Build one Taipei scenery tile in Blender and export it as glTF for Terrain GP.
 
-  blender -b --factory-startup --python tools/blender/build_tile.py -- <data dir> <texture dir> X0 X1 Y0 Y1 <out.glb>
+  blender -b --factory-startup --python tools/blender/build_tile.py -- <data dir> <texture dir> X0 X1 Y0 Y1 <out.gltf>
+
+Exports glTF with external textures in tex/ next to the file, so every tile shares one copy of each texture.
+Repeated small parts (window cages, AC units, arcade columns, rooftop tanks) are not modelled per copy: their
+positions go to <out>.inst.json (int16 decimetres from the tile corner, yaw in 1e-4 rad, base64) and the game draws
+them as instanced meshes. Signboards stay in the glTF and carry the node extra "detail" so distant tiles hide them.
 
 X/Y: metres east / north of TWD97 E 299000 / N 2766400 (the frame of data/taipei.json).
 Blender axes: x east, y north, z up, origin at the map centre; glTF export turns that into the game's world frame.
@@ -41,10 +46,16 @@ MAT['signboards'] = img_mat('signboards', 'signboards', rough=0.4, emit=0.8)
 MAT['tile_blue'] = img_mat('tile_blue', 'tile_blue', rough=0.3); MAT['tile_gold'] = img_mat('tile_gold', 'tile_gold', rough=0.3); MAT['tile_orange'] = img_mat('tile_orange', 'tile_orange', rough=0.35)
 for k, rgb, r, mt in [('cage', (0.55, 0.56, 0.55), 0.5, 0.6), ('ac', (0.86, 0.86, 0.83), 0.6, 0), ('ceiling', (0.62, 0.6, 0.56), 0.9, 0), ('column', (0.7, 0.68, 0.63), 0.8, 0),
                       ('tank', (0.82, 0.84, 0.86), 0.3, 0.8), ('marble', (0.93, 0.92, 0.89), 0.35, 0), ('stone', (0.62, 0.58, 0.52), 0.85, 0), ('lacquer', (0.56, 0.1, 0.08), 0.45, 0),
-                      ('gold', (0.85, 0.65, 0.2), 0.3, 0.8), ('dark', (0.08, 0.07, 0.06), 0.9, 0), ('stairs', (0.85, 0.84, 0.8), 0.6, 0), ('lattice', (0.42, 0.12, 0.08), 0.6, 0)]:
+                      ('gold', (0.85, 0.65, 0.2), 0.3, 0.8), ('dark', (0.08, 0.07, 0.06), 0.9, 0), ('stairs', (0.85, 0.84, 0.8), 0.6, 0), ('lattice', (0.42, 0.12, 0.08), 0.6, 0),
+                      ('deck', (0.33, 0.33, 0.34), 0.85, 0), ('concrete', (0.72, 0.71, 0.68), 0.8, 0)]:
     MAT[k] = col_mat(k, rgb, r, mt)
 
 # ---------- mesh builder: one bmesh per material keeps the export to one primitive per material
+DETAIL = {'signboards'}
+INST = {'cage': [], 'ac': [], 'column': [], 'tank': []}
+def inst(kind, bx, by, z, yaw):  # blender coords -> int16 decimetres from the tile's south-west corner
+    ox, oy = B(X0, Y0); INST[kind].extend((round((bx - ox) * 10), round((by - oy) * 10), round(z * 10), round(((yaw + math.pi) % (2 * math.pi) - math.pi) * 10000)))
+WALL_FACES = (0, 1, 3, 5)  # box faces kept for things fixed to a wall: the two ends, the front and the underside
 class Builder:
     def __init__(self): self.bm = {}; self.uv = {}
     def _b(self, mat):
@@ -57,12 +68,12 @@ class Builder:
         if uvs:
             for l, uv in zip(f.loops, uvs): l[self.uv[mat]].uv = uv
     def quad(self, mat, a, b2, c, d, uvs=None): self.face(mat, [a, b2, c, d], uvs)
-    def box(self, mat, cx, cy, cz, sx, sy, sz, yaw=0.0, uvscale=1.0):
+    def box(self, mat, cx, cy, cz, sx, sy, sz, yaw=0.0, uvscale=1.0, faces=None):
         c, s = math.cos(yaw), math.sin(yaw)
         P = lambda x, y, z: (cx + x * c - y * s, cy + x * s + y * c, cz + z)
         hx, hy = sx / 2, sy / 2; v = [P(-hx, -hy, 0), P(hx, -hy, 0), P(hx, hy, 0), P(-hx, hy, 0), P(-hx, -hy, sz), P(hx, -hy, sz), P(hx, hy, sz), P(-hx, hy, sz)]
-        for f in ((0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7), (4, 5, 6, 7), (3, 2, 1, 0)):
-            self.face(mat, [v[i] for i in f], [(0, 0), (uvscale, 0), (uvscale, uvscale), (0, uvscale)])
+        for fi, f in enumerate(((0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7), (4, 5, 6, 7), (3, 2, 1, 0))):
+            if faces is None or fi in faces: self.face(mat, [v[i] for i in f], [(0, 0), (uvscale, 0), (uvscale, uvscale), (0, uvscale)])
     def cyl(self, mat, cx, cy, z0, r, h, seg=10, r2=None):
         r2 = r if r2 is None else r2
         for i in range(seg):
@@ -70,10 +81,11 @@ class Builder:
             self.quad(mat, (cx + r * math.cos(a0), cy + r * math.sin(a0), z0), (cx + r * math.cos(a1), cy + r * math.sin(a1), z0), (cx + r2 * math.cos(a1), cy + r2 * math.sin(a1), z0 + h), (cx + r2 * math.cos(a0), cy + r2 * math.sin(a0), z0 + h), [(i / seg, 0), ((i + 1) / seg, 0), ((i + 1) / seg, 1), (i / seg, 1)])
         self.face(mat, [(cx + r2 * math.cos(2 * math.pi * i / seg), cy + r2 * math.sin(2 * math.pi * i / seg), z0 + h) for i in range(seg)])
     def to_object(self, name):
-        me = bpy.data.meshes.new(name); objs = []
+        objs = []
         for mat, b in self.bm.items():
             m = bpy.data.meshes.new(f'{name}_{mat}'); b.normal_update(); b.to_mesh(m); m.materials.append(MAT[mat])
             o = bpy.data.objects.new(f'{name}_{mat}', m); bpy.context.scene.collection.objects.link(o); objs.append(o)
+            if mat in DETAIL: o['detail'] = 1
         return objs
 
 def ccw(ring):
@@ -106,7 +118,12 @@ def street_dist(X, Y):
     return best
 
 # ---------- landmarks first, so ordinary buildings inside them are skipped
-LM = [l for l in O['landmarks'] if any(inside(l['p'][2 * i] / 10, l['p'][2 * i + 1] / 10) for i in range(len(l['p']) // 2))]
+_groups = {}
+for i, l in enumerate(O['landmarks']): _groups.setdefault(l['n'] or f'#{i}', []).append(l)
+LM = []
+for g in _groups.values():  # a landmark goes to the one tile that holds the centroid of all its parts
+    xs = [l['p'][2 * i] / 10 for l in g for i in range(len(l['p']) // 2)]; ys = [l['p'][2 * i + 1] / 10 for l in g for i in range(len(l['p']) // 2)]
+    if inside(sum(xs) / len(xs), sum(ys) / len(ys)): LM.extend(g)
 def ring_of(p): return ccw([(p[2 * i] / 10, p[2 * i + 1] / 10) for i in range(len(p) // 2)])
 def pip(x, y, r):
     c = False
@@ -298,7 +315,7 @@ def build_buildings():
                     for k in range(int(L // 4.2) + 1):
                         f = min(1, (k * 4.2 + 0.3) / max(L, 0.1)); px, py = ax + (bx - ax) * f, ay + (by - ay) * f
                         ux, uy = (bx - ax) / L, (by - ay) / L; px -= uy * 0.35; py += ux * 0.35
-                        bld.box('column', *B(px, py), base, 0.55, 0.55, 4.5 + 1.5, math.atan2(uy, ux))
+                        inst('column', *B(px, py), base, math.atan2(uy, ux))
             # street-face details on walk-ups: window cages, AC units, vertical signboards
             if lowrise and street[i] and L > 4:
                 ux, uy = (bx - ax) / L, (by - ay) / L; nx_, ny_ = uy, -ux; yaw = math.atan2(uy, ux)
@@ -308,8 +325,8 @@ def build_buildings():
                     for k in range(int(L // 3)):
                         if R.random() > 0.55: continue
                         f = (k + 0.5) * 3 / L; px, py = ax + (bx - ax) * f + nx_ * 0.2, ay + (by - ay) * f + ny_ * 0.2
-                        bld.box('cage', *B(px, py), zf + 0.6, 2.0, 0.4, 1.7, yaw); stats['cages'] += 1
-                        if R.random() < 0.35: bld.box('ac', *B(px + ux * 0.9 + nx_ * 0.25, py + uy * 0.9 + ny_ * 0.25), zf + 0.15, 0.8, 0.35, 0.5, yaw)
+                        inst('cage', *B(px, py), zf + 0.6, yaw); stats['cages'] += 1
+                        if R.random() < 0.35: inst('ac', *B(px + ux * 0.9 + nx_ * 0.25, py + uy * 0.9 + ny_ * 0.25), zf + 0.15, yaw)
                 if h < 30:
                     for k in range(int(L // 7)):
                         if R.random() > 0.6: continue
@@ -329,25 +346,65 @@ def build_buildings():
         # flat roof, rooftop water tank and stair hut
         bld.face('roof', [(*B(x, y), top) for x, y in ring], [((x - X0) / 8, (y - Y0) / 8) for x, y in ring])
         if h < 60 and R.random() < 0.6:
-            bld.cyl('tank', *B(gx + R.uniform(-2, 2), gy + R.uniform(-2, 2)), top + 0.3, 0.75, 1.4, 10)
+            inst('tank', *B(gx + R.uniform(-2, 2), gy + R.uniform(-2, 2)), top + 0.3, 0.0)
         if h < 60 and R.random() < 0.4:
             bld.box('facade_concrete', *B(gx, gy), top, 3.0, 2.6, 2.8, R.uniform(0, math.pi))
         stats['n'] += 1
     print('buildings', stats)
     return bld.to_object('buildings')
 
-lm_objs = build_landmarks(); cut_gate_passages(lm_objs); b_objs = build_buildings()
+def build_bridges():
+    bld = Builder(); cnt = 0
+    for br in O.get('bridges', []):
+        c, lay, w, g0, g1 = br[0], br[1], br[2] / 10, br[3], br[4]
+        pts = [(br[6 + 2 * i] / 10, br[7 + 2 * i] / 10) for i in range((len(br) - 6) // 2)]
+        S = [0.0]
+        for a, b2 in zip(pts, pts[1:]): S.append(S[-1] + math.dist(a, b2))
+        L, full = S[-1], 6.5 * lay
+        def hgt(sv):  # ramps fall at 5 % toward an end that meets a surface street
+            h = full
+            if g0: h = min(h, sv * 0.05)
+            if g1: h = min(h, (L - sv) * 0.05)
+            return max(h, 0.6)
+        for i in range(len(pts) - 1):
+            (ax, ay), (bx, by) = pts[i], pts[i + 1]
+            if not inside((ax + bx) / 2, (ay + by) / 2): continue
+            ln = math.dist(pts[i], pts[i + 1])
+            if ln < 0.5: continue
+            ux, uy = (bx - ax) / ln, (by - ay) / ln; nx_, ny_ = -uy, ux; hw = w / 2
+            za, zb = dem(ax, ay) + hgt(S[i]), dem(bx, by) + hgt(S[i + 1])
+            A = lambda off, X, Y: B(X + nx_ * off, Y + ny_ * off)
+            # deck top, underside, edges and parapets
+            bld.quad('deck', (*A(-hw, ax, ay), za), (*A(-hw, bx, by), zb), (*A(hw, bx, by), zb), (*A(hw, ax, ay), za))
+            bld.quad('concrete', (*A(hw, ax, ay), za - 1.2), (*A(hw, bx, by), zb - 1.2), (*A(-hw, bx, by), zb - 1.2), (*A(-hw, ax, ay), za - 1.2))
+            for off in (-hw, hw):
+                o2 = off + (0.25 if off > 0 else -0.25)
+                bld.quad('concrete', (*A(off, ax, ay), za - 1.2), (*A(off, bx, by), zb - 1.2), (*A(off, bx, by), zb + 0.9), (*A(off, ax, ay), za + 0.9))
+                bld.quad('concrete', (*A(o2, ax, ay), za - 1.2), (*A(o2, bx, by), zb - 1.2), (*A(o2, bx, by), zb + 0.9), (*A(o2, ax, ay), za + 0.9))
+                bld.quad('concrete', (*A(off, ax, ay), za + 0.9), (*A(off, bx, by), zb + 0.9), (*A(o2, bx, by), zb + 0.9), (*A(o2, ax, ay), za + 0.9))
+            # piers every 30 m where the deck is high enough to need them
+            for k in range(int(S[i] // 30) + 1, int(S[i + 1] // 30) + 1):
+                f = (k * 30 - S[i]) / ln; px, py = ax + (bx - ax) * f, ay + (by - ay) * f; zt = za + (zb - za) * f - 1.2; zg = dem(px, py) - 0.5
+                if zt - zg > 2.5:
+                    bld.box('concrete', *B(px, py), zg, 1.8, min(w * 0.6, 6.0), zt - zg, math.atan2(uy, ux))
+                    bld.box('concrete', *B(px, py), zt - 1.0, 1.8, w * 0.9, 1.0, math.atan2(uy, ux))  # pier cap
+            cnt += 1
+    print('bridge segments', cnt)
+    return bld.to_object('bridges')
+
+lm_objs = build_landmarks(); cut_gate_passages(lm_objs); b_objs = build_buildings() + build_bridges()
 
 # ---------- ambient occlusion baked into vertex colours (needs a ground to occlude against; the ground is not exported)
 bpy.ops.mesh.primitive_plane_add(size=1); ground = bpy.context.active_object; ground.name = 'ao_ground'
 gx0, gy0 = B(X0, Y0); gx1, gy1 = B(X1, Y1); ground.scale = ((gx1 - gx0) + 200, (gy1 - gy0) + 200, 1); ground.location = ((gx0 + gx1) / 2, (gy0 + gy1) / 2, min(dem(X0, Y0), dem(X1, Y1)) - 0.2)
 scn = bpy.context.scene; scn.render.engine = 'CYCLES'; scn.cycles.samples = 24
-try:
-    prefs = bpy.context.preferences.addons['cycles'].preferences; prefs.compute_device_type = 'METAL'; prefs.get_devices(); [setattr(d, 'use', True) for d in prefs.devices]; scn.cycles.device = 'GPU'
-except Exception as e: print('cpu bake', e)
+if os.environ.get('TGP_BAKE_GPU') == '1':  # parallel Blender instances deadlock on Metal's shader cache, so the GPU is opt-in
+    try:
+        prefs = bpy.context.preferences.addons['cycles'].preferences; prefs.compute_device_type = 'METAL'; prefs.get_devices(); [setattr(d, 'use', True) for d in prefs.devices]; scn.cycles.device = 'GPU'
+    except Exception as e: print('cpu bake', e)
 scn.world = bpy.data.worlds.new('w'); scn.world.light_settings.distance = 12.0
 for o in lm_objs + b_objs:
-    o.data.color_attributes.new('Col', 'BYTE_COLOR', 'CORNER'); o.data.color_attributes.active_color = o.data.color_attributes['Col']
+    o.data.color_attributes.new('Col', 'BYTE_COLOR', 'POINT'); o.data.color_attributes.active_color = o.data.color_attributes['Col']
     bpy.ops.object.select_all(action='DESELECT'); o.select_set(True); bpy.context.view_layer.objects.active = o
     bpy.ops.object.bake(type='AO', target='VERTEX_COLORS')
 bpy.data.objects.remove(ground)
@@ -355,7 +412,10 @@ bpy.data.objects.remove(ground)
 # ---------- export
 bpy.ops.object.select_all(action='SELECT')
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
-bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLB', use_selection=True, export_yup=True, export_apply=True,
-                          export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=6,
+bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLTF_SEPARATE', export_texture_dir='tex', use_selection=True, export_yup=True, export_apply=True,
+                          export_extras=True, export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=8, export_draco_normal_quantization=8,
                           export_image_format='WEBP', export_vertex_color='ACTIVE', export_all_vertex_colors=False)
-print('wrote', OUT, os.path.getsize(OUT) // 1024, 'KB')
+import struct
+json.dump({'x0': X0, 'y0': Y0, **{k: base64.b64encode(struct.pack(f'<{len(v)}h', *v)).decode() for k, v in INST.items()}}, open(OUT[:-5] + '.inst.json', 'w'))
+binf = OUT[:-5] + '.bin'
+print('wrote', OUT, (os.path.getsize(OUT) + (os.path.getsize(binf) if os.path.exists(binf) else 0)) // 1024, 'KB')

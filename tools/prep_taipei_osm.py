@@ -67,6 +67,24 @@ for wid, (nds, t) in ways.items():
         if t.get('name'): road_names_at.setdefault(n, set()).add(t['name'])
 print('roads', len(roads))
 
+# --- elevated roads and bridges (drawn by the Blender tiles): class, layer, width, whether each end meets a surface street
+BRIDGE_CLS = dict(CLS, motorway=0, motorway_link=5)
+ground_nodes = set()
+for wid, (nds, t) in ways.items():
+    if t.get('highway') in BRIDGE_CLS and not t.get('bridge') and t.get('layer', '0') in ('0', None) and t.get('tunnel') is None: ground_nodes.update(nds)
+bridges = []
+for wid, (nds, t) in ways.items():
+    c = BRIDGE_CLS.get(t.get('highway'))
+    if c is None or not t.get('bridge') or t.get('bridge') == 'no': continue
+    pts = [xy(n) for n in nds if n in nodes]
+    if len(pts) < 2 or not any(inside(p) for p in pts): continue
+    one = t.get('oneway') in ('yes', '1') or c in (0, 5)
+    ln = int(num(t.get('lanes'), 0) or 0) or LANES[min(c, 5)][1 if one else 0]
+    w = num(t.get('width')) or ln * LANE_W + 1.0
+    lay = max(1, int(num(t.get('layer'), 1) or 1))
+    bridges.append([c, lay, dm(w), 1 if nds[0] in ground_nodes else 0, 1 if nds[-1] in ground_nodes else 0, t.get('name', '')] + flat(pts))
+print('bridges', len(bridges))
+
 # --- traffic lights (with the names of the streets that meet there) and crossings
 signals, crossings = [], []
 for nid, (lo, la, t) in nodes.items():
@@ -158,6 +176,6 @@ for wid, r, t in outlines:
 print('landmark outlines', len(outlines), 'parts', len(parts), 'styled', sum(1 for p in parts if p['n'] in STYLE and p['rs'] != 'flat'))
 
 out = {'source': 'OpenStreetMap', 'credits': '道路、樹木、號誌、公園與地標：© OpenStreetMap contributors（ODbL）',
-       'roads': roads, 'signals': signals, 'crossings': crossings, 'green': green, 'trees': trees, 'landmarks': parts}
+       'roads': roads, 'bridges': bridges, 'signals': signals, 'crossings': crossings, 'green': green, 'trees': trees, 'landmarks': parts}
 json.dump(out, open('data/taipei_osm.json', 'w'), ensure_ascii=False, separators=(',', ':'))
 import os; print('wrote data/taipei_osm.json', os.path.getsize('data/taipei_osm.json') // 1024, 'KB')

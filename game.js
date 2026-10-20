@@ -964,17 +964,58 @@ function waterBarriers(grp) {
   im.castShadow = im.receiveShadow = true; grp.add(im);
 }
 const TILE_CACHE = new Map();
+// repeated street parts of the Blender tiles, drawn as instances: geometry origin at the base, local x along the wall
+let TILE_PARTS = null;
+function tileParts() {
+  if (TILE_PARTS) return TILE_PARTS;
+  const grille = canvasTex(128, 128, (g, w, h) => { g.clearRect(0, 0, w, h); g.strokeStyle = '#d4d6d4'; g.lineWidth = 7; g.strokeRect(4, 4, w - 8, h - 8); g.lineWidth = 4; for (let x = 20; x < w; x += 18) { g.beginPath(); g.moveTo(x, 4); g.lineTo(x, h - 4); g.stroke(); } g.beginPath(); g.moveTo(4, h / 2); g.lineTo(w - 4, h / 2); g.stroke(); }, true, false);
+  const geo = (g, y) => { g.translate(0, y, 0); return g; };
+  TILE_PARTS = {
+    cage: { g: geo(new THREE.BoxGeometry(2.0, 1.7, 0.4), 0.85), m: new THREE.MeshStandardMaterial({ map: grille, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.45, metalness: 0.6 }) },
+    ac: { g: geo(new THREE.BoxGeometry(0.8, 0.5, 0.35), 0.25), m: new THREE.MeshStandardMaterial({ color: lin(0xdcdcd4), roughness: 0.6 }) },
+    column: { g: geo(new THREE.BoxGeometry(0.55, 6.0, 0.55), 3.0), m: new THREE.MeshStandardMaterial({ color: lin(0xb4ae9f), roughness: 0.85 }) },
+    tank: { g: geo(new THREE.CylinderGeometry(0.75, 0.75, 1.4, 10), 0.7), m: new THREE.MeshStandardMaterial({ color: lin(0xd2d6da), roughness: 0.3, metalness: 0.8 }) },
+  };
+  return TILE_PARTS;
+}
+function tileInstances(js, M) {
+  const grp = new THREE.Group(), parts = tileParts(), ox = js.x0 - M.sx / 2, oz = M.sz / 2 - js.y0, m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1);
+  for (const k of Object.keys(parts)) {
+    if (!js[k]) continue;
+    const bin = atob(js[k]), a = new Int16Array(bin.length / 2); for (let i = 0; i < a.length; i++) a[i] = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8);
+    const n = a.length / 4; if (!n) continue;
+    const im = new THREE.InstancedMesh(parts[k].g, parts[k].m, n);
+    for (let i = 0; i < n; i++) { p.set(ox + a[i * 4] / 10, a[i * 4 + 2] / 10, oz - a[i * 4 + 1] / 10); e.set(0, a[i * 4 + 3] / 10000, 0); q.setFromEuler(e); m.compose(p, q, sc); im.setMatrixAt(i, m); }
+    im.castShadow = k !== 'cage'; im.receiveShadow = true; im.userData.tile = true; im.userData.detail = true; grp.add(im);
+  }
+  return grp;
+}
 const inTile = (M, x, z) => !!(M.tiles && M.tiles.some(t => x >= t.x0 && x <= t.x1 && z >= t.z0 && z <= t.z1));
-function loadTile(file) {
-  if (!TILE_CACHE.has(file)) TILE_CACHE.set(file, new Promise((ok, fail) => {
+function loadTile(file, M) {
+  if (!TILE_CACHE.has(file)) TILE_CACHE.set(file, Promise.all([new Promise((ok, fail) => {
     const L = new THREE.GLTFLoader();
-    if (THREE.DRACOLoader) { const dr = new THREE.DRACOLoader(); dr.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.1/'); L.setDRACOLoader(dr); }
+    if (THREE.DRACOLoader) { // one decoder (and worker pool) for every tile, matching Blender 5's Draco 1.5 encoder
+      if (!loadTile.draco) { loadTile.draco = new THREE.DRACOLoader(); loadTile.draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/'); loadTile.draco.setWorkerLimit(2); }
+      L.setDRACOLoader(loadTile.draco);
+    }
     L.load(file, g => {
-      g.scene.traverse(o => { o.userData.tile = true; if (o.isMesh) { o.castShadow = o.receiveShadow = true; const m = o.material; if (m.map) m.map.anisotropy = 4; } });
-      ok(g.scene);
+      const detail = [];
+      g.scene.traverse(o => { o.userData.tile = true; if (o.userData.detail) detail.push(o); if (o.isMesh) { o.castShadow = o.receiveShadow = true; const m = o.material; if (m.map) m.map.anisotropy = 4; } });
+      g.scene.userData.detail = detail; ok(g.scene);
     }, undefined, fail);
+  }), fetch(file.replace(/\.gltf$/, '.inst.json')).then(r => r.ok ? r.json() : null).catch(() => null)]).then(([sc, js]) => {
+    if (js) { const ig = tileInstances(js, M); ig.userData.tile = true; sc.add(ig); sc.userData.detail.push(...ig.children); }
+    return sc;
   }));
   return TILE_CACHE.get(file);
+}
+let tileT = 0;
+function updateTiles(dt) {
+  if (!W.tiles || !W.tiles.length || (tileT -= dt) > 0) return; tileT = 0.3;
+  for (const T of W.tiles) {
+    const near = Math.hypot(camera.position.x - T.cx, camera.position.z - T.cz) - T.r < 450;
+    if (near !== T.near) { T.near = near; for (const o of T.sc.userData.detail) o.visible = near; }
+  }
 }
 function buildMeshes() {
   if (W.group) { scene.remove(W.group); W.group.traverse(o => { if (o.userData.tile) return; if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => m.dispose()); }); }
@@ -1183,7 +1224,10 @@ function buildMeshes() {
       const rm = new THREE.Mesh(rg, roofM); rm.castShadow = rm.receiveShadow = true; grp.add(rm);
     }
     W.bldKept = kept;
-    for (const t of M.tiles || []) loadTile(t.file).then(sc => { if (W.group === grp) grp.add(sc); }).catch(e => console.warn('tile', t.file, e));
+    // nearest tiles to the start line first; window cages, signs and other street detail only on tiles near the camera
+    W.tiles = [];
+    const order = (M.tiles || []).map(t => ({ t, d: Math.hypot((t.x0 + t.x1) / 2 - X[0], (t.z0 + t.z1) / 2 - Z[0]) })).sort((a, b) => a.d - b.d);
+    for (const { t } of order) loadTile(t.file, M).then(sc => { if (W.group !== grp) return; grp.add(sc); W.tiles.push({ sc, cx: (t.x0 + t.x1) / 2, cz: (t.z0 + t.z1) / 2, r: Math.hypot(t.x1 - t.x0, t.z1 - t.z0) / 2, near: null }); }).catch(e => console.warn('tile', t.file, e));
     const inst = (list, geo, mat, set) => { if (!list.length) return; const im = new THREE.InstancedMesh(geo, mat, list.length), mm = new THREE.Matrix4(), qq = new THREE.Quaternion(), vv = new THREE.Vector3(), ss = new THREE.Vector3(), ee = new THREE.Euler(); list.forEach((it, i) => { set(it, vv, ee, ss); qq.setFromEuler(ee); mm.compose(vv, qq, ss); im.setMatrixAt(i, mm); }); im.castShadow = im.receiveShadow = true; grp.add(im); };
     const tankG = new THREE.CylinderGeometry(0.75, 0.75, 1.4, 12); tankG.translate(0, 1.6, 0);
     inst(props.tank, tankG, new THREE.MeshStandardMaterial({ color: lin(0xd5d9dd), roughness: 0.3, metalness: 0.8 }), ([x, y, z, sc], v, e, sv) => { v.set(x, y, z); e.set(0, 0, 0); sv.set(sc, sc, sc); });
@@ -2524,7 +2568,7 @@ function frame(now) {
   shake = car.surf === 3 ? Math.min(0.16, spd * 0.006) : car.surf === 2 && !W.city ? Math.min(0.1, spd * 0.003) : car.surf === 1 ? Math.min(0.05, spd * 0.0015) : 0;
   if (state.mode === 'menu0') { const t = now / 1000 * 0.08, R = 26; camera.position.set(car.x + Math.cos(t) * R, (car.y || 0) + 9, car.z + Math.sin(t) * R); camera.up.copy(UP); camera.lookAt(car.x, (car.y || 0) + 0.5, car.z); }
   else updateCamera(dt);
-  sky.position.copy(camera.position); SKY_U.time.value = now / 1000;
+  sky.position.copy(camera.position); SKY_U.time.value = now / 1000; updateTiles(dt);
   TEX.waterN.offset.set(now * 0.000011, now * 0.000006);
   if (POST.on && POST.comp) { POST.grade.uniforms.time.value = (now / 1000) % 100; POST.comp.render(); } else renderer.render(scene, camera);
   if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) $('#banner').classList.remove('show'); }
