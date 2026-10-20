@@ -1042,7 +1042,32 @@ function buildCar(color, ghost, lite) {
     wheels.push({ pivot, spin, front: x > 0, mark });
   }
   if (ghost) root.traverse(o => { o.castShadow = false; });
+  // one draw call per material instead of one per part; parts the frame loop moves stay separate
+  const keep = new Set([flap, light]); mergeParts(body, keep);
+  for (const w of wheels) { if (w.mark) keep.add(w.mark); mergeParts(w.spin, keep); }
   return { root, body, wheels, flap, light };
+}
+function mergeParts(group, keep) {
+  group.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(group.matrixWorld).invert(), m = new THREE.Matrix4(), byMat = new Map();
+  group.traverse(o => {
+    if (!o.isMesh || keep.has(o)) return;
+    for (let q = o.parent; q !== group; q = q.parent) if (keep.has(q)) return;
+    if (!byMat.has(o.material)) byMat.set(o.material, []);
+    byMat.get(o.material).push(o);
+  });
+  for (const [mat, list] of byMat) {
+    if (list.length < 2) continue;
+    const P = [], Nn = [], I = [];
+    for (const o of list) {
+      const g = o.geometry.clone().applyMatrix4(m.multiplyMatrices(inv, o.matrixWorld)), pos = g.attributes.position, nor = g.attributes.normal, b = P.length / 3;
+      for (let i = 0; i < pos.count; i++) { P.push(pos.getX(i), pos.getY(i), pos.getZ(i)); Nn.push(nor.getX(i), nor.getY(i), nor.getZ(i)); }
+      if (g.index) for (let i = 0; i < g.index.count; i++) I.push(b + g.index.getX(i)); else for (let i = 0; i < pos.count; i++) I.push(b + i);
+      g.dispose(); o.geometry.dispose(); o.parent.remove(o);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(Nn, 3)); g.setIndex(I);
+    const mm = new THREE.Mesh(g, mat); mm.castShadow = list[0].castShadow; mm.receiveShadow = list[0].receiveShadow; group.add(mm);
+  }
 }
 
 /* ================= Car state & physics ================= */
