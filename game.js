@@ -1071,7 +1071,7 @@ function mergeParts(group, keep) {
 }
 
 /* ================= Car state & physics ================= */
-const setup = { mode: 'solo', laps: 3, aiCount: 5, aiSkill: 0.45, map: 'terrain', width: 14, banking: true, walls: false, steerSens: 0.8, assist: true, steerMode: 'drag', autogas: false, quality: 'auto', aero: 0.5, bias: 57, tc: true, abs: true, auto: true, color: '#d7263d', reverse: false };
+const setup = { level: 'easy', mode: 'solo', laps: 3, aiCount: 5, aiSkill: 0.45, map: 'terrain', width: 14, banking: true, walls: false, steerSens: 0.8, assist: true, steerMode: 'drag', autogas: false, quality: 'auto', aero: 0.5, bias: 57, tc: true, abs: true, auto: true, esc: true, brakeAssist: true, color: '#d7263d', reverse: false };
 const aeroOf = a => ({ CdA: 1.10 + a * 0.65, ClA: 2.9 + a * 2.2, front: 0.42 });
 const car = {};
 let carModel = buildCar(setup.color, false); scene.add(carModel.root);
@@ -1156,15 +1156,34 @@ function physicsStep(dt, inp) {
   const engBrake = -sv * (1 - thr) * 1800 * (c.rpm / 15000);
   let bF = brk * sp.maxBrake * setup.bias / 100, bR = brk * sp.maxBrake * (1 - setup.bias / 100);
   const capF = muF * Fzf, capR = muR * Fzr;
+  // lateral force the tyres are currently asked for; ABS and TC leave room for it on the friction circle
+  const dyF = muF * Fzf * Math.abs(MF(aF, 11)), dyR = muR * Fzr * Math.abs(MF(aR, 12));
+  const roomF = Math.max(0.3 * capF, Math.sqrt(Math.max(0, (0.96 * capF) ** 2 - dyF * dyF)));
+  const roomR = Math.max(0.3 * capR, Math.sqrt(Math.max(0, (0.96 * capR) ** 2 - dyR * dyR)));
   let lockF = false, spin = false; c.tcAct = false;
-  if (setup.abs) { bF = Math.min(bF, capF * 0.96); bR = Math.min(bR, Math.max(0, capR * 0.96 - Math.abs(engBrake))); }
+  if (setup.abs) { bF = Math.min(bF, roomF); bR = Math.min(bR, Math.max(0, roomR - Math.abs(engBrake))); }
   else if (bF > capF && sv) { lockF = true; bF = capF * 0.8; }
-  const FxF = -sv * bF;
+  let FxF = -sv * bF;
   let FxR = Fdrive - sv * bR + engBrake;
+  // stability control: brake the outer front wheel against oversteer, the inner rear against understeer
+  let Mesc = 0; c.escAct = false;
+  if (setup.esc && c.vx > 5) {
+    const ayMax = (muF * Fzf + muR * Fzr) / sp.m, rLim = 0.9 * ayMax / c.vx;
+    const rRef = clamp(c.vx * Math.tan(c.delta) / sp.L, -rLim, rLim), beta = Math.atan2(c.vy, c.vx);
+    const e = c.r - rRef, dir = Math.sign(c.r || rRef || 1), Mwant = -sp.Iz * (10 * e - 6 * beta);
+    const over = e * dir > 0.03 || Math.abs(beta) > 0.05, under = e * dir < -0.08;
+    if (over || under) {
+      const front = Math.sign(Mwant) === -dir, cap = 0.5 * (front ? capF : capR), Fb = Math.min(Math.abs(Mwant) / 0.8, cap);
+      if (front) FxF -= sv * Fb; else FxR -= sv * Fb;
+      if (over && FxR > 0) FxR *= 0.4; // and cut the engine
+      Mesc = Math.sign(Mwant) * Fb * 0.8; c.escAct = true;
+    }
+  }
   if (Math.abs(FxR) > capR) {
     if (Fdrive !== 0 && Math.sign(FxR) === Math.sign(Fdrive) && setup.tc) { FxR = Math.sign(FxR) * capR * 0.98; c.tcAct = true; }
     else if (spd > 0.5 || Fdrive !== 0) { FxR = Math.sign(FxR) * capR * 0.85; spin = true; }
   }
+  if (setup.tc && Fdrive > 0 && FxR > Math.max(0.15 * capR, Math.sqrt(Math.max(0, (0.97 * capR) ** 2 - dyR * dyR)))) { FxR = Math.max(0.15 * capR, Math.sqrt(Math.max(0, (0.97 * capR) ** 2 - dyR * dyR))); c.tcAct = true; spin = false; }
   c.spin = spin; c.lockF = lockF;
   let FyF = -muF * Fzf * MF(aF, 11), FyR = -muR * Fzr * MF(aR, 12);
   const latF = Math.sqrt(Math.max(0, capF * capF - FxF * FxF)) * (lockF ? 0.3 : 1);
@@ -1179,9 +1198,9 @@ function physicsStep(dt, inp) {
   const Froll = sv * crr * (Fzf + Fzr);
   const Fdx = spd > 0.01 ? -drag * c.vx / spd : 0, Fdy = spd > 0.01 ? -drag * c.vy / spd : 0;
   const grass = surf === 2 && !off ? 0.045 * sp.m : surf === 3 ? 0.2 * sp.m : 0;
+  const Mz = sp.a * (FxF * sd + FyF * cd) - sp.b * FyR + Mesc;
   const Fx = FxR + FxF * cd - FyF * sd + Fdx - Froll - grass * c.vx + sp.m * gLong;
   const Fy = FyR + FxF * sd + FyF * cd + Fdy - grass * c.vy + sp.m * gLat;
-  const Mz = sp.a * (FxF * sd + FyF * cd) - sp.b * FyR;
   c.vx += (Fx / sp.m + c.vy * c.r) * dt;
   c.vy += (Fy / sp.m - c.vx * c.r) * dt;
   c.r += Mz / sp.Iz * dt;
@@ -1268,13 +1287,21 @@ function readInput(dt) {
   inp.steer = sK;
   // full lock is limited to what the tyres can use at this speed: Ackermann angle for the available lateral grip plus a small slip margin
   const spd = Math.hypot(car.vx, car.vy), aAvail = 1.7 * G * (1 + (car.down || 0) / (SPEC.m * G));
-  const vmax = Math.min(0.3, SPEC.L * aAvail / Math.max(spd * spd, 1) + 0.02) * setup.steerSens;
+  const easy = setup.level === 'easy';
+  const vmax = Math.min(0.3, SPEC.L * aAvail * (easy ? 0.85 : 1) / Math.max(spd * spd, 1) + (easy ? 0.01 : 0.02)) * setup.steerSens;
   const target = inp.steer * vmax, away = Math.abs(target) < Math.abs(car.steerUser) || target * car.steerUser < 0;
-  const rate = vmax / (analog || touch.sActive ? 0.08 : away ? 0.15 : 0.4); // keys build lock over 0.4 s, release in 0.15 s
+  // keys build lock over 0.4 s (0.25 s for beginners), release in 0.15 s; analog and touch follow in 0.08 s (0.15 s for beginners)
+  const rate = vmax / (analog || touch.sActive ? (easy ? 0.15 : 0.08) : away ? 0.15 : easy ? 0.25 : 0.4);
   car.steerUser += clamp(target - car.steerUser, -rate * dt, rate * dt);
   // steering assist: counter-steer into a rear slide, the way a driver catches oversteer
   const assist = setup.assist && spd > 8 ? clamp(0.9 * car.aR, -0.12, 0.12) : 0;
   car.delta = clamp(car.steerUser + assist, -0.34, 0.34);
+  // braking assist: slow to the speed the corner ahead allows (the computer drivers' profile, with a margin)
+  car.baAct = false;
+  if (setup.brakeAssist && state.mode === 'race' && RACE.prof && car.gear !== -1) {
+    const vT = RACE.prof[car.k] * 0.94;
+    if (spd > vT + 0.5) { inp.brk = Math.max(inp.brk, clamp((spd - vT) / 6, 0.25, 1)); inp.thr = 0; car.baAct = true; }
+  }
 }
 function bindTouch(id, key) {
   const el = $(id);
@@ -1561,11 +1588,20 @@ function syncLabels() {
 function readSetup() {
   TER.size = +$('#size').value; if (!TER.meters) TER.range = +$('#range').value; TER.base = +$('#base').value;
   setup.width = +$('#width').value; setup.banking = $('#banking').checked; setup.walls = $('#walls').checked; setup.aero = +$('#aero').value; setup.bias = +$('#bias').value;
-  setup.tc = $('#tc').checked; setup.abs = $('#abs').checked; setup.auto = $('#auto').checked;
+  setup.tc = $('#tc').checked; setup.abs = $('#abs').checked; setup.auto = $('#auto').checked; setup.esc = $('#esc').checked; setup.brakeAssist = $('#brakeAssist').checked;
   setup.steerSens = +$('#steer').value; setup.assist = $('#assist').checked; setup.autogas = $('#autogas').checked; muted = !$('#sound').checked;
   setup.laps = +$('#laps').value; setup.aiCount = +$('#aiCount').value; setup.aiSkill = +$('#aiSkill').value;
+  if (setup.level === 'easy') Object.assign(setup, { aero: 0.5, bias: 57, tc: true, abs: true, auto: true, assist: true, esc: true, brakeAssist: true });
   savePrefs();
 }
+// driving level: beginners get every aid and no setup sliders; pro shows the car setup and lets each aid be switched off
+function applyLevel() {
+  const easy = setup.level === 'easy';
+  document.querySelectorAll('#level button').forEach(b => b.classList.toggle('sel', b.dataset.l === setup.level));
+  document.querySelectorAll('.pro-only').forEach(el => { el.hidden = easy; });
+  $('#levelHint').textContent = easy ? '新手：循跡控制、防鎖死、車身穩定、煞車輔助、自動換檔全部開啟，彎前會自動減速到過得了彎的速度。熟悉後再切到「專業」調整賽車。' : '專業：可調尾翼與煞車平衡，每項輔助都能關閉。全部關閉時，油門、煞車與轉向都要自己控制抓地力。';
+}
+document.querySelectorAll('#level button').forEach(b => b.onclick = () => { setup.level = b.dataset.l; applyLevel(); readSetup(); });
 function mapChanged() { mapDirty = true; drawEditorBase(); drawEditor(); updateStartBtn(); }
 ['size', 'range', 'base'].forEach(id => $('#' + id).addEventListener('input', () => { syncLabels(); readSetup(); mapDirty = true; if (id !== 'base' && setup.map === 'terrain') { drawEditorBase(); drawEditor(); } updateStartBtn(); }));
 ['width', 'banking', 'walls'].forEach(id => $('#' + id).addEventListener('input', () => { syncLabels(); readSetup(); mapDirty = true; updateStartBtn(); }));
@@ -1774,11 +1810,11 @@ document.querySelectorAll('#steerMode button').forEach(b => b.onclick = () => { 
 document.querySelectorAll('#quality button').forEach(b => b.onclick = () => { setup.quality = b.dataset.q; document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x === b)); applyQuality(setup.quality === 'auto' ? autoLevel() : setup.quality); savePrefs(); });
 if (document.fullscreenEnabled) { $('#btnFull').hidden = false; $('#btnFull').onclick = () => { document.documentElement.requestFullscreen().then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {}); }; }
 // per-viewer preferences
-function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted })); } catch (e) { /* storage unavailable */ } }
+function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted, level: setup.level })); } catch (e) { /* storage unavailable */ } }
 function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem('tgp-prefs') || 'null'); if (!p) return;
-    if (p.nick) $('#nick').value = p.nick; if (p.steerSens) $('#steer').value = p.steerSens; if (p.steerMode) setup.steerMode = p.steerMode; if (p.quality) setup.quality = p.quality;
+    if (p.nick) $('#nick').value = p.nick; if (p.steerSens) $('#steer').value = p.steerSens; if (p.steerMode) setup.steerMode = p.steerMode; if (p.quality) setup.quality = p.quality; if (p.level === 'pro' || p.level === 'easy') setup.level = p.level;
     $('#autogas').checked = !!p.autogas; $('#assist').checked = p.assist !== false; $('#sound').checked = p.sound !== false;
     document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x.dataset.q === setup.quality));
   } catch (e) { /* storage unavailable */ }
@@ -2164,7 +2200,7 @@ function frame(now) {
 /* ================= Boot ================= */
 genPreset('hills', TER.seed);
 trackPts = randomTrack(20251019);
-loadPrefs(); readSetup(); syncLabels(); applyControls(); applyRaceMode();
+loadPrefs(); applyLevel(); readSetup(); syncLabels(); applyControls(); applyRaceMode();
 applyQuality(setup.quality === 'auto' ? autoLevel() : setup.quality);
 if (!COARSE && innerWidth >= 900) { $('#tele').hidden = false; $('#bTele').classList.add('on'); }
 drawEditorBase();

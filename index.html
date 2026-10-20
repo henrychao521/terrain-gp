@@ -500,16 +500,26 @@ input[type=text]{background:var(--raise);border:1px solid var(--line);color:var(
 
         <div class="pane" data-pane="car" hidden>
           <div class="group">
+            <h3>駕駛模式</h3>
+            <div class="seg" id="level" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+              <button class="sel" data-l="easy" type="button">新手</button>
+              <button data-l="pro" type="button">專業</button>
+            </div>
+            <p class="hint" id="levelHint"></p>
+          </div>
+          <div class="group pro-only" hidden>
             <h3>空力與底盤</h3>
             <div class="field"><label for="aero">尾翼角度</label><input type="range" id="aero" min="0" max="1" step="0.05" value="0.5"><output id="oAero"></output></div>
             <div class="aerohint" id="aeroHint"></div>
             <div class="field"><label for="bias">煞車平衡</label><input type="range" id="bias" min="50" max="64" step="0.5" value="57"><output id="oBias"></output></div>
           </div>
-          <div class="group">
+          <div class="group pro-only" hidden>
             <h3>駕駛輔助</h3>
             <div class="checks">
               <label><input type="checkbox" id="tc" checked>循跡控制 TC</label>
               <label><input type="checkbox" id="abs" checked>防鎖死 ABS</label>
+              <label><input type="checkbox" id="esc" checked>車身穩定 ESC（單輪煞車修正甩尾）</label>
+              <label><input type="checkbox" id="brakeAssist">煞車輔助（彎前自動減速）</label>
               <label><input type="checkbox" id="auto" checked>自動換檔</label>
               <label><input type="checkbox" id="assist" checked>轉向輔助（甩尾自動反打）</label>
             </div>
