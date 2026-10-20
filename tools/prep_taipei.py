@@ -1,7 +1,7 @@
 """Pack xindian-flood-sim's Taipei DEM, OSM roads and 3D buildings into one JSON for Terrain GP.
 Coordinates: metres relative to TWD97 E 299000 / N 2766400 (x east, y north)."""
 import json, base64, sys
-src = sys.argv[1] if len(sys.argv) > 1 else '../data/processed'
+src = sys.argv[1] if len(sys.argv) > 1 else '../xindian-flood-sim/data/processed'
 dem = json.load(open(f'{src}/demW.json'))
 osm = json.load(open(f'{src}/osm2.json'))
 bld = json.load(open(f'{src}/bldW.json'))
