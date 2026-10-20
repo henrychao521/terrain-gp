@@ -107,6 +107,8 @@ const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 
   TEX.rock = pixTex(256, 256, (u, v) => { const a = n3(u, v, 4, 6), b = n1(u, v, 16, 3), crack = Math.abs(n2(u, v, 8, 3) - 0.5) < 0.012 ? 0.55 : 1; return lerp3([92, 88, 84], [158, 152, 144], a * 0.7 + b * 0.3).map(x => x * crack); });
   TEX.snow = pixTex(128, 128, (u, v) => { const a = n1(u, v, 8, 4); return lerp3([214, 222, 232], [248, 250, 252], a); });
   TEX.pave = pixTex(256, 256, (u, v, i, j) => { const a = n2(u, v, 8, 4), joint = (i % 64 < 2 || j % 64 < 2) ? 0.72 : 1, c = sp(); return lerp3([150, 146, 138], [184, 180, 172], a).map(x => x * joint * (0.92 + 0.12 * c)); });
+  // Taipei sidewalk: 32 cm grey pavers with terracotta bands, 2 m per texture tile
+  TEX.walk = pixTex(256, 256, (u, v, i, j) => { const a = n2(u, v, 8, 3), c = sp(), joint = (i % 32 < 2 || j % 32 < 2) ? 0.7 : 1, band = (j >> 5) % 4 === 3; return (band ? lerp3([150, 92, 72], [176, 112, 88], a) : lerp3([156, 154, 148], [186, 184, 176], a)).map(x => x * joint * (0.9 + 0.14 * c)); }, { srgb: true });
   TEX.gravel = pixTex(256, 256, (u, v) => { const a = n3(u, v, 32, 2), c = sp(); return lerp3([168, 150, 118], [212, 196, 164], a).map(x => x * (0.7 + 0.45 * c)); }, { srgb: true });
   TEX.macro = pixTex(128, 128, (u, v) => { const a = n1(u, v, 4, 5) * 255; return [a, a, a]; });
   TEX.asphalt2 = pixTex(512, 512, (u, v) => { const a = n2(u, v, 16, 3), c = sp(); const g = 120 + a * 40 + (c - 0.5) * 70 + (c > 0.985 ? 60 : 0); return [g, g, g * 1.02]; }, { srgb: true });
@@ -227,21 +229,25 @@ function loadHeightImage(file) {
 /* ================= City maps (Taipei data file, or an imported .osm) ================= */
 const CITY = { taipei: null, osm: null };
 const ROAD_W = [18, 15, 12, 9, 6.5, 7];
+function pointInPoly(x, z, p) {
+  let c = false; for (let i = 0, j = p.length / 2 - 1; i < p.length / 2; j = i++) { const zi = p[i * 2 + 1], zj = p[j * 2 + 1]; if ((zi > z) !== (zj > z) && x < p[j * 2] + (z - zj) / (zi - zj) * (p[i * 2] - p[j * 2])) c = !c; }
+  return c;
+}
 function finishCity(M) {
   // street graph for snapping and routing; expressways, bus lanes and ramps are left out of routing
-  const key = new Map(), X = [], Z = [], adj = [];
+  const key = new Map(), X = [], Z = [], adj = [], major = [];
   const node = (x, z) => { const k = Math.round(x * 2) + ',' + Math.round(z * 2); let id = key.get(k); if (id === undefined) { id = X.length; key.set(k, id); X.push(x); Z.push(z); adj.push([]); } return id; };
   const COST = [1, 1, 1.12, 1.3, 2.2, 3];
   for (const r of M.roads) {
-    if (/快速|專用道/.test(r.n)) continue;
+    if (/快速|專用道/.test(r.n) || r.lay > 0) continue;
     let prev = -1;
     for (let i = 0; i < r.p.length; i += 2) {
-      const id = node(r.p[i], r.p[i + 1]);
-      if (prev >= 0 && prev !== id) { const w = Math.hypot(X[id] - X[prev], Z[id] - Z[prev]) * COST[r.c]; adj[prev].push(id, w); adj[id].push(prev, w); }
+      const id = node(r.p[i], r.p[i + 1]); if (r.c <= 3 && !(r.one && r.ln === 1)) major[id] = 1;
+      if (prev >= 0 && prev !== id) { const w = Math.hypot(X[id] - X[prev], Z[id] - Z[prev]) * COST[r.c] * (r.one && r.ln === 1 ? 1.6 : 1); adj[prev].push(id, w); adj[id].push(prev, r.one ? w * 8 : w); } // single-lane frontage roads only when needed
       prev = id;
     }
   }
-  M.graph = { x: Float32Array.from(X), z: Float32Array.from(Z), adj };
+  M.graph = { x: Float32Array.from(X), z: Float32Array.from(Z), adj, major: Uint8Array.from(X, (_, i) => major[i] ? 1 : 0) };
   // building footprint raster (4 m) so street trees never grow inside a building
   const cs = 4, rw = Math.ceil(M.sx / cs), rh = Math.ceil(M.sz / cs), occ = new Uint8Array(rw * rh);
   for (const b of M.blds) {
@@ -259,7 +265,8 @@ function finishCity(M) {
 }
 function loadTaipei() {
   if (CITY.taipei) return Promise.resolve(CITY.taipei);
-  return fetch('data/taipei.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(d => {
+  const get = u => fetch(u).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+  return Promise.all([get('data/taipei.json'), get('data/taipei_osm.json').catch(() => null)]).then(([d, o]) => {
     const sx = d.nx * d.d, sz = d.ny * d.d, cell = 10, nx = sx / cell + 1, nz = sz / cell + 1;
     const zr = atob(d.z), mr = atob(d.mask), dz = new Float32Array(d.nx * d.ny), dm = new Uint8Array(d.nx * d.ny);
     for (let k = 0; k < dz.length; k++) { let v = zr.charCodeAt(2 * k) | (zr.charCodeAt(2 * k + 1) << 8); if (v > 32767) v -= 65536; dz[k] = v / 100; dm[k] = mr.charCodeAt(k); }
@@ -271,9 +278,22 @@ function loadTaipei() {
       mask[J * nx + I] = dm[Math.round(fj) * d.nx + Math.round(fi)];
     }
     const toW = arr => { const out = new Float32Array(arr.length); for (let i = 0; i < arr.length; i += 2) { out[i] = arr[i] - sx / 2; out[i + 1] = sz / 2 - arr[i + 1]; } return out; };
-    const roads = d.roads.map(r => ({ c: r[0], n: r[1], p: toW(r.slice(2).map(v => v / 10)) }));
-    const blds = d.buildings.map(b => ({ h: b[0] / 10, p: toW(b.slice(1)) }));
-    return (CITY.taipei = finishCity({ kind: 'city', id: 'taipei', name: d.name, sx, sz, nx, nz, raw, mask, base: 0, water: 0.35, roads, blds, credits: d.credits }));
+    const dW = a => toW(a.map(v => v / 10)), pt = (x, y) => [x / 10 - sx / 2, sz / 2 - y / 10];
+    let roads = d.roads.map(r => ({ c: r[0], n: r[1], p: toW(r.slice(2).map(v => v / 10)) }));
+    let blds = d.buildings.map(b => ({ h: b[0] / 10, p: toW(b.slice(1)) })), env = null;
+    if (o) { // OpenStreetMap detail: carriageway widths and lanes, one-way streets, street furniture and landmarks
+      roads = o.roads.map(r => ({ c: r[0], n: r[1], one: r[2], ln: r[3], w: r[4] / 10, lay: r[5], p: dW(r.slice(6)) }));
+      env = {
+        signals: o.signals.map(([x, y, nm]) => { const [a, b] = pt(x, y); return { x: a, z: b, names: nm ? nm.split('／') : [] }; }),
+        crossings: o.crossings.map(([x, y]) => pt(x, y)),
+        trees: o.trees.map(([x, y, park]) => { const [a, b] = pt(x, y); return [a, b, park]; }),
+        green: o.green.map(g => ({ kind: g[0], p: dW(g.slice(1)) })),
+        landmarks: o.landmarks.map(l => ({ ...l, p: dW(l.p) })),
+      };
+      const inLm = (x, z) => env.landmarks.some(l => pointInPoly(x, z, l.p));
+      blds = blds.filter(b => { const p = b.p, m = p.length / 2; let gx = 0, gz = 0; for (let i = 0; i < m; i++) { gx += p[i * 2]; gz += p[i * 2 + 1]; } return !inLm(gx / m, gz / m); });
+    }
+    return (CITY.taipei = finishCity({ kind: 'city', id: 'taipei', name: d.name, sx, sz, nx, nz, raw, mask, base: 0, water: 0.35, roads, blds, env, credits: d.credits + (o ? '；' + o.credits : '') }));
   });
 }
 function parseOSM(text, fileName) {
@@ -334,10 +354,17 @@ const TP_CIRCUITS = [ // street junctions in data coordinates (m east, m north o
   [[615, 2675], [1510, 3124], [2028, 3297], [1877, 2800], [1511, 2730]],
   [[4312, 3718], [4760, 3709], [4745, 3209], [4207, 3247]],
 ];
-function snapNode(M, x, z) { const g = M.graph; let best = 0, bd = Infinity; for (let i = 0; i < g.x.length; i++) { const d = (g.x[i] - x) ** 2 + (g.z[i] - z) ** 2; if (d < bd) { bd = d; best = i; } } return best; }
+// nearest street node; a main carriageway within 40 m wins over a closer frontage road or lane
+function snapNode(M, x, z) { const g = M.graph; let best = 0, bd = Infinity; for (let i = 0; i < g.x.length; i++) { const d = (g.x[i] - x) ** 2 + (g.z[i] - z) ** 2 + (g.major && !g.major[i] ? 1600 : 0); if (d < bd) { bd = d; best = i; } } return best; }
 const viewSize = M => Math.max(M.sx, M.sz);
 function cityPoint(M, x, z) { const id = snapNode(M, x, z), V = viewSize(M); return { u: M.graph.x[id] / V + 0.5, v: M.graph.z[id] / V + 0.5, node: id }; }
-function cityPreset(M, i) { return TP_CIRCUITS[i].map(([X, Y]) => cityPoint(M, X - M.sx / 2, M.sz / 2 - Y)); }
+function cityPreset(M, i) {
+  const g = M.graph;
+  return TP_CIRCUITS[i].map(([X, Y]) => { const x = X - M.sx / 2, z = M.sz / 2 - Y, p = cityPoint(M, x, z), c = [];
+    for (let k = 0; k < g.x.length; k++) if ((!g.major || g.major[k]) && (g.x[k] - x) ** 2 + (g.z[k] - z) ** 2 < 45 * 45) c.push(k);
+    c.sort((a, b) => ((g.x[a] - x) ** 2 + (g.z[a] - z) ** 2) - ((g.x[b] - x) ** 2 + (g.z[b] - z) ** 2));
+    p.alt = c.length ? c.slice(0, 6) : [p.node]; return p; });
+}
 
 function astar(g, s, t) {
   const n = g.x.length, dist = new Float64Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1), done = new Uint8Array(n);
@@ -351,10 +378,16 @@ function astar(g, s, t) {
     for (let e = 0; e < a.length; e += 2) { const v = a[e], nd = dist[u] + a[e + 1]; if (nd < dist[v]) { dist[v] = nd; prev[v] = u; push(nd + Math.hypot(g.x[v] - hx, g.z[v] - hz), v); } }
   }
   if (!done[t]) return null;
-  const path = []; for (let v = t; v >= 0; v = prev[v]) path.push(v); return path.reverse();
+  const path = []; for (let v = t; v >= 0; v = prev[v]) path.push(v); path.reverse(); path.cost = dist[t]; return path;
 }
 function routeLoop(M, pts) {
   const g = M.graph, out = [];
+  // preset waypoints carry nearby carriageway nodes: pick, leg by leg, the one reachable in the circuit's direction
+  if (pts.every(p => p.alt)) {
+    const nodes = [pts[0].node];
+    for (let i = 1; i < pts.length; i++) { let best = pts[i].node, bc = Infinity; for (const c of pts[i].alt) { const p = astar(g, nodes[i - 1], c); if (p && p.cost < bc) { bc = p.cost; best = c; } } nodes.push(best); }
+    pts = pts.map((p, i) => ({ ...p, node: nodes[i] }));
+  }
   for (let i = 0; i < pts.length; i++) {
     const a = pts[i].node, b = pts[(i + 1) % pts.length].node, p = a === b ? [a] : astar(g, a, b);
     if (!p) { out.push([g.x[a], g.z[a]]); continue; }
@@ -447,6 +480,7 @@ Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, n
 sun.shadow.camera.updateProjectionMatrix(); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
 scene.add(sun); scene.add(sun.target);
 // post-processing (high quality): multisampled render → subtle bloom → grade (vignette, saturation, grain, sRGB out)
+let qLevel = null; // graphics quality level, set by applyQuality
 const POST = { comp: null, on: false, grade: null, bloom: null };
 const GradeShader = {
   uniforms: { tDiffuse: { value: null }, time: { value: 0 }, res: { value: new THREE.Vector2(1, 1) } },
@@ -472,7 +506,7 @@ function setupPost() {
   } catch (e) { POST.comp = null; return false; }
 }
 function resize() {
-  const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  const w = innerWidth, h = innerHeight; if (qLevel) renderer.setPixelRatio(pixelRatioFor(qLevel)); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
   if (POST.comp) { POST.comp.setPixelRatio(renderer.getPixelRatio()); POST.comp.setSize(w, h); POST.grade.uniforms.res.value.set(w, h); }
 }
 addEventListener('resize', resize); resize();
@@ -508,11 +542,36 @@ function centreline(M) {
   return sp.map(p => [p.x, p.z]);
 }
 
+// half widths left / right of the centreline: the real carriageway where the map knows it (Taipei), else the width setting
+function realWidths(M, hw) {
+  const n = W.n, X = W.x, Z = W.z, L = W.hwL = new Float32Array(n).fill(hw), R = W.hwR = new Float32Array(n).fill(hw);
+  W.lanes = new Uint8Array(n).fill(0); W.two = new Uint8Array(n); W.rname = new Array(n).fill(''); W.real = !!(W.city && M.roads.length && M.roads[0].w);
+  if (W.real) {
+    const cs = 25, grid = new Map(), cell = (x, z) => Math.floor(x / cs) + ',' + Math.floor(z / cs);
+    W.roadGrid = { cs, grid };
+    M.roads.forEach((r, ri) => { if (r.lay > 0) return; for (let i = 0; i + 3 < r.p.length; i += 2) { const k = cell((r.p[i] + r.p[i + 2]) / 2, (r.p[i + 1] + r.p[i + 3]) / 2); if (!grid.has(k)) grid.set(k, []); grid.get(k).push(ri, i); } });
+    const wid = new Float32Array(n), ln = new Float32Array(n), two = new Float32Array(n);
+    for (let k = 0; k < n; k++) {
+      let best = Infinity, bw = hw * 2, bl = 0, bt = 0, bn = ''; const tx = -W.lz[k], tz = W.lx[k], cx0 = Math.floor(X[k] / cs), cz0 = Math.floor(Z[k] / cs);
+      for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const lst = grid.get((cx0 + a) + ',' + (cz0 + b)); if (!lst) continue;
+        for (let e = 0; e < lst.length; e += 2) { const r = M.roads[lst[e]], i = lst[e + 1], x0 = r.p[i], z0 = r.p[i + 1], dx = r.p[i + 2] - x0, dz = r.p[i + 3] - z0, l2 = dx * dx + dz * dz || 1;
+          const f = clamp(((X[k] - x0) * dx + (Z[k] - z0) * dz) / l2, 0, 1), d = Math.hypot(X[k] - x0 - dx * f, Z[k] - z0 - dz * f), par = Math.abs(dx * tx + dz * tz) / Math.sqrt(l2);
+          const score = d + (1 - par) * 20; if (score < best) { best = score; bw = r.w; bl = r.ln; bt = r.one ? 0 : 1; bn = r.n; } } }
+      wid[k] = bw; ln[k] = bl; two[k] = bt; W.rname[k] = bn;
+    }
+    // junctions and short mismatches would make the width flicker: median over 30 m, then smooth
+    const med = new Float32Array(n), h = Math.round(15 / W.ds);
+    for (let k = 0; k < n; k++) { const a = []; for (let o = -h; o <= h; o++) a.push(wid[(k + o + n) % n]); a.sort((p, q) => p - q); med[k] = a[a.length >> 1]; }
+    smoothCirc(med, Math.round(8 / W.ds), 2);
+    for (let k = 0; k < n; k++) { L[k] = R[k] = clamp(med[k] / 2, 3.6, 13); W.lanes[k] = ln[k]; W.two[k] = two[k]; }
+  }
+  W.hwMax = Math.max(...L, ...R);
+}
 function buildWorld() {
   const M = activeMap();
   Object.assign(W, { M, sx: M.sx, sz: M.sz, nx: M.nx, nz: M.nz, base: M.base, city: M.kind === 'city' });
   const raw = M.raw, hw = setup.width / 2, NX = W.nx, NZ = W.nz, cx = W.sx / (NX - 1), cz = W.sz / (NZ - 1);
-  W.wall = setup.walls && W.city ? hw + 3.2 : Infinity;
+  W.wall = setup.walls && W.city ? hw + 3.2 : Infinity; // refined once the real widths are known
   // --- centreline
   const cl = centreline(M), n = cl.length;
   let len = 0; for (let k = 0; k < n; k++) { const a = cl[k], b = cl[(k + 1) % n]; len += Math.hypot(b[0] - a[0], b[1] - a[1]); }
@@ -523,6 +582,7 @@ function buildWorld() {
     const a = (k - 1 + n) % n, b = (k + 1) % n; let tx = X[b] - X[a], tz = Z[b] - Z[a]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
     LX[k] = tz; LZ[k] = -tx; // left of travel direction
   }
+  realWidths(M, hw);
   const rawQ = (x, z) => gridSample(raw, x, z);
   for (let k = 0; k < n; k++) {
     TH[k] = rawQ(X[k], Z[k]);
@@ -551,23 +611,25 @@ function buildWorld() {
   }
   // --- carve the road into the ground
   const H = W.H = new Float32Array(raw), D = W.dist = new Float32Array(NX * NZ).fill(1e9);
-  const tgt = new Float32Array(NX * NZ), R = hw + (W.city ? 28 : 48), R2 = R * R, rci = Math.ceil(R / cx), rcj = Math.ceil(R / cz);
+  const tgt = new Float32Array(NX * NZ), HW = new Float32Array(NX * NZ), R = W.hwMax + (W.city ? 28 : 48), R2 = R * R, rci = Math.ceil(R / cx), rcj = Math.ceil(R / cz);
   for (let k = 0; k < n; k++) {
     const gi = Math.round((X[k] + W.sx / 2) / cx), gj = Math.round((Z[k] + W.sz / 2) / cz);
     for (let j = Math.max(0, gj - rcj); j <= Math.min(NZ - 1, gj + rcj); j++) {
       const dz = -W.sz / 2 + j * cz - Z[k];
       for (let i = Math.max(0, gi - rci); i <= Math.min(NX - 1, gi + rci); i++) {
         const dx = -W.sx / 2 + i * cx - X[k], d2 = dx * dx + dz * dz, o = j * NX + i;
-        if (d2 < R2 && d2 < D[o]) { D[o] = d2; tgt[o] = TH[k] + BK[k] * clamp(dx * LX[k] + dz * LZ[k], -hw - 5, hw + 5); }
+        if (d2 < R2 && d2 < D[o]) { D[o] = d2; HW[o] = Math.max(W.hwL[k], W.hwR[k]); tgt[o] = TH[k] + BK[k] * clamp(dx * LX[k] + dz * LZ[k], -HW[o] - 5, HW[o] + 5); }
       }
     }
   }
   for (let i = 0; i < NX * NZ; i++) {
-    if (D[i] < 1e8) { const d = Math.sqrt(D[i]); D[i] = d; H[i] = tgt[i] + (raw[i] - tgt[i]) * smooth(hw + 5, R, d); }
+    if (D[i] < 1e8) { const d = Math.sqrt(D[i]); D[i] = d; H[i] = tgt[i] + (raw[i] - tgt[i]) * smooth(HW[i] + 5, R, d); }
     else D[i] = 1e4;
   }
+  W.hwGrid = HW;
   for (let k = 0; k < n; k++) TH[k] = Hq(X[k], Z[k]);
   // gravel traps on the outside of tighter corners (and the run-off past the exit); barriers per side
+  if (W.wall !== Infinity && W.real) W.wall = W.hwMax + 0.5;
   W.grav = new Int8Array(n);
   if (!W.city) {
     const Ks = Float32Array.from(KA); smoothCirc(Ks, 6, 2);
@@ -576,7 +638,8 @@ function buildWorld() {
   }
   W.wallL = new Float32Array(n).fill(Infinity); W.wallR = new Float32Array(n).fill(Infinity);
   if (setup.walls) for (let k = 0; k < n; k++) for (const side of [1, -1]) {
-    let off = W.city ? hw + 3.2 : W.grav[k] === side ? hw + 17 : hw + 13;
+    const hs = side > 0 ? W.hwL[k] : W.hwR[k];
+    let off = W.real ? hs + 0.5 : W.city ? hs + 3.2 : W.grav[k] === side ? hs + 17 : hs + 13; // Taipei: water barriers on the kerb line
     if (gridSample(D, X[k] + LX[k] * off * side, Z[k] + LZ[k] * off * side) < off - 3) off = Infinity; // another stretch of track is nearer: leave a gap
     (side > 0 ? W.wallL : W.wallR)[k] = off;
   }
@@ -665,6 +728,238 @@ function ribbonGeo(build) { // build(push) where push(x,y,z,u,v,color) returns i
   g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
   g.setIndex(I); g.computeVertexNormals(); return g;
 }
+/* ================= Taipei street dressing (real carriageways from OpenStreetMap) ================= */
+// is (x, z) on another street's carriageway that crosses the circuit direction (tx, tz)? used to open kerbs at side streets
+function sideStreetAt(x, z, tx, tz) {
+  const G = W.roadGrid, M = W.M; if (!G) return false;
+  const lst = G.grid.get(Math.floor(x / G.cs) + ',' + Math.floor(z / G.cs)); if (!lst) return false;
+  for (let e = 0; e < lst.length; e += 2) {
+    const r = M.roads[lst[e]], i = lst[e + 1], x0 = r.p[i], z0 = r.p[i + 1], dx = r.p[i + 2] - x0, dz = r.p[i + 3] - z0, l2 = dx * dx + dz * dz || 1;
+    const f = clamp(((x - x0) * dx + (z - z0) * dz) / l2, 0, 1), d = Math.hypot(x - x0 - dx * f, z - z0 - dz * f);
+    if (d < r.w / 2 + 0.5 && Math.abs(dx * tx + dz * tz) / Math.sqrt(l2) < 0.8) return true;
+  }
+  return false;
+}
+// nearest centreline sample to (x, z) within maxD metres, or -1
+function nearestSample(x, z, maxD) {
+  let best = -1, bd = maxD * maxD;
+  for (let k = 0; k < W.n; k++) { const dx = X_(k) - x, dz = W.z[k] - z, d = dx * dx + dz * dz; if (d < bd) { bd = d; best = k; } }
+  return best;
+}
+const X_ = k => W.x[k];
+const TAIPEI_PAINT = { white: lin(0xe9e9e4), yellow: lin(0xe0a81c), red: lin(0xb3262b) };
+function buildTaipeiStreet(grp, ribbon, S) {
+  const n = W.n, X = W.x, Z = W.z, ds = W.ds, env = W.M.env, P = TAIPEI_PAINT;
+  // one mesh for every painted line: quads between consecutive samples at lateral offsets t0..t1
+  const pos = [], col = [], idx = [];
+  const quad = (r, t0, t1, c, y = 0.075) => {
+    const b = pos.length / 3;
+    for (const rr of [r, r + 1]) { const k = rr % n; for (const t of [t0, t1]) { const x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t; pos.push(x, Hq(x, z) + y, z); col.push(c.r, c.g, c.b); } }
+    idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+  };
+  // a mark of length len metres starting at sample k0 (several samples)
+  const mark = (k0, len, t0, t1, c) => {
+    if (len >= ds) { for (let i = 0; i < Math.round(len / ds); i++) quad(k0 + i, typeof t0 === 'function' ? t0(k0 + i) : t0, typeof t1 === 'function' ? t1(k0 + i) : t1, c); return; }
+    const k = k0 % n, fx = -W.lz[k], fz = W.lx[k], b = pos.length / 3; // shorter than a sample: lay it along the local tangent
+    for (const f of [0, len]) for (const t of [t0, t1]) { const x = X[k] + W.lx[k] * t + fx * f, z = Z[k] + W.lz[k] * t + fz * f; pos.push(x, Hq(x, z) + 0.075, z); col.push(c.r, c.g, c.b); }
+    idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+  };
+  const dash = r => (S[r] % 10) < 4; // 4 m line, 6 m gap
+  const near = new Uint8Array(n); // samples at a crossing or junction: no lane dashes there
+  // crossings and signalised junctions on the circuit
+  const cross = new Set(), stops = [];
+  for (const [x, z] of env.crossings) { const k = nearestSample(x, z, 9); if (k >= 0) cross.add(k); }
+  const sigK = new Set(); for (const sg of env.signals) { const k = nearestSample(sg.x, sg.z, 18); if (k >= 0) sigK.add(k); }
+  const crossList = [...cross].sort((a, b) => a - b).filter((k, i, a) => i === 0 || k - a[i - 1] > Math.round(12 / ds));
+  for (const k of crossList) {
+    const w0 = k => -W.hwR[k % n] + 0.3, w1 = k => W.hwL[k % n] - 0.3, len = 4.5, k0 = (k - Math.round(len / 2 / ds) + n) % n;
+    for (let i = 0; i < Math.round(len / ds); i++) {
+      const r = (k0 + i) % n, a = w0(r), b = w1(r), m = Math.floor((b - a) / 1.0);
+      for (let j = 0; j < m; j++) quad(r, a + j * 1.0, a + j * 1.0 + 0.45, P.white, 0.08); // zebra bars run with the traffic
+      near[r] = 1;
+    }
+    for (let o = -Math.round(14 / ds); o <= Math.round(14 / ds); o++) near[(k + o + n) % n] = 1;
+    const signal = [...sigK].some(s => Math.min(Math.abs(s - k), n - Math.abs(s - k)) * ds < 30);
+    if (signal) stops.push(k0);
+  }
+  // stop line and scooter waiting box before each signalised crossing (traffic runs along +k, keeps right = negative lateral)
+  const boxes = [];
+  for (const k0 of stops) {
+    const kb = (k0 - Math.round(4.5 / ds) + n) % n, ks = (kb - Math.round(0.5 / ds) + n) % n, hr = W.hwR[kb], half = W.two[kb] ? 0 : W.hwL[kb];
+    mark(ks, 0.5, -hr + 0.3, half - 0.2, P.white); // stop line across our side of the road
+    const bx0 = -hr + 0.6, bx1 = Math.min(half - 0.6, bx0 + Math.max(4, (hr + half) * 0.6));
+    mark(kb, 0.15, bx0, bx1, P.white); mark((k0 - Math.round(0.4 / ds) + n) % n, 0.15, bx0, bx1, P.white);
+    mark(kb, 4.1, bx0, bx0 + 0.15, P.white); mark(kb, 4.1, bx1 - 0.15, bx1, P.white);
+    boxes.push([(kb + Math.round(2 / ds)) % n, (bx0 + bx1) / 2, bx1 - bx0]);
+    for (let o = -Math.round(10 / ds); o <= 0; o++) near[(kb + o + n) % n] = 1;
+  }
+  // lane lines: edge lines, double yellow centre on two-way streets, dashed lane dividers, slow-lane line for scooters
+  for (let r = 0; r < n; r++) {
+    const hl = W.hwL[r], hr = W.hwR[r], two = W.two[r], ln = Math.max(1, W.lanes[r] || Math.round((hl + hr) / 3.4)), main = hl + hr >= 11;
+    quad(r, hl - 0.35, hl - 0.2, P.white); quad(r, -hr + 0.2, -hr + 0.35, P.white);
+    if (near[r]) continue;
+    if (two) { quad(r, -0.2, -0.08, P.yellow); quad(r, 0.08, 0.2, P.yellow); }
+    const curb = main ? 1.6 : 0;
+    const dirs = two ? [[-hr + curb, -0.2, Math.max(1, Math.round(ln / 2))], [0.2, hl - curb, Math.max(1, Math.round(ln / 2))]] : [[-hr + curb, hl, ln]];
+    for (const [a, b, m] of dirs) for (let j = 1; j < m; j++) if (dash(r)) { const t = a + (b - a) * j / m; quad(r, t - 0.07, t + 0.07, P.white); }
+    if (main) { quad(r, -hr + curb - 0.08, -hr + curb + 0.08, P.white); if (two) quad(r, hl - curb - 0.08, hl - curb + 0.08, P.white); }
+  }
+  const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); pg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); pg.setIndex(idx); pg.computeVertexNormals();
+  const paint = new THREE.Mesh(pg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }));
+  paint.receiveShadow = true; grp.add(paint);
+  // 機車停等區 lettering in the scooter boxes
+  if (boxes.length) {
+    const tex = canvasTex(512, 128, (g, w, h) => { g.clearRect(0, 0, w, h); g.fillStyle = '#ecece6'; g.font = '700 92px "Noto Sans TC", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('機車停等區', w / 2, h / 2 + 4); }, true, false);
+    const tp = [], tu = [], ti = [];
+    for (const [k, c, wdt] of boxes) {
+      const len = Math.min(wdt * 0.9, 6), dep = len / 4, kk = k % n, fx = -W.lz[kk], fz = W.lx[kk], b = tp.length / 3;
+      // letters face drivers approaching along +k: text runs across the lane, its top toward the junction
+      for (const [u, v] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+        const lat = c + (0.5 - u) * len, fwd = (v - 0.5) * dep, x = X[kk] + W.lx[kk] * lat + fx * fwd, z = Z[kk] + W.lz[kk] * lat + fz * fwd;
+        tp.push(x, Hq(x, z) + 0.085, z); tu.push(u, v);
+      }
+      ti.push(b, b + 2, b + 1, b + 1, b + 2, b + 3);
+    }
+    const tg = new THREE.BufferGeometry(); tg.setAttribute('position', new THREE.Float32BufferAttribute(tp, 3)); tg.setAttribute('uv', new THREE.Float32BufferAttribute(tu, 2)); tg.setIndex(ti); tg.computeVertexNormals();
+    grp.add(new THREE.Mesh(tg, new THREE.MeshStandardMaterial({ map: tex, transparent: true, depthWrite: false, roughness: 0.6, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -10 })));
+  }
+  // kerbs and sidewalks, open where a side street joins or another part of the circuit runs alongside
+  const open = side => { const o = new Uint8Array(n);
+    for (let k = 0; k < n; k++) { const hs = side > 0 ? W.hwL[k] : W.hwR[k], t = (hs + 1.8) * side, x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t;
+      if (sideStreetAt(x, z, -W.lz[k], W.lx[k]) || gridSample(W.dist, x, z) < hs + 1.2) o[k] = 1; }
+    const c = o.slice(); for (let k = 0; k < n; k++) if (c[k]) for (let q = -2; q <= 2; q++) o[(k + q + n) % n] = 1; return o; };
+  const walkM = new THREE.MeshStandardMaterial({ map: TEX.walk, roughness: 0.85, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+  const kerbM = new THREE.MeshStandardMaterial({ color: lin(0xa7a49c), roughness: 0.8, side: THREE.DoubleSide });
+  for (const sd of [1, -1]) {
+    const op = open(sd), keep = r => !op[r] && !op[(r + 1) % n], hs = k => sd > 0 ? W.hwL[k] : -W.hwR[k];
+    ribbon(k => hs(k), k => hs(k) + sd * 3.5, 2, () => lin(0xffffff), 0.17, keep, false, walkM, 2);
+    // kerb face: a thin vertical strip at the carriageway edge
+    const kg = ribbonGeo((push, I) => { const w = lin(0xffffff), id = new Int32Array(n + 1);
+      for (let r = 0; r <= n; r++) { const k = r % n, t = hs(k), x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t, h = Hq(x, z); id[r] = push(x, h + 0.02, z, 0, 0, w); push(x, h + 0.17, z, 0, 1, w); }
+      for (let r = 0; r < n; r++) if (keep(r)) I.push(id[r], id[r + 1], id[r] + 1, id[r] + 1, id[r + 1], id[r + 1] + 1); });
+    const km = new THREE.Mesh(kg, kerbM); km.receiveShadow = true; grp.add(km);
+  }
+}
+// parks and lawns, traffic lights with street-name signs, and landmark buildings from OpenStreetMap
+const CSS_COL = { blue: 0x2f5fa8, white: 0xf1efe8, red: 0xa3302a, grey: 0x9a9a98, gray: 0x9a9a98, brown: 0x7a5236, yellow: 0xd9b23a, orange: 0xcf7a2c, green: 0x4b7a4a, black: 0x222222 };
+const colOf = (c, d) => c ? (CSS_COL[c.toLowerCase()] ?? (/^#[0-9a-f]{6}$/i.test(c) ? parseInt(c.slice(1), 16) : d)) : d;
+function taipeiScenery(grp) {
+  const env = W.M.env, D = W.dist, HWg = W.hwGrid, n = W.n;
+  // --- green areas, draped just above the ground
+  { const pos = [], col = [], idx = [], c = new THREE.Color(), shade = { forest: 0x3f6a2c, wood: 0x3f6a2c, park: 0x5b8a3a, garden: 0x5f8f3e, grass: 0x6a9a44, pitch: 0x4f8a40, playground: 0x8a7a5a };
+    for (const g of env.green) {
+      const p = g.p, m = p.length / 2; if (m < 3) continue;
+      const contour = []; for (let i = 0; i < m; i++) contour.push(new THREE.Vector2(p[i * 2], p[i * 2 + 1]));
+      if (THREE.ShapeUtils.isClockWise(contour)) contour.reverse();
+      let tris; try { tris = THREE.ShapeUtils.triangulateShape(contour, []); } catch (e) { continue; }
+      c.copy(lin(shade[g.kind] ?? 0x5f8f3e)); const b = pos.length / 3;
+      for (const v of contour) { pos.push(v.x, Hq(v.x, v.y) + 0.04, v.y); col.push(c.r, c.g, c.b); }
+      for (const t of tris) idx.push(b + t[0], b + t[2], b + t[1]);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(pos.filter((v, i) => i % 3 !== 1).map(v => v / 6), 2)); g.setIndex(idx); g.computeVertexNormals();
+    const gm = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: TEX.grass, vertexColors: true, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 })); gm.receiveShadow = true; grp.add(gm);
+  }
+  // --- traffic lights at the circuit's signalised junctions: pole on the right-hand kerb, mast arm over the road, green name sign
+  { const sig = [];
+    for (const sg of env.signals) {
+      const k = nearestSample(sg.x, sg.z, 22); if (k < 0) continue;
+      if (sig.some(o => Math.min(Math.abs(o.k - k), n - Math.abs(o.k - k)) * W.ds < 25)) continue;
+      const base = nm => nm.replace(/[一二三四五六七八九十]+段$/, ''), own = W.rname[k];
+      let cross = sg.names.filter(nm => nm && base(nm) !== base(own));
+      if (!cross.length && W.roadGrid) { // the signal node only carries our street: take the nearest crossing street
+        const G = W.roadGrid, tx = -W.lz[k], tz = W.lx[k]; let bd = 30, bn = '';
+        for (let a = -1; a <= 1; a++) for (let b2 = -1; b2 <= 1; b2++) { const lst = G.grid.get((Math.floor(sg.x / G.cs) + a) + ',' + (Math.floor(sg.z / G.cs) + b2)); if (!lst) continue;
+          for (let e = 0; e < lst.length; e += 2) { const r = W.M.roads[lst[e]], i = lst[e + 1]; if (!r.n || base(r.n) === base(own)) continue;
+            const x0 = r.p[i], z0 = r.p[i + 1], dx = r.p[i + 2] - x0, dz = r.p[i + 3] - z0, l2 = dx * dx + dz * dz || 1, f = clamp(((sg.x - x0) * dx + (sg.z - z0) * dz) / l2, 0, 1), d = Math.hypot(sg.x - x0 - dx * f, sg.z - z0 - dz * f);
+            if (d < bd && Math.abs(dx * tx + dz * tz) / Math.sqrt(l2) < 0.6) { bd = d; bn = r.n; } } }
+        if (bn) cross = [bn];
+      }
+      sig.push({ k: (k - Math.round(6 / W.ds) + n) % n, name: cross[0] || '' });
+    }
+    if (sig.length) {
+      const cols = 4, rows = Math.ceil(sig.length / cols), cw = 256, ch = 64;
+      const atlas = canvasTex(cw * cols, ch * rows, (g, w, h) => { g.fillStyle = '#1e6b3e'; g.fillRect(0, 0, w, h);
+        sig.forEach((o, i) => { const x = (i % cols) * cw, y = Math.floor(i / cols) * ch; g.strokeStyle = '#f2f2f2'; g.lineWidth = 3; g.strokeRect(x + 4, y + 4, cw - 8, ch - 8);
+          g.fillStyle = '#ffffff'; g.font = `700 ${o.name.length > 5 ? 30 : 38}px "Noto Sans TC", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(o.name || '路口', x + cw / 2, y + ch / 2 + 2); }); }, true, false);
+      const poleG = new THREE.CylinderGeometry(0.13, 0.16, 6.2, 8); poleG.translate(0, 3.1, 0);
+      const armG = new THREE.CylinderGeometry(0.08, 0.1, 1, 6); armG.rotateZ(Math.PI / 2); armG.translate(0.5, 0, 0);
+      const headG = new THREE.BoxGeometry(1.25, 0.42, 0.32);
+      const metal = new THREE.MeshStandardMaterial({ color: lin(0x8c9196), roughness: 0.5, metalness: 0.6 });
+      const poles = new THREE.InstancedMesh(poleG, metal, sig.length), arms = new THREE.InstancedMesh(armG, metal, sig.length), heads = new THREE.InstancedMesh(headG, new THREE.MeshStandardMaterial({ color: lin(0x1c1e21), roughness: 0.6 }), sig.length);
+      const lampG = new THREE.CircleGeometry(0.13, 12), lamps = new THREE.InstancedMesh(lampG, new THREE.MeshBasicMaterial({ color: 0xffffff }), sig.length * 3);
+      const sp = [], su = [], si = [];
+      const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3();
+      const lampCol = [lin(0x401010), lin(0x40300a), lin(0x30ff80)];
+      sig.forEach((o, i) => {
+        const k = o.k, hr = W.hwR[k], reach = Math.min(hr + W.hwL[k] * (W.two[k] ? 0 : 1), 9), bx = X_(k) - W.lx[k] * (hr + 1.3), bz = W.z[k] - W.lz[k] * (hr + 1.3), by = Hq(bx, bz);
+        const yaw = Math.atan2(W.lx[k], W.lz[k]) - Math.PI / 2, fx = -W.lz[k], fz = W.lx[k]; // arm points left (+lateral), signals face oncoming (-forward)
+        e.set(0, 0, 0); q.setFromEuler(e); p.set(bx, by, bz); sc.set(1, 1, 1); m.compose(p, q, sc); poles.setMatrixAt(i, m);
+        e.set(0, yaw, 0); q.setFromEuler(e); p.set(bx, by + 5.9, bz); sc.set(reach + 1.3, 1, 1); m.compose(p, q, sc); arms.setMatrixAt(i, m);
+        const hx = bx + W.lx[k] * (reach * 0.75 + 1.3), hz = bz + W.lz[k] * (reach * 0.75 + 1.3); p.set(hx, by + 5.55, hz); sc.set(1, 1, 1); m.compose(p, q, sc); heads.setMatrixAt(i, m);
+        for (let j = 0; j < 3; j++) { const t = (j - 1) * 0.4, lx = hx + W.lx[k] * t - fx * 0.17, lz = hz + W.lz[k] * t - fz * 0.17; e.set(0, Math.atan2(-fx, -fz), 0); q.setFromEuler(e); p.set(lx, by + 5.55, lz); m.compose(p, q, sc); lamps.setMatrixAt(i * 3 + j, m); lamps.setColorAt(i * 3 + j, lampCol[j]); }
+        // name sign on the arm, both faces
+        const u0 = (i % cols) / cols, v1 = 1 - Math.floor(i / cols) / rows, u1 = u0 + 1 / cols, v0 = v1 - 1 / rows, sx = bx + W.lx[k] * (reach * 0.35 + 1.3), sz = bz + W.lz[k] * (reach * 0.35 + 1.3);
+        for (const face of [-1, 1]) {
+          const b = sp.length / 3, ox = fx * 0.06 * face, oz = fz * 0.06 * face;
+          for (const [a, h] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const side = a * face; sp.push(sx + W.lx[k] * side * 1.3 + ox, by + 6.55 + h * 0.32, sz + W.lz[k] * side * 1.3 + oz); su.push(a < 0 ? u0 : u1, h < 0 ? v0 : v1); }
+          si.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
+        }
+      });
+      const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); sg.setAttribute('uv', new THREE.Float32BufferAttribute(su, 2)); sg.setIndex(si); sg.computeVertexNormals();
+      poles.castShadow = arms.castShadow = heads.castShadow = true;
+      grp.add(poles, arms, heads, lamps, new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ map: atlas, roughness: 0.5, side: THREE.DoubleSide })));
+    }
+  }
+  // --- landmarks: OpenStreetMap 3D building parts (walls, flat or pyramidal roofs) and the old city gates
+  { const wp = [], wc = [], wi = [], c = new THREE.Color();
+    const tri = (a, b, cc, col) => { const s0 = wp.length / 3; wp.push(...a, ...b, ...cc); for (let i = 0; i < 3; i++) wc.push(col.r, col.g, col.b); wi.push(s0, s0 + 1, s0 + 2); };
+    const quadV = (a, b, cc, d, col) => { tri(a, b, cc, col); tri(b, d, cc, col); };
+    const prism = (ring, y0, y1, wallC, roofC, roof, rh) => { // ring: [[x,z]...] counter-clockwise seen from above
+      const m = ring.length, top = roof === 'flat' || !rh ? y1 : y1 - rh;
+      for (let i = 0; i < m; i++) { const [ax, az] = ring[i], [bx, bz] = ring[(i + 1) % m]; quadV([ax, y0, az], [bx, y0, bz], [ax, top, az], [bx, top, bz], wallC); }
+      if (roof === 'pyramidal' || roof === 'hipped' || roof === 'dome' || roof === 'gabled') { let cx = 0, cz = 0; ring.forEach(([x, z]) => { cx += x; cz += z; }); cx /= m; cz /= m;
+        for (let i = 0; i < m; i++) { const [ax, az] = ring[i], [bx, bz] = ring[(i + 1) % m]; tri([ax, top, az], [bx, top, bz], [cx, y1, cz], roofC); } }
+      else { const v2 = ring.map(([x, z]) => new THREE.Vector2(x, z)); THREE.ShapeUtils.triangulateShape(v2, []).forEach(t => tri([ring[t[0]][0], top, ring[t[0]][1]], [ring[t[2]][0], top, ring[t[2]][1]], [ring[t[1]][0], top, ring[t[1]][1]], roofC)); }
+    };
+    const ringOf = p => { const r = []; for (let i = 0; i < p.length; i += 2) r.push([p[i], p[i + 1]]); const v = r.map(([x, z]) => new THREE.Vector2(x, z)); if (THREE.ShapeUtils.isClockWise(v)) r.reverse(); return r; };
+    for (const L of env.landmarks) {
+      const ring = ringOf(L.p); if (ring.length < 3) continue;
+      let base = Infinity; ring.forEach(([x, z]) => { base = Math.min(base, Hq(x, z)); }); base -= 0.2;
+      if (L.k === 'gate') { // 臺北府城 gates: stone platform with an arched passage, red-pillared pavilion, glazed hip roof
+        let cx = 0, cz = 0; ring.forEach(([x, z]) => { cx += x; cz += z; }); cx /= ring.length; cz /= ring.length;
+        const sh = (r, f) => r.map(([x, z]) => [cx + (x - cx) * f, cz + (z - cz) * f]);
+        prism(ring, base, base + 5.2, lin(0xa59c8c), lin(0x8f8778), 'flat', 0);
+        prism(sh(ring, 0.62), base + 5.2, base + 9.0, lin(0x9a2d24), lin(0x9a2d24), 'flat', 0);
+        prism(sh(ring, 0.95), base + 9.0, base + 12.6, lin(0x9a2d24), lin(0xd08a2a), 'hipped', 3.4);
+        // arched passage: a dark slot through the long axis of the platform
+        let best = 0, ax = 1, az = 0; for (let i = 0; i < ring.length; i++) { const [x0, z0] = ring[i], [x1, z1] = ring[(i + 1) % ring.length], l = Math.hypot(x1 - x0, z1 - z0); if (l > best) { best = l; ax = (x1 - x0) / l; az = (z1 - z0) / l; } }
+        const px = -az, pz = ax, hwA = 1.8, dark = lin(0x1d1a17);
+        let half = 0; ring.forEach(([x, z]) => { half = Math.max(half, Math.abs((x - cx) * px + (z - cz) * pz)); });
+        for (const sd of [1, -1]) { const ox = cx + px * (half + 0.04) * sd, oz = cz + pz * (half + 0.04) * sd;
+          quadV([ox - ax * hwA, base + 0.2, oz - az * hwA], [ox + ax * hwA, base + 0.2, oz + az * hwA], [ox - ax * hwA, base + 3.6, oz - az * hwA], [ox + ax * hwA, base + 3.6, oz + az * hwA], dark); }
+        continue;
+      }
+      const wall = lin(colOf(L.bc, 0xece8de)), roofC = lin(colOf(L.rc, L.rs === 'flat' ? 0xb8b4aa : 0x8a4b33));
+      prism(ring, base + L.mh, base + L.h, wall, roofC, L.rs, L.rh);
+    }
+    if (wi.length) { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(wc, 3)); g.setIndex(wi); g.computeVertexNormals();
+      const lm = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, side: THREE.DoubleSide })); lm.castShadow = lm.receiveShadow = true; grp.add(lm); }
+  }
+}
+// red and white plastic water barriers (水馬), the usual Taiwanese road-closure barrier, on the kerb line
+function waterBarriers(grp) {
+  const n = W.n, X = W.x, Z = W.z, spots = [];
+  for (const sd of [1, -1]) { const arr = sd > 0 ? W.wallL : W.wallR; let acc = 0;
+    for (let k = 0; k < n; k++) { acc += W.ds; if (!isFinite(arr[k]) || acc < 1.25) continue; acc = 0; spots.push([k, sd, arr[k]]); } }
+  if (!spots.length) return;
+  const g = new THREE.BoxGeometry(1.2, 0.8, 0.42, 1, 1, 1); g.translate(0, 0.4, 0);
+  { const p = g.attributes.position; for (let i = 0; i < p.count; i++) if (p.getY(i) > 0.5) p.setZ(i, p.getZ(i) * 0.55); g.computeVertexNormals(); } // narrower at the top
+  const im = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ roughness: 0.55 }), spots.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1), red = lin(0xc4212a), wht = lin(0xf2f0ea);
+  spots.forEach(([k, sd, off], i) => { const t = off * sd, x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t; p.set(x, Hq(x, z), z); e.set(0, Math.atan2(W.lx[k], W.lz[k]) + Math.PI / 2, 0); q.setFromEuler(e); m.compose(p, q, sc); im.setMatrixAt(i, m); im.setColorAt(i, i & 1 ? wht : red); });
+  im.castShadow = im.receiveShadow = true; grp.add(im);
+}
 function buildMeshes() {
   if (W.group) { scene.remove(W.group); W.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => m.dispose()); }); }
   const grp = W.group = new THREE.Group(); scene.add(grp);
@@ -723,7 +1018,7 @@ function buildMeshes() {
     const g = ribbonGeo((push, I) => {
       const grey = lin(0x6f6f6f);
       for (const r of M.roads) {
-        const pts = r.p, m = pts.length / 2, hwR = ROAD_W[r.c] / 2; if (m < 2) continue; let s = 0, prevBase = -1;
+        const pts = r.p, m = pts.length / 2, hwR = (r.w || ROAD_W[r.c]) / 2; if (m < 2 || r.lay > 0) continue; let s = 0, prevBase = -1;
         for (let i = 0; i < m; i++) {
           const a = Math.max(0, i - 1), b = Math.min(m - 1, i + 1); let tx = pts[b * 2] - pts[a * 2], tz = pts[b * 2 + 1] - pts[a * 2 + 1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
           if (i) s += Math.hypot(pts[i * 2] - pts[i * 2 - 2], pts[i * 2 + 1] - pts[i * 2 - 1]);
@@ -740,16 +1035,18 @@ function buildMeshes() {
   }
   // --- circuit ribbons
   const S = new Float32Array(n + 1); for (let k = 1; k <= n; k++) S[k] = S[k - 1] + W.ds;
+  // from / to: lateral offsets, either numbers or functions of the sample index (real road widths vary along the lap)
   function ribbon(from, to, cols, colorAt, yOff, keep, flat, mat, metric) {
+    const F = typeof from === 'function' ? from : () => from, T = typeof to === 'function' ? to : () => to;
     const g = ribbonGeo((push, I) => {
-      const vert = (r, t, cc) => { const k = r % n, x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t; return metric ? push(x, Hq(x, z) + yOff, z, t / metric, S[r] / metric, cc) : push(x, Hq(x, z) + yOff, z, (t - from) / (to - from), S[r] / 8, cc); };
+      const vert = (r, q, cc) => { const k = r % n, f = F(k), t = f + (T(k) - f) * q / cols, x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t; return metric ? push(x, Hq(x, z) + yOff, z, t / metric, S[r] / metric, cc) : push(x, Hq(x, z) + yOff, z, q / cols, S[r] / 8, cc); };
       if (!flat) {
-        for (let r = 0; r <= n; r++) for (let q = 0; q <= cols; q++) vert(r, from + (to - from) * q / cols, colorAt(r % n, q));
+        for (let r = 0; r <= n; r++) for (let q = 0; q <= cols; q++) vert(r, q, colorAt(r % n, q));
         for (let r = 0; r < n; r++) { if (keep && !keep(r)) continue; for (let q = 0; q < cols; q++) { const a = r * (cols + 1) + q, b = a + 1, cc = a + cols + 1, d = cc + 1; I.push(a, b, cc, b, d, cc); } }
       } else {
         for (let r = 0; r < n; r++) { if (keep && !keep(r)) continue;
-          for (let q = 0; q < cols; q++) { const t0 = from + (to - from) * q / cols, t1 = from + (to - from) * (q + 1) / cols, cc = colorAt(r, q);
-            const a = vert(r, t0, cc), b = vert(r, t1, cc), c2 = vert(r + 1, t0, cc), d = vert(r + 1, t1, cc); I.push(a, b, c2, b, d, c2); } }
+          for (let q = 0; q < cols; q++) { const cc = colorAt(r, q);
+            const a = vert(r, q, cc), b = vert(r, q + 1, cc), c2 = vert(r + 1, q, cc), d = vert(r + 1, q + 1, cc); I.push(a, b, c2, b, d, c2); } }
       }
     });
     const m = new THREE.Mesh(g, mat || new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -6 }));
@@ -758,27 +1055,31 @@ function buildMeshes() {
   const asph = lin(0x8a8a8c), asph2 = lin(0x77777a), white = lin(0xf0f0f0), red = lin(0xc8202a), green = lin(0x2c9a46), black = lin(0x151515);
   // asphalt: darker rubber on the racing line, streaky braking marks where the speed profile drops
   const ar = mulberry32(5), shade = Array.from({ length: n }, () => ar()), line = new Float32Array(n), brake = new Float32Array(n), ahead = Math.round(25 / W.ds);
-  for (let k = 0; k < n; k++) { line[k] = clamp(RACE.ks[(k + ahead) % n] * 650, -(hw - 1.6), hw - 1.6); const v0 = RACE.prof[k], v1 = RACE.prof[(k + Math.round(40 / W.ds)) % n]; brake[k] = clamp((v0 - v1) / 25, 0, 1); }
+  const hL = k => W.hwL[k % n], hR = k => -W.hwR[k % n];
+  for (let k = 0; k < n; k++) { line[k] = clamp(RACE.ks[(k + ahead) % n] * 650, -(W.hwR[k] - 1.6), W.hwL[k] - 1.6); const v0 = RACE.prof[k], v1 = RACE.prof[(k + Math.round(40 / W.ds)) % n]; brake[k] = clamp((v0 - v1) / 25, 0, 1); }
   smoothCirc(line, 6, 2); smoothCirc(brake, 4, 2);
   const AC = 20, tmpC = new THREE.Color();
-  ribbon(-hw, hw, AC, (k, q) => {
-    const t = -hw + 2 * hw * q / AC, dl = (t - line[k]) / 1.7, rub = Math.exp(-dl * dl), streak = brake[k] * (0.5 + 0.5 * Math.sin(t * 5.3 + k * 0.05)) * Math.exp(-dl * dl * 0.6);
-    const edge = smooth(hw - 1.2, hw, Math.abs(t)) * 0.12;
+  ribbon(hR, hL, AC, (k, q) => {
+    const t = -W.hwR[k] + (W.hwL[k] + W.hwR[k]) * q / AC, dl = (t - line[k]) / 1.7, rub = Math.exp(-dl * dl) * (W.real ? 0.45 : 1), streak = brake[k] * (W.real ? 0.4 : 1) * (0.5 + 0.5 * Math.sin(t * 5.3 + k * 0.05)) * Math.exp(-dl * dl * 0.6);
+    const edge = smooth((t > 0 ? W.hwL[k] : W.hwR[k]) - 1.2, t > 0 ? W.hwL[k] : W.hwR[k], Math.abs(t)) * 0.12;
     return tmpC.copy(asph).lerp(asph2, shade[k] * 0.4).multiplyScalar(1 - rub * 0.22 - streak * 0.32 + edge).clone();
   }, 0.05, null, false,
     new THREE.MeshStandardMaterial({ vertexColors: true, map: TEX.asphalt2, normalMap: TEX.asphaltN, normalScale: new THREE.Vector2(0.55, 0.55), roughness: 0.8, envMapIntensity: 0.5, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }), 6);
   const gravM = new THREE.MeshStandardMaterial({ map: TEX.gravel, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
   for (const sd of [1, -1]) { const keepG = r => W.grav[r] === sd && W.grav[(r + 1) % n] === sd; ribbon(sd > 0 ? hw + 1.5 : -hw - 17, sd > 0 ? hw + 17 : -hw - 1.5, 4, () => white, 0.035, keepG, false, gravM, 5); }
-  ribbon(hw - 0.45, hw - 0.15, 1, () => white, 0.07, null, false);
-  ribbon(-hw + 0.15, -hw + 0.45, 1, () => white, 0.07, null, false);
-  const kerbKeep = r => W.kerb[r] && W.kerb[(r + 1) % n], kerbCol = k => ((k >> 1) & 1) ? white : red;
-  ribbon(hw, hw + 1.5, 1, kerbCol, 0.09, kerbKeep, true);
-  ribbon(-hw - 1.5, -hw, 1, kerbCol, 0.09, kerbKeep, true);
-  ribbon(-hw, hw, 10, (k, q) => ((q + k) & 1) ? white : black, 0.1, r => r === 0 || r === 1, true);
-  ribbon(-hw, hw, 1, () => green, 0.1, r => W.drs[r] && !W.drs[(r - 1 + n) % n], true);
+  if (W.real) buildTaipeiStreet(grp, ribbon, S); // Taiwanese road markings, kerbs, sidewalks, water barriers
+  else {
+    ribbon(k => W.hwL[k] - 0.45, k => W.hwL[k] - 0.15, 1, () => white, 0.07, null, false);
+    ribbon(k => -W.hwR[k] + 0.15, k => -W.hwR[k] + 0.45, 1, () => white, 0.07, null, false);
+    const kerbKeep = r => W.kerb[r] && W.kerb[(r + 1) % n], kerbCol = k => ((k >> 1) & 1) ? white : red;
+    ribbon(hL, k => W.hwL[k] + 1.5, 1, kerbCol, 0.09, kerbKeep, true);
+    ribbon(k => -W.hwR[k] - 1.5, hR, 1, kerbCol, 0.09, kerbKeep, true);
+  }
+  ribbon(hR, hL, 10, (k, q) => ((q + k) & 1) ? white : black, 0.1, r => r === 0 || r === 1, true);
+  if (!W.real) ribbon(hR, hL, 1, () => green, 0.1, r => W.drs[r] && !W.drs[(r - 1 + n) % n], true);
   for (let gs = 1; gs <= 6; gs++) { // starting grid slots, staggered like a real grid
-    const r0 = n - gs * 4, side = gs & 1 ? 1 : -1;
-    ribbon(side * 1.0, side * 4.6, 1, () => white, 0.1, r => r === r0, true);
+    const r0 = n - gs * 4, side = gs & 1 ? 1 : -1, wk = Math.min(W.hwL[r0], W.hwR[r0]);
+    ribbon(side * Math.min(1.0, wk - 3), side * Math.min(4.6, wk - 0.4), 1, () => white, 0.1, r => r === r0, true);
   }
   // --- barriers: concrete + catch fence on street circuits; armco rails and tyre walls on road courses
   const vwall = (side, extra, y0, y1, mat, uScale, keep) => {
@@ -790,7 +1091,8 @@ function buildMeshes() {
     });
     const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true; grp.add(m);
   };
-  if (W.city) {
+  if (W.real) waterBarriers(grp);
+  else if (W.city) {
     const bm = new THREE.MeshStandardMaterial({ map: TEX.barrier, roughness: 0.8, side: THREE.DoubleSide });
     const fm = new THREE.MeshStandardMaterial({ map: TEX.fence, alphaTest: 0.4, transparent: false, roughness: 0.5, metalness: 0.6, side: THREE.DoubleSide });
     for (const sd of [1, -1]) { vwall(sd, 0, -0.3, 1.05, bm, 32); vwall(sd, 0.15, 1.05, 4.2, fm, 3.2); }
@@ -873,7 +1175,7 @@ function buildMeshes() {
     const shedG = new THREE.BoxGeometry(1, 2.6, 1); shedG.translate(0, 1.3, 0);
     inst(props.shed, shedG, new THREE.MeshStandardMaterial({ color: lin(0x6f8796), roughness: 0.45, metalness: 0.6 }), ([x, y, z, a, w], v, e, sv) => { v.set(x, y, z); e.set(0, -a, 0); sv.set(w, 1, w * 0.8); });
   }
-  buildStands(grp, stand);
+  if (!W.real) buildStands(grp, stand);
   // --- vegetation
   const tr = mulberry32(42), m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), tc = new THREE.Color();
   const treeGeo = crossGeo(0.4), eu = new THREE.Euler();
@@ -901,7 +1203,18 @@ function buildMeshes() {
     }
     tufts.count = i; q4.identity(); grp.add(tufts);
   }
-  if (W.city) {
+  if (W.real) {
+    const street = [], park = [], occ = M.occ, HWg = W.hwGrid;
+    const free = (x, z) => { const i = Math.floor((x + W.sx / 2) / occ.cs), j = Math.floor((z + W.sz / 2) / occ.cs); return i >= 0 && j >= 0 && i < occ.rw && j < occ.rh && !occ.a[j * occ.rw + i]; };
+    for (const [x, z, pk] of M.env.trees) {
+      if (Math.abs(x) > W.sx / 2 - 4 || Math.abs(z) > W.sz / 2 - 4 || !free(x, z)) continue;
+      if (gridSample(D, x, z) < gridSample(HWg, x, z) + 1.4) continue; // keep the carriageway and barrier line clear
+      (pk ? park : street).push([x, z, pk ? 0.9 + tr() * 0.5 : 0.75 + tr() * 0.35]);
+    }
+    placeTrees(street, true); placeTrees(park, true);
+    taipeiScenery(grp);
+  }
+  if (W.city && !W.real) {
     const spots = [], occ = M.occ, free = (x, z) => { const i = Math.floor((x + W.sx / 2) / occ.cs), j = Math.floor((z + W.sz / 2) / occ.cs); return i >= 0 && j >= 0 && i < occ.rw && j < occ.rh && !occ.a[j * occ.rw + i]; };
     for (const r of M.roads) {
       if (r.c > 3) continue; const pts = r.p, off = ROAD_W[r.c] / 2 + 2.2;
@@ -917,15 +1230,16 @@ function buildMeshes() {
       }
     }
     placeTrees(spots, true);
+  }
+  if (W.city) {
     // street lights along the circuit
     const lamps = [], lampG = new THREE.CylinderGeometry(0.09, 0.12, 9, 6); lampG.translate(0, 4.5, 0);
     const headG = new THREE.BoxGeometry(1.6, 0.2, 0.4); headG.translate(0.7, 9, 0);
-    const off = (isFinite(W.wall) ? W.wall : hw) + 1.6;
-    for (let k = 0; k < n; k += Math.round(38 / W.ds)) for (const sd of [1, -1]) lamps.push([k, sd]);
+    for (let k = 0; k < n; k += Math.round(38 / W.ds)) for (const sd of [1, -1]) { const hs = sd > 0 ? W.hwL[k] : W.hwR[k], x = X[k] + W.lx[k] * (hs + 2) * sd, z = Z[k] + W.lz[k] * (hs + 2) * sd; if (!W.real || gridSample(D, x, z) > hs + 1) lamps.push([k, sd]); }
     const poles = new THREE.InstancedMesh(lampG, new THREE.MeshStandardMaterial({ color: lin(0x5d6166), roughness: 0.5, metalness: 0.7 }), lamps.length);
     const heads = new THREE.InstancedMesh(headG, new THREE.MeshStandardMaterial({ color: lin(0x4a4d52), roughness: 0.5, metalness: 0.5, emissive: lin(0x333020) }), lamps.length);
     const e = new THREE.Euler();
-    lamps.forEach(([k, sd], i) => { const x = X[k] + W.lx[k] * off * sd, z = Z[k] + W.lz[k] * off * sd; ps.set(x, Hq(x, z), z); e.set(0, Math.atan2(W.lz[k] * sd, -W.lx[k] * sd), 0); q4.setFromEuler(e); sc.set(1, 1, 1); m4.compose(ps, q4, sc); poles.setMatrixAt(i, m4); heads.setMatrixAt(i, m4); });
+    lamps.forEach(([k, sd], i) => { const off = W.real ? (sd > 0 ? W.hwL[k] : W.hwR[k]) + 2.4 : (isFinite(W.wall) ? W.wall : (sd > 0 ? W.hwL[k] : W.hwR[k])) + 1.6, x = X[k] + W.lx[k] * off * sd, z = Z[k] + W.lz[k] * off * sd; ps.set(x, Hq(x, z), z); e.set(0, Math.atan2(W.lz[k] * sd, -W.lx[k] * sd), 0); q4.setFromEuler(e); sc.set(1, 1, 1); m4.compose(ps, q4, sc); poles.setMatrixAt(i, m4); heads.setMatrixAt(i, m4); });
     poles.castShadow = heads.castShadow = true; grp.add(poles, heads); q4.identity();
   } else {
     const spots = [];
@@ -1110,7 +1424,7 @@ function placeCar(k, lat = 0, keepTyres = false) {
 function physicsStep(dt, inp) {
   const c = car, sp = SPEC, ae = aeroOf(setup.aero);
   const loc = trackLocate(c.x, c.z, c.k); c.k = loc.k; c.lat = loc.lat;
-  const hw = setup.width / 2, al = Math.abs(loc.lat);
+  const hw = loc.lat > 0 ? W.hwL[loc.k] : W.hwR[loc.k], al = Math.abs(loc.lat);
   const gs = W.grav[loc.k];
   const surf = al < hw ? 0 : (al < hw + 1.5 && W.kerb[loc.k]) ? 1 : (gs && Math.sign(loc.lat) === gs && al < hw + 17) ? 3 : 2; c.surf = surf;
   const off = surf === 2 && W.city; // city run-off is pavement, not grass
@@ -1820,12 +2134,15 @@ function loadPrefs() {
   } catch (e) { /* storage unavailable */ }
 }
 // graphics quality: pixel ratio and shadow map size; "auto" steps down when the frame rate stays low
-let qLevel = null;
 const autoLevel = () => COARSE ? 'mid' : 'high';
+// pixel ratio for a quality level, also capped by total pixels so big Retina screens don't render 6 MP through the bloom chain
+function pixelRatioFor(level) {
+  const dprMax = level === 'high' ? 2 : level === 'mid' ? 1.5 : 1, maxPx = level === 'high' ? 3.7e6 : level === 'mid' ? 2.4e6 : 1.3e6;
+  return Math.max(1, Math.min(window.devicePixelRatio || 1, dprMax, Math.sqrt(maxPx / (innerWidth * innerHeight))));
+}
 function applyQuality(level) {
   if (level === qLevel) return; qLevel = level;
-  const dprMax = level === 'high' ? 2 : level === 'mid' ? 1.5 : 1;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, dprMax));
+  renderer.setPixelRatio(pixelRatioFor(level));
   const shadows = level !== 'low', size = level === 'high' ? 2048 : 1024;
   if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
   sun.shadow.mapSize.set(size, size); sun.castShadow = shadows;
@@ -1855,7 +2172,7 @@ function nameTag(text, color) {
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); sp.scale.set(3.4, 0.85, 1); sp.position.set(0, 2.2, 0); return sp;
 }
 function disposeModel(m) { scene.remove(m.root); m.root.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); }
-function gridSlot(i) { const n = W.n; return { k: ((n - 8 - i * 5) % n + n) % n, lat: (i % 2 ? -1 : 1) * Math.min(2.8, setup.width / 2 - 2) }; }
+function gridSlot(i) { const n = W.n; return { k: ((n - 8 - i * 5) % n + n) % n, lat: (i % 2 ? -1 : 1) * Math.min(2.8, Math.min(W.hwL[((n - 8 - i * 5) % n + n) % n], W.hwR[((n - 8 - i * 5) % n + n) % n]) - 1.8) }; }
 // Speed the circuit allows at each sample: cornering limit with downforce, then braking (backward) and traction (forward) passes
 function buildProfile() {
   const n = W.n, ds = W.ds, ae = aeroOf(0.5), kA = 0.5 * 1.2 * ae.ClA / SPEC.m, mu = 1.72, v = new Float32Array(n);
@@ -1910,24 +2227,25 @@ function poseModel(mdl, x, z, psi) {
 }
 function opponentsStep(dt) {
   if (!RACE.on) return;
-  const L = W.len, n = W.n, hw = setup.width / 2, pv = Math.hypot(car.vx, car.vy);
+  const L = W.len, n = W.n, pv = Math.hypot(car.vx, car.vy);
   const others = [{ s: playerProgress(), lat: car.lat, v: pv }, ...RACE.cars];
   for (const r of NET.remote.values()) if (r.inRace) others.push({ s: r.prog, lat: r.lat || 0, v: r.v || 0 });
   for (const c of RACE.cars) {
     if (state.t < c.delay) { poseOpponent(c); continue; }
     const sm = ((c.s % L) + L) % L, k = Math.floor(sm / W.ds) % n, ahead = (k + Math.round(25 / W.ds)) % n;
     const cool = c.finT >= 0 ? 0.75 : 1;
-    let vT = RACE.prof[k] * c.skill * cool, latT = clamp(RACE.ks[ahead] * 650, -(hw - 1.6), hw - 1.6);
+    const hwk = Math.min(W.hwL[k], W.hwR[k]);
+    let vT = RACE.prof[k] * c.skill * cool, latT = clamp(RACE.ks[ahead] * 650, -(hwk - 1.6), hwk - 1.6);
     for (const o of others) {
       if (o === c) continue;
       const d = wrapGap(o.s - c.s);
       if (d > 0 && d < 28 && Math.abs(o.lat - c.lat) < 2.6) {
-        const side = o.lat > 0 ? -1 : 1, passLat = clamp(o.lat + side * 3.4, -(hw - 1.2), hw - 1.2);
+        const side = o.lat > 0 ? -1 : 1, passLat = clamp(o.lat + side * 3.4, -(hwk - 1.2), hwk - 1.2);
         if (Math.abs(passLat - o.lat) > 2.6 && d > 6) latT = passLat; else vT = Math.min(vT, o.v + Math.max(0, d - 8) * 0.6);
       }
     }
     if (c.v < vT) c.v = Math.min(vT, c.v + accelAt(c.v) * (0.88 + 0.12 * c.skill) * dt); else c.v = Math.max(vT, c.v - 34 * dt);
-    c.latV = clamp((latT - c.lat) * 1.1, -3.2, 3.2); c.lat = clamp(c.lat + c.latV * dt, -(hw - 1), hw - 1);
+    c.latV = clamp((latT - c.lat) * 1.1, -3.2, 3.2); c.lat = clamp(c.lat + c.latV * dt, -(hwk - 1), hwk - 1);
     c.s += c.v * dt;
     const done = Math.floor(c.s / L);
     if (done > c.lap) {
@@ -1938,7 +2256,7 @@ function opponentsStep(dt) {
     poseOpponent(c);
   }
   // contact with the player: two circles per car (nose and tail), the player's car is the one pushed
-  for (const c of RACE.cars) if (bump(c)) { c.v *= 0.97; c.lat = clamp(c.lat + Math.sign(c.lat - car.lat || 1) * 0.3, -(hw - 1), hw - 1); }
+  for (const c of RACE.cars) if (bump(c)) { const kk = Math.floor((((c.s % L) + L) % L) / W.ds) % n, hk = Math.min(W.hwL[kk], W.hwR[kk]); c.v *= 0.97; c.lat = clamp(c.lat + Math.sign(c.lat - car.lat || 1) * 0.3, -(hk - 1), hk - 1); }
   for (const r of NET.remote.values()) if (r.inRace && r.x !== undefined) bump(r);
 }
 function bump(o) {
