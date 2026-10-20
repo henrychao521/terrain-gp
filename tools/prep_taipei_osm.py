@@ -1,10 +1,14 @@
 """Pack OpenStreetMap detail for the Taipei street circuit into data/taipei_osm.json.
 
-Input: a directory of raw OSM XML tiles (api.openstreetmap.org/api/0.6/map) covering the map,
-TWD97 E 299000-304600 / N 2766400-2770600. Output coordinates are decimetres east / north of
-TWD97 E 299000 / N 2766400, the same frame as data/taipei.json.
+Input: a directory of OSM XML files covering the map, TWD97 E 299000-304600 / N 2766400-2770600.
+Output coordinates are decimetres east / north of TWD97 E 299000 / N 2766400, the same frame as data/taipei.json.
 
-  python3 tools/prep_taipei_osm.py <tile dir>
+Recommended source, the daily Geofabrik extract of Taiwan (ODbL), cut to the map with osmium-tool:
+  curl -LO https://download.geofabrik.de/asia/taiwan-latest.osm.pbf
+  osmium extract -b 121.48346,25.00303,121.54309,25.04435 -s smart -o area.osm.pbf taiwan-latest.osm.pbf
+  mkdir xml && osmium cat area.osm.pbf -o xml/area.osm
+  python3 tools/prep_taipei_osm.py xml
+Overlapping tiles from api.openstreetmap.org/api/0.6/map also work.
 """
 import glob, json, math, random, sys, xml.etree.ElementTree as ET
 from pyproj import Transformer
@@ -18,7 +22,7 @@ LANE_W, CURB_W = 3.2, 1.5  # Taipei arterial lanes ~3.0-3.5 m; outside lane has 
 GREEN = {'park', 'garden', 'grass', 'forest', 'wood', 'pitch', 'playground', 'recreation_ground', 'village_green', 'meadow', 'scrub', 'golf_course'}
 WOODED = {'forest', 'wood', 'park'}
 
-nodes, ways, rels = {}, {}, []
+nodes, ways, rels = {}, {}, {}
 for fn in sorted(glob.glob(sys.argv[1] + '/*.osm')):
     for ev, el in ET.iterparse(fn, events=('end',)):
         if el.tag == 'node':
@@ -27,7 +31,7 @@ for fn in sorted(glob.glob(sys.argv[1] + '/*.osm')):
         elif el.tag == 'way':
             ways[el.get('id')] = ([n.get('ref') for n in el.findall('nd')], {t.get('k'): t.get('v') for t in el.findall('tag')}); el.clear()
         elif el.tag == 'relation':
-            rels.append(([(m.get('type'), m.get('ref'), m.get('role')) for m in el.findall('member')], {t.get('k'): t.get('v') for t in el.findall('tag')})); el.clear()
+            rels[el.get('id')] = ([(m.get('type'), m.get('ref'), m.get('role')) for m in el.findall('member')], {t.get('k'): t.get('v') for t in el.findall('tag')}); el.clear()  # by id: overlapping tiles repeat relations
 print('osm', len(nodes), 'nodes', len(ways), 'ways', len(rels), 'relations')
 
 proj = {}
@@ -62,6 +66,24 @@ for wid, (nds, t) in ways.items():
     for n in nds:
         if t.get('name'): road_names_at.setdefault(n, set()).add(t['name'])
 print('roads', len(roads))
+
+# --- elevated roads and bridges (drawn by the Blender tiles): class, layer, width, whether each end meets a surface street
+BRIDGE_CLS = dict(CLS, motorway=0, motorway_link=5)
+ground_nodes = set()
+for wid, (nds, t) in ways.items():
+    if t.get('highway') in BRIDGE_CLS and not t.get('bridge') and t.get('layer', '0') in ('0', None) and t.get('tunnel') is None: ground_nodes.update(nds)
+bridges = []
+for wid, (nds, t) in ways.items():
+    c = BRIDGE_CLS.get(t.get('highway'))
+    if c is None or not t.get('bridge') or t.get('bridge') == 'no': continue
+    pts = [xy(n) for n in nds if n in nodes]
+    if len(pts) < 2 or not any(inside(p) for p in pts): continue
+    one = t.get('oneway') in ('yes', '1') or c in (0, 5)
+    ln = int(num(t.get('lanes'), 0) or 0) or LANES[min(c, 5)][1 if one else 0]
+    w = num(t.get('width')) or ln * LANE_W + 1.0
+    lay = max(1, int(num(t.get('layer'), 1) or 1))
+    bridges.append([c, lay, dm(w), 1 if nds[0] in ground_nodes else 0, 1 if nds[-1] in ground_nodes else 0, t.get('name', '')] + flat(pts))
+print('bridges', len(bridges))
 
 # --- traffic lights (with the names of the streets that meet there) and crossings
 signals, crossings = [], []
@@ -102,7 +124,7 @@ def add_green(r, kind):
 for wid, (nds, t) in ways.items():
     kind = t.get('leisure') if t.get('leisure') in GREEN else t.get('landuse') if t.get('landuse') in GREEN else t.get('natural') if t.get('natural') in GREEN else None
     if kind and nds and nds[0] == nds[-1]: add_green(ring_of(nds), kind)
-for members, t in rels:
+for members, t in rels.values():
     kind = t.get('leisure') if t.get('leisure') in GREEN else t.get('landuse') if t.get('landuse') in GREEN else None
     if kind and t.get('type') == 'multipolygon':
         for typ, ref, role in members:
@@ -154,6 +176,6 @@ for wid, r, t in outlines:
 print('landmark outlines', len(outlines), 'parts', len(parts), 'styled', sum(1 for p in parts if p['n'] in STYLE and p['rs'] != 'flat'))
 
 out = {'source': 'OpenStreetMap', 'credits': '道路、樹木、號誌、公園與地標：© OpenStreetMap contributors（ODbL）',
-       'roads': roads, 'signals': signals, 'crossings': crossings, 'green': green, 'trees': trees, 'landmarks': parts}
+       'roads': roads, 'bridges': bridges, 'signals': signals, 'crossings': crossings, 'green': green, 'trees': trees, 'landmarks': parts}
 json.dump(out, open('data/taipei_osm.json', 'w'), ensure_ascii=False, separators=(',', ':'))
 import os; print('wrote data/taipei_osm.json', os.path.getsize('data/taipei_osm.json') // 1024, 'KB')
