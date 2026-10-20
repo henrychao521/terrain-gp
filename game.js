@@ -266,7 +266,7 @@ function finishCity(M) {
 function loadTaipei() {
   if (CITY.taipei) return Promise.resolve(CITY.taipei);
   const get = u => fetch(u).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
-  return Promise.all([get('data/taipei.json'), get('data/taipei_osm.json').catch(() => null)]).then(([d, o]) => {
+  return Promise.all([get('data/taipei.json'), get('data/taipei_osm.json').catch(() => null), get('models/taipei/tiles.json').catch(() => null)]).then(([d, o, tl]) => {
     const sx = d.nx * d.d, sz = d.ny * d.d, cell = 10, nx = sx / cell + 1, nz = sz / cell + 1;
     const zr = atob(d.z), mr = atob(d.mask), dz = new Float32Array(d.nx * d.ny), dm = new Uint8Array(d.nx * d.ny);
     for (let k = 0; k < dz.length; k++) { let v = zr.charCodeAt(2 * k) | (zr.charCodeAt(2 * k + 1) << 8); if (v > 32767) v -= 65536; dz[k] = v / 100; dm[k] = mr.charCodeAt(k); }
@@ -293,7 +293,9 @@ function loadTaipei() {
       const inLm = (x, z) => env.landmarks.some(l => pointInPoly(x, z, l.p));
       blds = blds.filter(b => { const p = b.p, m = p.length / 2; let gx = 0, gz = 0; for (let i = 0; i < m; i++) { gx += p[i * 2]; gz += p[i * 2 + 1]; } return !inLm(gx / m, gz / m); });
     }
-    return (CITY.taipei = finishCity({ kind: 'city', id: 'taipei', name: d.name, sx, sz, nx, nz, raw, mask, base: 0, water: 0.35, roads, blds, env, credits: d.credits + (o ? '；' + o.credits : '') }));
+    // Blender-built scenery tiles replace the generated buildings and landmarks inside their bounds
+    const tiles = tl && window.THREE.GLTFLoader ? tl.tiles.map(t => ({ file: 'models/taipei/' + t.file, x0: t.x0 - sx / 2, x1: t.x1 - sx / 2, z0: sz / 2 - t.y1, z1: sz / 2 - t.y0 })) : [];
+    return (CITY.taipei = finishCity({ kind: 'city', id: 'taipei', name: d.name, sx, sz, nx, nz, raw, mask, base: 0, water: 0.35, roads, blds, env, tiles, credits: d.credits + (o ? '；' + o.credits : '') }));
   });
 }
 function parseOSM(text, fileName) {
@@ -925,6 +927,7 @@ function taipeiScenery(grp) {
     const ringOf = p => { const r = []; for (let i = 0; i < p.length; i += 2) r.push([p[i], p[i + 1]]); const v = r.map(([x, z]) => new THREE.Vector2(x, z)); if (THREE.ShapeUtils.isClockWise(v)) r.reverse(); return r; };
     for (const L of env.landmarks) {
       const ring = ringOf(L.p); if (ring.length < 3) continue;
+      { let gx = 0, gz = 0; ring.forEach(([x, z]) => { gx += x; gz += z; }); if (inTile(W.M, gx / ring.length, gz / ring.length)) continue; }
       let base = Infinity; ring.forEach(([x, z]) => { base = Math.min(base, Hq(x, z)); }); base -= 0.2;
       if (L.k === 'gate') { // 臺北府城 gates: stone platform with an arched passage, red-pillared pavilion, glazed hip roof
         let cx = 0, cz = 0; ring.forEach(([x, z]) => { cx += x; cz += z; }); cx /= ring.length; cz /= ring.length;
@@ -960,8 +963,21 @@ function waterBarriers(grp) {
   spots.forEach(([k, sd, off], i) => { const t = off * sd, x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t; p.set(x, Hq(x, z), z); e.set(0, Math.atan2(W.lx[k], W.lz[k]) + Math.PI / 2, 0); q.setFromEuler(e); m.compose(p, q, sc); im.setMatrixAt(i, m); im.setColorAt(i, i & 1 ? wht : red); });
   im.castShadow = im.receiveShadow = true; grp.add(im);
 }
+const TILE_CACHE = new Map();
+const inTile = (M, x, z) => !!(M.tiles && M.tiles.some(t => x >= t.x0 && x <= t.x1 && z >= t.z0 && z <= t.z1));
+function loadTile(file) {
+  if (!TILE_CACHE.has(file)) TILE_CACHE.set(file, new Promise((ok, fail) => {
+    const L = new THREE.GLTFLoader();
+    if (THREE.DRACOLoader) { const dr = new THREE.DRACOLoader(); dr.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.4.1/'); L.setDRACOLoader(dr); }
+    L.load(file, g => {
+      g.scene.traverse(o => { o.userData.tile = true; if (o.isMesh) { o.castShadow = o.receiveShadow = true; const m = o.material; if (m.map) m.map.anisotropy = 4; } });
+      ok(g.scene);
+    }, undefined, fail);
+  }));
+  return TILE_CACHE.get(file);
+}
 function buildMeshes() {
-  if (W.group) { scene.remove(W.group); W.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => m.dispose()); }); }
+  if (W.group) { scene.remove(W.group); W.group.traverse(o => { if (o.userData.tile) return; if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => m.dispose()); }); }
   const grp = W.group = new THREE.Group(); scene.add(grp);
   const M = W.M, NX = W.nx, NZ = W.nz, cx = W.sx / (NX - 1), cz = W.sz / (NZ - 1), H = W.H, D = W.dist, hw = setup.width / 2, n = W.n, X = W.x, Z = W.z;
   const nrm = new THREE.Vector3();
@@ -1124,7 +1140,7 @@ function buildMeshes() {
     M.blds.forEach((b, bi) => {
       const p = b.p, m = p.length / 2; let gx = 0, gz = 0;
       for (let i = 0; i < m; i++) { gx += p[i * 2]; gz += p[i * 2 + 1]; } gx /= m; gz /= m;
-      if (near(gx, gz)) return;
+      if (near(gx, gz) || inTile(M, gx, gz)) return;
       for (let i = 0; i < m; i++) { const j = (i + 1) % m; if (near(p[i * 2], p[i * 2 + 1]) || near((p[i * 2] + p[j * 2]) / 2, (p[i * 2 + 1] + p[j * 2 + 1]) / 2)) return; }
       const key = Math.floor((gx + W.sx / 2) / tile) + ',' + Math.floor((gz + W.sz / 2) / tile);
       if (!tiles.has(key)) tiles.set(key, { F: [0, 1, 2].map(() => ({ P: [], U: [], C: [], I: [] })), S: { P: [], U: [], C: [], I: [] }, RP: [], RC: [], RI: [] });
@@ -1167,6 +1183,7 @@ function buildMeshes() {
       const rm = new THREE.Mesh(rg, roofM); rm.castShadow = rm.receiveShadow = true; grp.add(rm);
     }
     W.bldKept = kept;
+    for (const t of M.tiles || []) loadTile(t.file).then(sc => { if (W.group === grp) grp.add(sc); }).catch(e => console.warn('tile', t.file, e));
     const inst = (list, geo, mat, set) => { if (!list.length) return; const im = new THREE.InstancedMesh(geo, mat, list.length), mm = new THREE.Matrix4(), qq = new THREE.Quaternion(), vv = new THREE.Vector3(), ss = new THREE.Vector3(), ee = new THREE.Euler(); list.forEach((it, i) => { set(it, vv, ee, ss); qq.setFromEuler(ee); mm.compose(vv, qq, ss); im.setMatrixAt(i, mm); }); im.castShadow = im.receiveShadow = true; grp.add(im); };
     const tankG = new THREE.CylinderGeometry(0.75, 0.75, 1.4, 12); tankG.translate(0, 1.6, 0);
     inst(props.tank, tankG, new THREE.MeshStandardMaterial({ color: lin(0xd5d9dd), roughness: 0.3, metalness: 0.8 }), ([x, y, z, sc], v, e, sv) => { v.set(x, y, z); e.set(0, 0, 0); sv.set(sc, sc, sc); });

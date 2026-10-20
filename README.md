@@ -10,6 +10,13 @@ F1 風格的瀏覽器賽車，可用高度圖、臺北實測地形或 OpenStreet
 
 - `data/taipei_osm.json`：臺北街道賽的實際道路細節（車道數、路寬、單行道、行道樹、公園、號誌與路名、斑馬線、地標 3D 造型），由 `tools/prep_taipei_osm.py` 從 OpenStreetMap 原始圖資（api.openstreetmap.org 0.01° 分塊下載）產生：`python3 tools/prep_taipei_osm.py <分塊目錄>`。
 
+- `models/taipei/*.glb`：用 Blender 建模的臺北街景區塊（建物的騎樓、鐵窗、冷氣、直立招牌、屋頂水塔，以及東門、中正紀念堂、國家戲劇院／音樂廳、自由廣場牌樓等地標），由 `tools/blender/` 的腳本產生：
+  ```
+  python3 tools/blender/make_textures.py <貼圖目錄>
+  blender -b --factory-startup --python tools/blender/build_tile.py -- data <貼圖目錄> X0 X1 Y0 Y1 models/taipei/<檔名>.glb
+  ```
+  區塊範圍登記在 `models/taipei/tiles.json`；範圍內的建物與地標改用 Blender 模型，範圍外仍由遊戲即時產生。
+
 線上對戰使用 claude.ai Artifact 的即時房間功能，只在 claude.ai 上開啟時可用；GitHub Pages 版本支援單人計時與電腦對手。
 
 資料來源：內政部國土測繪中心 2025 年 20 m DEM（政府資料開放授權條款第 1 版）；臺北市 3D 近似建物模型（sheethub/tpe3d）；道路 © OpenStreetMap contributors（ODbL）。

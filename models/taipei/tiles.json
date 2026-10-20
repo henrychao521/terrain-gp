@@ -1,0 +1,2 @@
+{ "note": "Blender-built scenery tiles (tools/blender/build_tile.py). Bounds in metres east/north of TWD97 E 299000 / N 2766400.",
+  "tiles": [ { "file": "t_3000_3150.glb", "x0": 3000, "x1": 3900, "y0": 3150, "y1": 4000 } ] }
