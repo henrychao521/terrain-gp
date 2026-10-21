@@ -655,11 +655,13 @@ function startPreview() {
   PV.f = Math.max(1, T / 32); PV.s = 0; PV.k = 0; camInit = false;
   $('#pvInfo').textContent = (W.len / 1000).toFixed(2) + ' km・' + W.corners.length + ' 個彎・預估單圈 ' + fmt(T);
   $('#preview').hidden = false; $('#lights').hidden = true; document.body.classList.add('previewing'); state.mode = 'preview';
+  bannerT = 0; $('#banner').classList.remove('show'); // the hold-sideways hint waits for the end of the preview, it would cover the road cards
 }
 function endPreview() {
   if (state.mode !== 'preview') return;
   $('#preview').hidden = true; $('#turnHint').hidden = true; document.body.classList.remove('previewing'); camInit = false; NOTE.road = ''; NOTE.pending = '';
   state.mode = 'lights'; state.lightsT = 0; state.lightsOut = 4.2 + Math.random() * 1.2; $('#lights').hidden = false;
+  if (COARSE && innerHeight > innerWidth) banner('橫向握持手機，視野更寬', 'info');
 }
 function previewStep(dt) {
   const n = W.n, k = Math.floor(PV.s / W.ds) % n, f = (PV.s / W.ds) % 1, k2 = (k + 1) % n;
@@ -2408,7 +2410,7 @@ function startRace(fromNet) {
     state.mode = 'lights'; state.lightsT = 0; state.lightsOut = 4.2 + Math.random() * 1.2; $('#lights').hidden = false;
     NOTE.road = ''; NOTE.pending = '';
     if (setup.preview !== false && setup.mode !== 'online' && W.corners) startPreview();
-    if (COARSE && innerHeight > innerWidth) banner('橫向握持手機，視野更寬', 'info');
+    if (COARSE && innerHeight > innerWidth && state.mode !== 'preview') banner('橫向握持手機，視野更寬', 'info');
   };
   if (mapDirty) { $('#busy').textContent = setup.map !== 'terrain' ? '生成街道與建物中…' : '生成地形中…'; $('#busy').hidden = false; setTimeout(go, 30); } else go();
 }

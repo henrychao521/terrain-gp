@@ -107,6 +107,7 @@ body.previewing #tower,body.previewing #rightCol,body.previewing #tele,body.prev
 #locPill{bottom:calc(var(--sb) + 150px);left:50%;transform:translateX(-50%);font-size:13px;padding:3px 12px;border-radius:12px;background:rgba(10,14,20,.6);color:#dfe6ee;white-space:nowrap;z-index:3}
 #locCard{top:calc(var(--st) + 22%);left:50%;transform:translateX(-50%);display:grid;justify-items:center;padding:8px 22px;border-radius:6px;background:rgba(10,14,20,.72);opacity:0;transition:opacity .4s;z-index:4;pointer-events:none}
 #locCard.show{opacity:1}#locCard b{font-size:26px;letter-spacing:.06em}#locCard small,#locCard span{font-size:13px;color:#aab4c0}
+#pvSkip{pointer-events:auto;min-height:44px;padding:0 18px} /* .hud ignores the pointer; the skip button must not */
 #preview{inset:auto 0 calc(var(--sb) + 18px) 0;display:flex;justify-content:center;align-items:center;gap:14px;z-index:6}
 #preview .pv{display:grid;gap:4px;padding:8px 14px;border-radius:6px;background:rgba(10,14,20,.72);min-width:240px}#preview .pv b{font-size:16px}#preview .pv span{font-size:13px;color:#aab4c0}
 #preview i{display:block;height:4px;background:#2a323c;border-radius:2px;overflow:hidden}#preview em{display:block;height:100%;width:0;background:#5bc0ff}
