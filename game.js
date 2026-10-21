@@ -569,6 +569,104 @@ function realWidths(M, hw) {
   }
   W.hwMax = Math.max(...L, ...R);
 }
+/* ================= Corner notes, location and the preview lap ================= */
+const CORNER_WORD = ['髮夾彎', '急彎', '中彎', '緩彎', '微彎', '微彎'];
+// corners of the lap: entry/exit sample, direction, turn angle, severity (1 hairpin .. 6 gentle), suggested speed, street turned onto
+function analyzeCorners() {
+  const n = W.n, ds = W.ds, K = Float32Array.from(W.kappa); smoothCirc(K, Math.round(10 / ds), 2);
+  const on = k => Math.abs(K[k]) > 1 / 350, raw = [];
+  let k0 = 0; while (k0 < n && on(k0)) k0++;
+  if (k0 >= n) { W.corners = []; return; }
+  for (let i = 0; i < n;) {
+    const k = (k0 + i) % n; if (!on(k)) { i++; continue; }
+    const sg = Math.sign(K[k]); let j = i, ang = 0, kmax = 0;
+    while (j < n && on((k0 + j) % n) && Math.sign(K[(k0 + j) % n]) === sg) { const kk = (k0 + j) % n; ang += K[kk] * ds; kmax = Math.max(kmax, Math.abs(K[kk])); j++; }
+    raw.push({ i0: i, i1: j, ang, kmax }); i = j;
+  }
+  const merged = []; // pieces of one corner split by a short straight
+  for (const c of raw) { const p = merged[merged.length - 1]; if (p && Math.sign(p.ang) === Math.sign(c.ang) && (c.i0 - p.i1) * ds < 15) { p.i1 = c.i1; p.ang += c.ang; p.kmax = Math.max(p.kmax, c.kmax); } else merged.push({ ...c }); }
+  W.corners = merged.filter(c => Math.abs(c.ang) > 0.3).map(c => {
+    const entry = (k0 + c.i0) % n, exit = (k0 + c.i1) % n;
+    const left = (-W.lz[exit]) * W.lx[entry] + W.lx[exit] * W.lz[entry] > 0; // exit direction against the entry's left
+    const R = 1 / c.kmax, grade = R < 25 ? 1 : R < 45 ? 2 : R < 75 ? 3 : R < 120 ? 4 : R < 200 ? 5 : 6;
+    let v = Infinity; for (let i = c.i0; i <= c.i1; i++) v = Math.min(v, RACE.prof[(k0 + i) % n]);
+    const onto = W.real ? W.rname[(exit + Math.round(30 / ds)) % n] : '';
+    return { entry, exit, left, deg: Math.round(Math.abs(c.ang) * 180 / Math.PI / 5) * 5, grade, vRec: v * 3.6 * (setup.level === 'easy' ? 0.94 : 1), onto };
+  });
+  // landmarks for the location card: one point per named landmark
+  const lm = new Map(); if (W.M.env) for (const l of W.M.env.landmarks) { if (!l.n) continue; const e = lm.get(l.n) || { n: l.n, x: 0, z: 0, c: 0 }; for (let i = 0; i < l.p.length; i += 2) { e.x += l.p[i]; e.z += l.p[i + 1]; e.c++; } lm.set(l.n, e); }
+  W.lmPts = [...lm.values()].map(e => ({ n: e.n, x: e.x / e.c, z: e.z / e.c }));
+  NOTE.road = ''; NOTE.pending = ''; NOTE.run = 0;
+}
+const NOTE = { road: '', pending: '', run: 0, cardT: 0 };
+function arrowPath(left, deg) { // a stem that bends through the turn angle, with a head
+  const s = left ? -1 : 1, a = Math.min(180, Math.max(25, deg)) * Math.PI / 180, r = 20, pts = [[0, 38], [0, 6]];
+  for (let i = 1; i <= 8; i++) { const t = a * i / 8; pts.push([s * (r - r * Math.cos(t)), 6 - r * Math.sin(t)]); }
+  const [ex, ey] = pts[pts.length - 1], dx = s * Math.sin(a), dy = -Math.cos(a), hx = -dy, hy = dx;
+  return 'M' + pts.map(p => p.map(v => v.toFixed(1)).join(' ')).join(' L') + ` M${(ex - dx * 12 + hx * 9).toFixed(1)} ${(ey - dy * 12 + hy * 9).toFixed(1)} L${ex.toFixed(1)} ${ey.toFixed(1)} L${(ex - dx * 12 - hx * 9).toFixed(1)} ${(ey - dy * 12 - hy * 9).toFixed(1)}`;
+}
+// turn hint and location for the sample k (the car, or the preview camera), speed in m/s
+function drivingNotes(k, spd, dt) {
+  const n = W.n, th = $('#turnHint'), active = state.mode === 'race' || state.mode === 'lights' || state.mode === 'preview';
+  let show = false;
+  if (active && setup.turnHints !== false && W.corners && W.corners.length) {
+    let best = null, bd = Infinity;
+    for (const c of W.corners) { const d = ((c.entry - k + n) % n) * W.ds, inside = ((k - c.entry + n) % n) < ((c.exit - c.entry + n) % n); const dd = inside ? 0 : d; if (dd < bd) { bd = dd; best = c; } }
+    const reach = Math.max(140, spd * 5);
+    if (best && bd < reach) {
+      show = true;
+      $('#thArrow').setAttribute('d', arrowPath(best.left, best.deg));
+      $('#thText').textContent = (best.left ? '左' : '右') + (best.deg >= 70 && best.grade <= 3 ? '轉' : '彎') + ' ' + CORNER_WORD[best.grade - 1] + ' ' + best.deg + '°';
+      $('#thDist').textContent = bd > 0 ? Math.round(bd / 10) * 10 + ' m' : '彎中';
+      $('#thInfo').textContent = '建議 ' + Math.round(best.vRec / 5) * 5 + ' km/h' + (best.onto && best.onto !== W.rname[k] ? '・進入 ' + best.onto : '');
+      th.classList.toggle('fast', state.mode !== 'preview' && spd * 3.6 > best.vRec + 15 && bd < 150);
+    }
+  }
+  th.hidden = !show;
+  // current road, and a card when the circuit turns onto another major road
+  const pill = $('#locPill');
+  if (!W.real || !active) { pill.hidden = true; return; }
+  const road = W.rname[k] || ''; pill.hidden = !road; pill.textContent = '目前位置　' + road;
+  if (road && road !== NOTE.road) {
+    if (road === NOTE.pending) NOTE.run += spd * dt; else { NOTE.pending = road; NOTE.run = 0; }
+    if (NOTE.run > 25) {
+      const first = !NOTE.road; NOTE.road = road;
+      if (!first || state.mode === 'preview') {
+        let near = '', nd = 350; for (const p of W.lmPts) { const d = Math.hypot(p.x - W.x[k], p.z - W.z[k]); if (d < nd) { nd = d; near = p.n; } }
+        $('#lcRoad').textContent = road; $('#lcNear').textContent = near ? '附近：' + near : ''; $('#locCard').classList.add('show'); NOTE.cardT = 2.6;
+      }
+    }
+  }
+  if (NOTE.cardT > 0 && (NOTE.cardT -= dt) <= 0) $('#locCard').classList.remove('show');
+}
+// preview lap: a first-person run along the centreline, compressed to about half a minute, skippable
+const PV = { s: 0, f: 1, k: 0, dir: new THREE.Vector3(), pos: new THREE.Vector3() };
+function startPreview() {
+  let T = 0; for (let k = 0; k < W.n; k++) T += W.ds / Math.max(8, RACE.prof[k]);
+  PV.f = Math.max(1, T / 32); PV.s = 0; PV.k = 0; camInit = false;
+  $('#pvInfo').textContent = (W.len / 1000).toFixed(2) + ' km・' + W.corners.length + ' 個彎・預估單圈 ' + fmt(T);
+  $('#preview').hidden = false; $('#lights').hidden = true; document.body.classList.add('previewing'); state.mode = 'preview';
+}
+function endPreview() {
+  if (state.mode !== 'preview') return;
+  $('#preview').hidden = true; $('#turnHint').hidden = true; document.body.classList.remove('previewing'); camInit = false; NOTE.road = ''; NOTE.pending = '';
+  state.mode = 'lights'; state.lightsT = 0; state.lightsOut = 4.2 + Math.random() * 1.2; $('#lights').hidden = false;
+}
+function previewStep(dt) {
+  const n = W.n, k = Math.floor(PV.s / W.ds) % n, f = (PV.s / W.ds) % 1, k2 = (k + 1) % n;
+  PV.k = k; PV.s += Math.max(8, RACE.prof[k]) * PV.f * dt;
+  $('#pvBar').style.width = Math.min(100, PV.s / W.len * 100) + '%';
+  if (PV.s >= W.len) { endPreview(); return; }
+  const x = W.x[k] + (W.x[k2] - W.x[k]) * f, z = W.z[k] + (W.z[k2] - W.z[k]) * f, ka = (k + Math.round(28 / W.ds)) % n;
+  PV.pos.set(x, Hq(x, z) + 1.5, z);
+  // smooth the viewing direction, not the target point: at preview speed a lagging target ends up behind the camera
+  const want = new THREE.Vector3(W.x[ka], Hq(W.x[ka], W.z[ka]) + 1.0, W.z[ka]).sub(PV.pos).normalize();
+  if (!camInit) PV.dir.copy(want); else PV.dir.lerp(want, 1 - Math.exp(-dt * 5)).normalize(); camInit = true;
+  camera.position.copy(PV.pos); camera.up.copy(UP); camera.lookAt(PV.pos.x + PV.dir.x * 30, PV.pos.y + PV.dir.y * 30, PV.pos.z + PV.dir.z * 30);
+  if (Math.abs(camera.fov - 68) > 0.05) { camera.fov = 68; camera.updateProjectionMatrix(); }
+  drivingNotes(k, Math.max(8, RACE.prof[k]) * PV.f, dt);
+}
+$('#pvSkip').onclick = () => endPreview();
 function buildWorld() {
   const M = activeMap();
   Object.assign(W, { M, sx: M.sx, sz: M.sz, nx: M.nx, nz: M.nz, base: M.base, city: M.kind === 'city' });
@@ -649,6 +747,7 @@ function buildWorld() {
     let k = 0; while (k < n) { if (!isFinite(arr[k])) { k++; continue; } let e = k; while (e < n && isFinite(arr[e])) e++; if ((e - k) * W.ds < 30 && !(k === 0 || e === n)) for (let j = k; j < e; j++) arr[j] = Infinity; k = e; }
   }
   buildProfile();
+  analyzeCorners();
   buildMeshes();
   drawMinimapBase();
   $('#trkLen').textContent = (len / 1000).toFixed(3) + ' km';
@@ -1703,11 +1802,12 @@ const keys = {}, touch = { l: 0, r: 0, gas: 0, brake: 0, steer: 0, sActive: fals
 let drsReq = false; const padPrev = {};
 addEventListener('keydown', e => {
   if (!$('#setup').hidden || !$('#pause').hidden) { if (e.code === 'Escape' && state.mode !== 'menu0') resume(); return; }
+  if (state.mode === 'preview' && (e.code === 'Space' || e.code === 'Enter' || e.code === 'Escape')) { endPreview(); e.preventDefault(); return; }
   keys[e.code] = true;
   if (e.code === 'Space') { drsReq = true; e.preventDefault(); }
   if (e.code === 'KeyE') shift(1);
   if (e.code === 'KeyQ') shift(-1);
-  if (e.code === 'KeyC') camMode = (camMode + 1) % 3;
+  if (e.code === 'KeyC') nextCam();
   if (e.code === 'KeyR') resetToTrack();
   if (e.code === 'KeyM') { muted = !muted; banner(muted ? '音效關閉' : '音效開啟', 'info'); }
   if (e.code === 'Escape') openMenu();
@@ -1855,6 +1955,9 @@ function banner(txt, kind) { const b = $('#banner'); b.textContent = txt; b.clas
 
 /* ================= Visuals ================= */
 let camMode = 0;
+const CAMS = ['追車視角', '遠景追車', '車手視角', '鼻錐視角', '前翼低視角', '轉播視角'];
+function nextCam() { camMode = (camMode + 1) % CAMS.length; camInit = false; tvCam.k = -1; banner(CAMS[camMode], 'info'); }
+const tvCam = { k: -1, pos: new THREE.Vector3() };
 const m4 = new THREE.Matrix4(), rt = new THREE.Vector3(), camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), camFwd = new THREE.Vector3(1, 0, 0), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
 let camInit = false, shake = 0;
 function updateCarVisual() {
@@ -1874,23 +1977,28 @@ function updateCamera(dt) {
   const c = car, root = carModel.root;
   const fwd = tmp.set(1, 0, 0).applyQuaternion(root.quaternion), up = tmp2.set(0, 1, 0).applyQuaternion(root.quaternion);
   const spd = Math.hypot(c.vx, c.vy);
-  if (camMode === 0) {
+  if (camMode === 5) { // broadcast: fixed trackside cameras about every 180 m, switching as the car passes
+    const n = W.n, gap = Math.max(1, Math.round(180 / W.ds)), ahead = Math.round(60 / W.ds), slot = Math.floor(((c.k + ahead) % n) / gap) * gap;
+    if (slot !== tvCam.k) { tvCam.k = slot; const sd = (slot / gap) & 1 ? 1 : -1, off = ((sd > 0 ? W.hwL : W.hwR)[slot] || 6) + 6, x = W.x[slot] + W.lx[slot] * off * sd, z = W.z[slot] + W.lz[slot] * off * sd; tvCam.pos.set(x, Hq(x, z) + 5.5, z); }
+    camPos.copy(tvCam.pos); camLook.copy(root.position); camLook.y += 0.6;
+  } else if (camMode === 0 || camMode === 1) {
+    const back = camMode === 0 ? 7.2 : 13, up = camMode === 0 ? 2.5 : 5.2;
     if (!camInit) camFwd.copy(fwd); else camFwd.lerp(fwd, 1 - Math.exp(-dt * 6)).normalize();
-    const want = new THREE.Vector3().copy(root.position).addScaledVector(camFwd, -7.2); want.y += 2.5;
+    const want = new THREE.Vector3().copy(root.position).addScaledVector(camFwd, -back); want.y += up;
     const gh = Hq(want.x, want.z) + 1.2; if (want.y < gh) want.y = gh;
     if (!camInit) camPos.copy(want); else camPos.lerp(want, 1 - Math.exp(-dt * 12));
     camLook.copy(root.position).addScaledVector(camFwd, 4); camLook.y += 0.9;
   } else {
-    const local = camMode === 1 ? [-0.05, 1.12, 0] : [0.12, 0.9, 0], ahead = camMode === 1 ? [10, 0.85, 0] : [10, 0.75, 0];
+    const local = camMode === 2 ? [-0.05, 1.12, 0] : camMode === 3 ? [0.12, 0.9, 0] : [3.1, 0.32, 0], ahead = camMode === 2 ? [10, 0.85, 0] : camMode === 3 ? [10, 0.75, 0] : [12, 0.3, 0];
     camPos.set(...local).applyQuaternion(root.quaternion).add(root.position);
     camLook.set(...ahead).applyQuaternion(root.quaternion).add(root.position);
   }
   camInit = true;
   camera.position.copy(camPos);
   if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5) * shake, (Math.random() - .5) * shake, (Math.random() - .5) * shake));
-  camera.up.copy(camMode === 0 ? UP : up);
+  camera.up.copy(camMode <= 1 || camMode === 5 ? UP : up);
   camera.lookAt(camLook);
-  const fov = (camMode === 2 ? 74 : 62) + clamp(spd / 90, 0, 1) * 10;
+  const fov = camMode === 5 ? clamp(40 - Math.hypot(camPos.x - root.position.x, camPos.z - root.position.z) * 0.15, 18, 40) : (camMode === 3 || camMode === 4 ? 74 : 62) + clamp(spd / 90, 0, 1) * 10;
   if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
 }
 
@@ -1941,7 +2049,9 @@ function drawG() {
 const tyreCls = T => T < 80 ? 'tyre-cold' : T > 120 ? 'tyre-hot' : 'tyre-ok';
 let hudT = 0;
 function hud(dt) {
-  hudT += dt; if (hudT < 1 / 30) return; hudT = 0;
+  hudT += dt; if (hudT < 1 / 30) return;
+  if (state.mode !== 'preview') drivingNotes(car.k, Math.hypot(car.vx, car.vy), hudT);
+  hudT = 0;
   const c = car, spd = Math.hypot(c.vx, c.vy) * 3.6;
   $('#spd').textContent = Math.round(spd);
   $('#gear').textContent = c.gear === -1 ? 'R' : c.gear;
@@ -2046,6 +2156,7 @@ function readSetup() {
   TER.size = +$('#size').value; if (!TER.meters) TER.range = +$('#range').value; TER.base = +$('#base').value;
   setup.width = +$('#width').value; setup.banking = $('#banking').checked; setup.walls = $('#walls').checked; setup.aero = +$('#aero').value; setup.bias = +$('#bias').value;
   setup.tc = $('#tc').checked; setup.abs = $('#abs').checked; setup.auto = $('#auto').checked; setup.esc = $('#esc').checked; setup.brakeAssist = $('#brakeAssist').checked;
+  setup.turnHints = $('#turnHints').checked; setup.preview = $('#previewOn').checked;
   setup.steerSens = +$('#steer').value; setup.assist = $('#assist').checked; setup.autogas = $('#autogas').checked; muted = !$('#sound').checked; setVolume(+$('#vol').value / 100, false);
   setup.laps = +$('#laps').value; setup.aiCount = +$('#aiCount').value; setup.aiSkill = +$('#aiSkill').value;
   if (setup.level === 'easy') Object.assign(setup, { aero: 0.5, bias: 57, tc: true, abs: true, auto: true, assist: true, esc: true, brakeAssist: true });
@@ -2244,6 +2355,8 @@ function startRace(fromNet) {
     setupGrid();
     $('#setup').hidden = true; $('#pause').hidden = true; $('#busy').hidden = true;
     state.mode = 'lights'; state.lightsT = 0; state.lightsOut = 4.2 + Math.random() * 1.2; $('#lights').hidden = false;
+    NOTE.road = ''; NOTE.pending = '';
+    if (setup.preview !== false && setup.mode !== 'online' && W.corners) startPreview();
     if (COARSE && innerHeight > innerWidth) banner('橫向握持手機，視野更寬', 'info');
   };
   if (mapDirty) { $('#busy').textContent = setup.map !== 'terrain' ? '生成街道與建物中…' : '生成地形中…'; $('#busy').hidden = false; setTimeout(go, 30); } else go();
@@ -2254,7 +2367,7 @@ $('#menuBtn').onclick = openMenu;
 $('#pResume').onclick = resume;
 $('#pRestart').onclick = () => startRace();
 $('#pSetup').onclick = () => { $('#pause').hidden = true; $('#setup').hidden = false; drawEditor(); updateStartBtn(); };
-$('#bCam').onclick = () => { camMode = (camMode + 1) % 3; };
+$('#bCam').onclick = () => nextCam();
 $('#bReset').onclick = () => resetToTrack();
 $('#bTele').onclick = () => { $('#tele').hidden = !$('#tele').hidden; $('#bTele').classList.toggle('on', !$('#tele').hidden); };
 document.addEventListener('visibilitychange', () => { if (document.hidden) { if (state.mode === 'race' || state.mode === 'lights') openMenu(); } else if (state.mode === 'race') keepAwake(); });
@@ -2267,12 +2380,12 @@ document.querySelectorAll('#steerMode button').forEach(b => b.onclick = () => { 
 document.querySelectorAll('#quality button').forEach(b => b.onclick = () => { setup.quality = b.dataset.q; document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x === b)); applyQuality(setup.quality === 'auto' ? autoLevel() : setup.quality); savePrefs(); });
 if (document.fullscreenEnabled) { $('#btnFull').hidden = false; $('#btnFull').onclick = () => { document.documentElement.requestFullscreen().then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {}); }; }
 // per-viewer preferences
-function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted, level: setup.level, volume })); } catch (e) { /* storage unavailable */ } }
+function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted, level: setup.level, volume, turnHints: setup.turnHints, preview: setup.preview })); } catch (e) { /* storage unavailable */ } }
 function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem('tgp-prefs') || 'null'); if (!p) return;
     if (p.nick) $('#nick').value = p.nick; if (p.steerSens) $('#steer').value = p.steerSens; if (p.steerMode) setup.steerMode = p.steerMode; if (p.quality) setup.quality = p.quality; if (p.level === 'pro' || p.level === 'easy') setup.level = p.level;
-    $('#autogas').checked = !!p.autogas; $('#assist').checked = p.assist !== false; $('#sound').checked = p.sound !== false; if (typeof p.volume === 'number') $('#vol').value = Math.round(p.volume * 100);
+    $('#autogas').checked = !!p.autogas; $('#assist').checked = p.assist !== false; $('#sound').checked = p.sound !== false; if (typeof p.volume === 'number') $('#vol').value = Math.round(p.volume * 100); if (p.turnHints === false) $('#turnHints').checked = false; if (p.preview === false) $('#previewOn').checked = false;
     document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x.dataset.q === setup.quality));
   } catch (e) { /* storage unavailable */ }
 }
@@ -2648,7 +2761,8 @@ function frame(now) {
   if (state.mode === 'race' && !RACE.on) { recordGhost(); showGhost(); } else ghostModel.root.visible = false;
   const spd = Math.hypot(car.vx, car.vy);
   shake = car.surf === 3 ? Math.min(0.16, spd * 0.006) : car.surf === 2 && !W.city ? Math.min(0.1, spd * 0.003) : car.surf === 1 ? Math.min(0.05, spd * 0.0015) : 0;
-  if (state.mode === 'menu0') { const t = now / 1000 * 0.08, R = 26; camera.position.set(car.x + Math.cos(t) * R, (car.y || 0) + 9, car.z + Math.sin(t) * R); camera.up.copy(UP); camera.lookAt(car.x, (car.y || 0) + 0.5, car.z); }
+  if (state.mode === 'preview') previewStep(dt);
+  else if (state.mode === 'menu0') { const t = now / 1000 * 0.08, R = 26; camera.position.set(car.x + Math.cos(t) * R, (car.y || 0) + 9, car.z + Math.sin(t) * R); camera.up.copy(UP); camera.lookAt(car.x, (car.y || 0) + 0.5, car.z); }
   else updateCamera(dt);
   sky.position.copy(camera.position); SKY_U.time.value = now / 1000; updateTiles(dt);
   TEX.waterN.offset.set(now * 0.000011, now * 0.000006);

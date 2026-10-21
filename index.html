@@ -100,6 +100,16 @@ button{font:inherit;color:inherit}
 #balance.over{background:rgba(255,69,69,.2);color:var(--red)}
 .tyre-cold{color:var(--accent)}.tyre-ok{color:var(--green)}.tyre-hot{color:var(--red)}
 
+#turnHint{top:calc(var(--st) + 54px);left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:6px 14px 6px 8px;z-index:4}
+#turnHint svg{width:54px;height:54px}#turnHint path{fill:none;stroke:#ffd23f;stroke-width:9;stroke-linecap:round;stroke-linejoin:round}
+#turnHint.fast path{stroke:#ff4a4a}#turnHint div{display:grid;line-height:1.15}#turnHint b{font-size:22px;letter-spacing:.04em}#turnHint span{font:700 18px 'IBM Plex Mono',monospace;color:#cfe8ff}#turnHint small{font-size:13px;color:#aab4c0}#turnHint.fast small{color:#ff8080}
+body.previewing #tower,body.previewing #rightCol,body.previewing #tele,body.previewing #wheel,body.previewing #standings,body.previewing #touch{visibility:hidden}
+#locPill{bottom:calc(var(--sb) + 150px);left:50%;transform:translateX(-50%);font-size:13px;padding:3px 12px;border-radius:12px;background:rgba(10,14,20,.6);color:#dfe6ee;white-space:nowrap;z-index:3}
+#locCard{top:calc(var(--st) + 22%);left:50%;transform:translateX(-50%);display:grid;justify-items:center;padding:8px 22px;border-radius:6px;background:rgba(10,14,20,.72);opacity:0;transition:opacity .4s;z-index:4;pointer-events:none}
+#locCard.show{opacity:1}#locCard b{font-size:26px;letter-spacing:.06em}#locCard small,#locCard span{font-size:13px;color:#aab4c0}
+#preview{inset:auto 0 calc(var(--sb) + 18px) 0;display:flex;justify-content:center;align-items:center;gap:14px;z-index:6}
+#preview .pv{display:grid;gap:4px;padding:8px 14px;border-radius:6px;background:rgba(10,14,20,.72);min-width:240px}#preview .pv b{font-size:16px}#preview .pv span{font-size:13px;color:#aab4c0}
+#preview i{display:block;height:4px;background:#2a323c;border-radius:2px;overflow:hidden}#preview em{display:block;height:100%;width:0;background:#5bc0ff}
 #banner{top:calc(var(--st) + 30%);left:50%;transform:translateX(-50%);font-size:18px;font-weight:700;letter-spacing:.06em;padding:5px 14px;border-radius:4px;opacity:0;transition:opacity .25s;white-space:nowrap;z-index:4}
 #banner.show{opacity:1}
 #banner.bad{background:var(--red);color:#fff}#banner.good{background:var(--purple);color:#fff}#banner.info{background:var(--panel-solid);border:1px solid var(--line);color:var(--fg)}
@@ -363,6 +373,10 @@ input[type=text]{background:var(--raise);border:1px solid var(--line);color:var(
   <ol class="posrows" id="posRows"></ol>
 </div>
 <div id="banner" class="hud"></div>
+<div id="turnHint" class="hud panel" hidden><svg viewBox="-50 -50 100 100" aria-hidden="true"><path id="thArrow" d="" /></svg><div><b id="thText"></b><span id="thDist"></span><small id="thInfo"></small></div></div>
+<div id="locPill" class="hud" hidden></div>
+<div id="locCard" class="hud"><small>進入</small><b id="lcRoad"></b><span id="lcNear"></span></div>
+<div id="preview" class="hud" hidden><div class="pv"><b>賽道預覽</b><span id="pvInfo"></span><i><em id="pvBar"></em></i></div><button class="btn" id="pvSkip" type="button">跳過 ▶</button></div>
 <div id="lights" class="hud" hidden><i></i><i></i><i></i><i></i><i></i></div>
 <div id="hudCredit" class="hud"></div>
 
@@ -594,6 +608,8 @@ input[type=text]{background:var(--raise);border:1px solid var(--line);color:var(
             <div class="checks">
               <label><input type="checkbox" id="touchOn">顯示觸控按鍵（平板、觸控筆電可手動開啟）</label>
               <label><input type="checkbox" id="autogas">自動油門（只需操作轉向與煞車）</label>
+              <label><input type="checkbox" id="turnHints" checked>轉彎提示（彎道方向、距離與建議速度）</label>
+              <label><input type="checkbox" id="previewOn" checked>開跑前播放賽道預覽（可跳過）</label>
               <label><input type="checkbox" id="sound" checked>引擎音效（遊戲中按 M 靜音）</label>
             </div>
           </div>
