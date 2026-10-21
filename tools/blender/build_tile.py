@@ -110,6 +110,21 @@ for r in O['roads']:
     p = [(r[6 + 2 * i] / 10, r[7 + 2 * i] / 10) for i in range((len(r) - 6) // 2)]
     for a, b in zip(p, p[1:]):
         if X0 - 60 <= (a[0] + b[0]) / 2 <= X1 + 60 and Y0 - 60 <= (a[1] + b[1]) / 2 <= Y1 + 60: road_segs.append((a, b, r[4] / 10, r[0]))
+def clear_roads(ring):
+    """Push footprint corners out of every carriageway (the 3D-model footprints and OSM roads don't line up exactly,
+    and the game's track uses at least 3.6 m half width). Returns None when the building itself stands in a road."""
+    out = [list(p) for p in ring]
+    for _ in range(2):
+        for v in out:
+            for (ax, ay), (bx, by), w, c in road_segs:
+                if c > 5: continue
+                dx, dy = bx - ax, by - ay; l2 = dx * dx + dy * dy or 1; f = min(1, max(0, ((v[0] - ax) * dx + (v[1] - ay) * dy) / l2))
+                px, py = ax + dx * f, ay + dy * f; d = math.hypot(v[0] - px, v[1] - py); half = max(w / 2, 3.6) + 0.6
+                if d < half:
+                    if d < 1e-3: continue
+                    v[0] = px + (v[0] - px) / d * half; v[1] = py + (v[1] - py) / d * half
+    gx = sum(p[0] for p in out) / len(out); gy = sum(p[1] for p in out) / len(out)
+    return None if street_dist(gx, gy) < 0 else [tuple(p) for p in out]
 def street_dist(X, Y):
     best = 1e9
     for (ax, ay), (bx, by), w, c in road_segs:
@@ -286,6 +301,8 @@ def build_buildings():
         if len(ring) < 3: continue
         gx = sum(p[0] for p in ring) / len(ring); gy = sum(p[1] for p in ring) / len(ring)
         if not inside(gx, gy) or any(pip(gx, gy, r) for r in lm_rings): continue
+        ring = clear_roads(ccw(ring))
+        if ring is None or len(ring) < 3: stats['dropped'] = stats.get('dropped', 0) + 1; continue
         ring = ccw(ring); hsh = (bi * 2654435761) & 0xffffffff
         fam = ('facade_concrete' if hsh % 3 == 0 else 'facade_glass') if h > 42 else [pal[hsh % 3], 'facade_concrete', 'facade_glass'][hsh % 3] if h > 24 else ('facade_concrete' if hsh % 5 == 0 else pal[hsh % 3])
         base = min(dem(x, y) for x, y in ring) - 1.5; top = dem(gx, gy) + h

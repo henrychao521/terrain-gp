@@ -653,7 +653,7 @@
 	"accessors":[
 		{
 			"componentType":5126,
-			"count":3160,
+			"count":3184,
 			"max":[
 				-2081,
 				42.116539001464844,
@@ -668,28 +668,28 @@
 		},
 		{
 			"componentType":5126,
-			"count":3160,
+			"count":3184,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":3160,
+			"count":3184,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":3160,
+			"count":3184,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":4740,
+			"count":4776,
 			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
-			"count":1584,
+			"count":1484,
 			"max":[
 				-2065.88623046875,
 				14.098175048828125,
@@ -698,34 +698,34 @@
 			"min":[
 				-2496.964111328125,
 				1.159850001335144,
-				-713.242431640625
+				-712.345703125
 			],
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":1584,
+			"count":1484,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":1584,
+			"count":1484,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":1584,
+			"count":1484,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":2376,
+			"count":2226,
 			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
-			"count":1584,
+			"count":1484,
 			"max":[
 				-2062,
 				14.098175048828125,
@@ -734,65 +734,65 @@
 			"min":[
 				-2500,
 				7.159850120544434,
-				-718
+				-716.3397827148438
 			],
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":1584,
+			"count":1484,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":1584,
+			"count":1484,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":1584,
+			"count":1484,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":2376,
+			"count":2226,
 			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
-			"count":2320,
+			"count":2136,
 			"max":[
-				-2063.76611328125,
+				-2062.90283203125,
 				20.898174285888672,
 				4.558845043182373
 			],
 			"min":[
-				-2501.25,
+				-2500.7392578125,
 				7.459849834442139,
-				-716.3550415039062
+				-714.7142944335938
 			],
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":2320,
+			"count":2136,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":2320,
+			"count":2136,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":2320,
+			"count":2136,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":3480,
+			"count":3204,
 			"type":"SCALAR"
 		},
 		{
@@ -806,7 +806,7 @@
 			"min":[
 				-2500,
 				6.911104202270508,
-				-718
+				-716.3397827148438
 			],
 			"type":"VEC3"
 		},
@@ -833,43 +833,43 @@
 		},
 		{
 			"componentType":5126,
-			"count":3192,
+			"count":3200,
 			"max":[
 				-2079,
-				52.08169937133789,
+				52.47758102416992,
 				-7
 			],
 			"min":[
-				-2402.37451171875,
+				-2469.056396484375,
 				1.4692000150680542,
-				-673.5266723632812
+				-688.3656005859375
 			],
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":3192,
+			"count":3200,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":3192,
+			"count":3200,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":3192,
+			"count":3200,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":4788,
+			"count":4800,
 			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
-			"count":2184,
+			"count":2204,
 			"max":[
 				-2110,
 				23.240371704101562,
@@ -878,29 +878,29 @@
 			"min":[
 				-2429,
 				1.159850001335144,
-				-718
+				-716.3397827148438
 			],
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":2184,
+			"count":2204,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":2184,
+			"count":2204,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":2184,
+			"count":2204,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":3276,
+			"count":3306,
 			"type":"SCALAR"
 		},
 		{
@@ -941,7 +941,7 @@
 		},
 		{
 			"componentType":5126,
-			"count":1268,
+			"count":1316,
 			"max":[
 				-2062,
 				27.520835876464844,
@@ -956,23 +956,23 @@
 		},
 		{
 			"componentType":5126,
-			"count":1268,
+			"count":1316,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":1268,
+			"count":1316,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":1268,
+			"count":1316,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":1902,
+			"count":1974,
 			"type":"SCALAR"
 		},
 		{
@@ -1051,58 +1051,58 @@
 	"bufferViews":[
 		{
 			"buffer":0,
-			"byteLength":28154,
+			"byteLength":28605,
 			"byteOffset":0
 		},
 		{
 			"buffer":0,
-			"byteLength":16696,
-			"byteOffset":28156
+			"byteLength":15779,
+			"byteOffset":28608
 		},
 		{
 			"buffer":0,
-			"byteLength":9910,
-			"byteOffset":44852
+			"byteLength":9423,
+			"byteOffset":44388
 		},
 		{
 			"buffer":0,
-			"byteLength":19273,
-			"byteOffset":54764
+			"byteLength":17853,
+			"byteOffset":53812
 		},
 		{
 			"buffer":0,
-			"byteLength":9748,
-			"byteOffset":74040
+			"byteLength":10391,
+			"byteOffset":71668
 		},
 		{
 			"buffer":0,
-			"byteLength":26806,
-			"byteOffset":83788
+			"byteLength":26965,
+			"byteOffset":82060
 		},
 		{
 			"buffer":0,
-			"byteLength":19963,
-			"byteOffset":110596
+			"byteLength":20438,
+			"byteOffset":109028
 		},
 		{
 			"buffer":0,
-			"byteLength":2026,
-			"byteOffset":130560
+			"byteLength":2027,
+			"byteOffset":129468
 		},
 		{
 			"buffer":0,
-			"byteLength":12559,
-			"byteOffset":132588
+			"byteLength":13764,
+			"byteOffset":131496
 		},
 		{
 			"buffer":0,
 			"byteLength":3098,
-			"byteOffset":145148
+			"byteOffset":145260
 		},
 		{
 			"buffer":0,
-			"byteLength":54941,
-			"byteOffset":148248
+			"byteLength":54929,
+			"byteOffset":148360
 		}
 	],
 	"samplers":[
@@ -1113,7 +1113,7 @@
 	],
 	"buffers":[
 		{
-			"byteLength":203192,
+			"byteLength":203292,
 			"uri":"t_0_3.bin"
 		}
 	]

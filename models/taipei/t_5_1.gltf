@@ -793,7 +793,7 @@
 			"max":[
 				1243,
 				36.89556121826172,
-				821
+				820.7680053710938
 			],
 			"min":[
 				1197,
@@ -1192,58 +1192,58 @@
 		},
 		{
 			"buffer":0,
-			"byteLength":1240,
+			"byteLength":1242,
 			"byteOffset":916
 		},
 		{
 			"buffer":0,
 			"byteLength":1394,
-			"byteOffset":2156
+			"byteOffset":2160
 		},
 		{
 			"buffer":0,
 			"byteLength":3552,
-			"byteOffset":3552
+			"byteOffset":3556
 		},
 		{
 			"buffer":0,
 			"byteLength":369,
-			"byteOffset":7104
+			"byteOffset":7108
 		},
 		{
 			"buffer":0,
 			"byteLength":318,
-			"byteOffset":7476
+			"byteOffset":7480
 		},
 		{
 			"buffer":0,
 			"byteLength":318,
-			"byteOffset":7796
+			"byteOffset":7800
 		},
 		{
 			"buffer":0,
 			"byteLength":5289,
-			"byteOffset":8116
+			"byteOffset":8120
 		},
 		{
 			"buffer":0,
 			"byteLength":2053,
-			"byteOffset":13408
+			"byteOffset":13412
 		},
 		{
 			"buffer":0,
 			"byteLength":730,
-			"byteOffset":15464
+			"byteOffset":15468
 		},
 		{
 			"buffer":0,
 			"byteLength":445,
-			"byteOffset":16196
+			"byteOffset":16200
 		},
 		{
 			"buffer":0,
 			"byteLength":6452,
-			"byteOffset":16644
+			"byteOffset":16648
 		}
 	],
 	"samplers":[
@@ -1254,7 +1254,7 @@
 	],
 	"buffers":[
 		{
-			"byteLength":23096,
+			"byteLength":23100,
 			"uri":"t_5_1.bin"
 		}
 	]
