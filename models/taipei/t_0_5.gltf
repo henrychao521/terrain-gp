@@ -26,14 +26,16 @@
 				7,
 				8,
 				9,
-				10
+				10,
+				11,
+				12
 			]
 		}
 	],
 	"nodes":[
 		{
 			"mesh":0,
-			"name":"buildings_facade_ai_grey"
+			"name":"buildings_facade_ai_old_concrete_balcony"
 		},
 		{
 			"mesh":1,
@@ -53,7 +55,7 @@
 		},
 		{
 			"mesh":5,
-			"name":"buildings_facade_ai_cream"
+			"name":"buildings_facade_ai_concrete"
 		},
 		{
 			"extras":{
@@ -68,24 +70,36 @@
 		},
 		{
 			"mesh":8,
-			"name":"buildings_facade_ai_pink"
+			"name":"buildings_facade_ai_yellow_tile_apts"
 		},
 		{
 			"mesh":9,
-			"name":"bridges_deck"
+			"name":"buildings_facade_ai_green_tile_apts"
 		},
 		{
 			"mesh":10,
+			"name":"buildings_facade_ai_grey"
+		},
+		{
+			"mesh":11,
+			"name":"bridges_deck"
+		},
+		{
+			"mesh":12,
 			"name":"bridges_concrete"
 		}
 	],
 	"materials":[
 		{
 			"doubleSided":true,
-			"name":"facade_ai_grey",
+			"name":"facade_ai_old_concrete_balcony",
+			"normalTexture":{
+				"index":0,
+				"scale":0.800000011920929
+			},
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":0
+					"index":1
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.800000011920929
@@ -99,12 +113,12 @@
 				0.3499999940395355
 			],
 			"emissiveTexture":{
-				"index":1
+				"index":2
 			},
 			"name":"storefront",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":2
+					"index":3
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.800000011920929
@@ -127,9 +141,13 @@
 		{
 			"doubleSided":true,
 			"name":"roof_ai_1",
+			"normalTexture":{
+				"index":4,
+				"scale":0.800000011920929
+			},
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":3
+					"index":5
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.8999999761581421
@@ -140,7 +158,7 @@
 			"name":"facade_concrete",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":4
+					"index":6
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.800000011920929
@@ -148,10 +166,14 @@
 		},
 		{
 			"doubleSided":true,
-			"name":"facade_ai_cream",
+			"name":"facade_ai_concrete",
+			"normalTexture":{
+				"index":7,
+				"scale":0.800000011920929
+			},
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":5
+					"index":8
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.800000011920929
@@ -165,12 +187,12 @@
 				0.800000011920929
 			],
 			"emissiveTexture":{
-				"index":6
+				"index":9
 			},
 			"name":"signboards",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":7
+					"index":10
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.4000000059604645
@@ -179,9 +201,13 @@
 		{
 			"doubleSided":true,
 			"name":"roof_ai_0",
+			"normalTexture":{
+				"index":11,
+				"scale":0.800000011920929
+			},
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":8
+					"index":12
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.8999999761581421
@@ -189,10 +215,44 @@
 		},
 		{
 			"doubleSided":true,
-			"name":"facade_ai_pink",
+			"name":"facade_ai_yellow_tile_apts",
+			"normalTexture":{
+				"index":13,
+				"scale":0.800000011920929
+			},
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":9
+					"index":14
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_green_tile_apts",
+			"normalTexture":{
+				"index":15,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":16
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_grey",
+			"normalTexture":{
+				"index":17,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":18
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.800000011920929
@@ -229,7 +289,7 @@
 	],
 	"meshes":[
 		{
-			"name":"buildings_facade_ai_grey",
+			"name":"buildings_facade_ai_old_concrete_balcony",
 			"primitives":[
 				{
 					"attributes":{
@@ -364,7 +424,7 @@
 			]
 		},
 		{
-			"name":"buildings_facade_ai_cream",
+			"name":"buildings_facade_ai_concrete",
 			"primitives":[
 				{
 					"attributes":{
@@ -384,7 +444,7 @@
 							}
 						}
 					},
-					"indices":28,
+					"indices":23,
 					"material":5,
 					"mode":4
 				}
@@ -395,10 +455,10 @@
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":29,
-						"NORMAL":30,
-						"TEXCOORD_0":31,
-						"COLOR_0":32
+						"POSITION":28,
+						"NORMAL":29,
+						"TEXCOORD_0":30,
+						"COLOR_0":31
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -411,7 +471,7 @@
 							}
 						}
 					},
-					"indices":33,
+					"indices":32,
 					"material":6,
 					"mode":4
 				}
@@ -422,10 +482,10 @@
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":34,
-						"NORMAL":35,
-						"TEXCOORD_0":36,
-						"COLOR_0":37
+						"POSITION":33,
+						"NORMAL":34,
+						"TEXCOORD_0":35,
+						"COLOR_0":36
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -438,21 +498,21 @@
 							}
 						}
 					},
-					"indices":38,
+					"indices":37,
 					"material":7,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"buildings_facade_ai_pink",
+			"name":"buildings_facade_ai_yellow_tile_apts",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":39,
-						"NORMAL":40,
-						"TEXCOORD_0":41,
-						"COLOR_0":42
+						"POSITION":38,
+						"NORMAL":39,
+						"TEXCOORD_0":40,
+						"COLOR_0":41
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -465,21 +525,21 @@
 							}
 						}
 					},
-					"indices":43,
+					"indices":42,
 					"material":8,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"bridges_deck",
+			"name":"buildings_facade_ai_green_tile_apts",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":44,
-						"NORMAL":45,
-						"TEXCOORD_0":46,
-						"COLOR_0":47
+						"POSITION":43,
+						"NORMAL":44,
+						"TEXCOORD_0":45,
+						"COLOR_0":46
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -492,21 +552,21 @@
 							}
 						}
 					},
-					"indices":48,
+					"indices":42,
 					"material":9,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"bridges_concrete",
+			"name":"buildings_facade_ai_grey",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":49,
-						"NORMAL":50,
-						"TEXCOORD_0":51,
-						"COLOR_0":52
+						"POSITION":47,
+						"NORMAL":48,
+						"TEXCOORD_0":49,
+						"COLOR_0":50
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -519,8 +579,62 @@
 							}
 						}
 					},
-					"indices":53,
+					"indices":9,
 					"material":10,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"bridges_deck",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":51,
+						"NORMAL":52,
+						"TEXCOORD_0":53,
+						"COLOR_0":54
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":11,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":55,
+					"material":11,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"bridges_concrete",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":56,
+						"NORMAL":57,
+						"TEXCOORD_0":58,
+						"COLOR_0":59
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":12,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":60,
+					"material":12,
 					"mode":4
 				}
 			]
@@ -546,7 +660,7 @@
 		{
 			"extensions":{
 				"EXT_texture_webp":{
-					"source":1
+					"source":2
 				}
 			},
 			"sampler":0
@@ -586,14 +700,6 @@
 		{
 			"extensions":{
 				"EXT_texture_webp":{
-					"source":5
-				}
-			},
-			"sampler":0
-		},
-		{
-			"extensions":{
-				"EXT_texture_webp":{
 					"source":6
 				}
 			},
@@ -606,18 +712,108 @@
 				}
 			},
 			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":8
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":8
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":9
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":10
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":11
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":12
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":13
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":14
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":15
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":16
+				}
+			},
+			"sampler":0
 		}
 	],
 	"images":[
 		{
 			"mimeType":"image/webp",
-			"name":"facade_ai_grey",
-			"uri":"tex/facade_ai_grey.webp"
+			"name":"facade_ai_old_concrete_balcony_n",
+			"uri":"tex/facade_ai_old_concrete_balcony_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_old_concrete_balcony",
+			"uri":"tex/facade_ai_old_concrete_balcony.webp"
 		},
 		{
 			"mimeType":"image/webp",
 			"name":"storefront",
 			"uri":"tex/storefront.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"roof_ai_1_n",
+			"uri":"tex/roof_ai_1_n.webp"
 		},
 		{
 			"mimeType":"image/webp",
@@ -631,8 +827,13 @@
 		},
 		{
 			"mimeType":"image/webp",
-			"name":"facade_ai_cream",
-			"uri":"tex/facade_ai_cream.webp"
+			"name":"facade_ai_concrete_n",
+			"uri":"tex/facade_ai_concrete_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_concrete",
+			"uri":"tex/facade_ai_concrete.webp"
 		},
 		{
 			"mimeType":"image/webp",
@@ -641,13 +842,43 @@
 		},
 		{
 			"mimeType":"image/webp",
+			"name":"roof_ai_0_n",
+			"uri":"tex/roof_ai_0_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
 			"name":"roof_ai_0",
 			"uri":"tex/roof_ai_0.webp"
 		},
 		{
 			"mimeType":"image/webp",
-			"name":"facade_ai_pink",
-			"uri":"tex/facade_ai_pink.webp"
+			"name":"facade_ai_yellow_tile_apts_n",
+			"uri":"tex/facade_ai_yellow_tile_apts_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_yellow_tile_apts",
+			"uri":"tex/facade_ai_yellow_tile_apts.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_green_tile_apts_n",
+			"uri":"tex/facade_ai_green_tile_apts_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_green_tile_apts",
+			"uri":"tex/facade_ai_green_tile_apts.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_grey_n",
+			"uri":"tex/facade_ai_grey_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_grey",
+			"uri":"tex/facade_ai_grey.webp"
 		}
 	],
 	"accessors":[
@@ -828,39 +1059,34 @@
 		},
 		{
 			"componentType":5126,
-			"count":100,
+			"count":48,
 			"max":[
-				-2095,
+				-2129,
 				20.078527450561523,
 				-1398
 			],
 			"min":[
 				-2152,
 				2.2442750930786133,
-				-1433
+				-1423.0479736328125
 			],
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":100,
+			"count":48,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":100,
+			"count":48,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":100,
+			"count":48,
 			"normalized":true,
 			"type":"VEC4"
-		},
-		{
-			"componentType":5123,
-			"count":150,
-			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
@@ -936,39 +1162,101 @@
 		},
 		{
 			"componentType":5126,
-			"count":56,
+			"count":28,
 			"max":[
-				-2105,
+				-2117,
 				20.06640625,
 				-1411
 			],
 			"min":[
 				-2136,
 				2.3023500442504883,
+				-1432.80859375
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":28,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":28,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":28,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":42,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":28,
+			"max":[
+				-2105,
+				19.070518493652344,
+				-1422
+			],
+			"min":[
+				-2124,
+				2.37280011177063,
 				-1441.5167236328125
 			],
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":56,
+			"count":28,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":56,
+			"count":28,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":56,
+			"count":28,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
+			"componentType":5126,
+			"count":52,
+			"max":[
+				-2095,
+				16.324337005615234,
+				-1411
+			],
+			"min":[
+				-2113,
+				2.3863000869750977,
+				-1433
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":52,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":52,
+			"type":"VEC2"
+		},
+		{
 			"componentType":5123,
-			"count":84,
-			"type":"SCALAR"
+			"count":52,
+			"normalized":true,
+			"type":"VEC4"
 		},
 		{
 			"componentType":5126,
@@ -1046,58 +1334,68 @@
 	"bufferViews":[
 		{
 			"buffer":0,
-			"byteLength":1904,
+			"byteLength":1951,
 			"byteOffset":0
 		},
 		{
 			"buffer":0,
 			"byteLength":961,
-			"byteOffset":1904
+			"byteOffset":1952
 		},
 		{
 			"buffer":0,
 			"byteLength":773,
-			"byteOffset":2868
+			"byteOffset":2916
 		},
 		{
 			"buffer":0,
-			"byteLength":530,
-			"byteOffset":3644
+			"byteLength":550,
+			"byteOffset":3692
 		},
 		{
 			"buffer":0,
 			"byteLength":769,
-			"byteOffset":4176
+			"byteOffset":4244
 		},
 		{
 			"buffer":0,
-			"byteLength":1543,
-			"byteOffset":4948
+			"byteLength":858,
+			"byteOffset":5016
 		},
 		{
 			"buffer":0,
 			"byteLength":650,
-			"byteOffset":6492
+			"byteOffset":5876
 		},
 		{
 			"buffer":0,
 			"byteLength":308,
-			"byteOffset":7144
+			"byteOffset":6528
 		},
 		{
 			"buffer":0,
-			"byteLength":950,
-			"byteOffset":7452
+			"byteLength":563,
+			"byteOffset":6836
+		},
+		{
+			"buffer":0,
+			"byteLength":602,
+			"byteOffset":7400
+		},
+		{
+			"buffer":0,
+			"byteLength":935,
+			"byteOffset":8004
 		},
 		{
 			"buffer":0,
 			"byteLength":391,
-			"byteOffset":8404
+			"byteOffset":8940
 		},
 		{
 			"buffer":0,
 			"byteLength":3482,
-			"byteOffset":8796
+			"byteOffset":9332
 		}
 	],
 	"samplers":[
@@ -1108,7 +1406,7 @@
 	],
 	"buffers":[
 		{
-			"byteLength":12280,
+			"byteLength":12816,
 			"uri":"t_0_5.bin"
 		}
 	]

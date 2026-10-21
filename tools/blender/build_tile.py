@@ -30,10 +30,16 @@ B = lambda X, Y: (X - SX / 2, Y - SY / 2)  # data -> blender xy
 inside = lambda X, Y: X0 <= X <= X1 and Y0 <= Y <= Y1
 
 # ---------- materials
+AI_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai_textures')
 def img_mat(name, file, rough=0.8, emit=0.0, metal=0.0, path=None):
     m = bpy.data.materials.new(name); m.use_nodes = True; nt = m.node_tree; bsdf = nt.nodes['Principled BSDF']
     tex = nt.nodes.new('ShaderNodeTexImage'); tex.image = bpy.data.images.load(path or f'{TEX}/{file}.png'); tex.extension = 'REPEAT'
     nt.links.new(tex.outputs['Color'], bsdf.inputs['Base Color']); bsdf.inputs['Roughness'].default_value = rough; bsdf.inputs['Metallic'].default_value = metal
+    npath = os.path.join(AI_DIR, 'normals', name + '_n.jpg') if path else None
+    if npath and os.path.exists(npath):  # Marigold normal map computed on Colab (tools/blender/ai_textures/normals)
+        nimg = nt.nodes.new('ShaderNodeTexImage'); nimg.image = bpy.data.images.load(npath); nimg.image.colorspace_settings.name = 'Non-Color'; nimg.extension = 'REPEAT'
+        nmap = nt.nodes.new('ShaderNodeNormalMap'); nmap.inputs['Strength'].default_value = 0.8
+        nt.links.new(nimg.outputs['Color'], nmap.inputs['Color']); nt.links.new(nmap.outputs['Normal'], bsdf.inputs['Normal'])
     if emit: nt.links.new(tex.outputs['Color'], bsdf.inputs['Emission Color']); bsdf.inputs['Emission Strength'].default_value = emit
     return m
 def col_mat(name, rgb, rough=0.7, metal=0.0):
@@ -42,11 +48,18 @@ def col_mat(name, rgb, rough=0.7, metal=0.0):
 MAT = {k: img_mat(k, k) for k in ('facade_mosaic_cream', 'facade_mosaic_pink', 'facade_mosaic_grey', 'facade_concrete', 'roof')}
 MAT['facade_glass'] = img_mat('facade_glass', 'facade_glass', rough=0.15, metal=0.3)
 # AI-generated facades and roofs (tools/blender/ai_textures, SDXL on Colab) replace the drawn ones when present
-AI_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai_textures')
-AI = {k: os.path.join(AI_DIR, k + '.jpg') for k in ('facade_ai_cream', 'facade_ai_pink', 'facade_ai_grey', 'facade_ai_concrete', 'roof_ai_0', 'roof_ai_1')}
-AI = {k: v for k, v in AI.items() if os.path.exists(v)}
+AI = {f[:-4]: os.path.join(AI_DIR, f) for f in sorted(os.listdir(AI_DIR)) if f.endswith('.jpg') and f.startswith(('facade_ai_', 'roof_ai_'))} if os.path.isdir(AI_DIR) else {}
 for k, v in AI.items(): MAT[k] = img_mat(k, k, path=v, rough=0.9 if k.startswith('roof') else 0.8)
 AI_FOR = {'facade_mosaic_cream': 'facade_ai_cream', 'facade_mosaic_pink': 'facade_ai_pink', 'facade_mosaic_grey': 'facade_ai_grey', 'facade_concrete': 'facade_ai_concrete'}
+AI_GROUPS = {  # walk-ups up to 24 m, mid-rise to 42 m, towers above; red brick only now and then on low old buildings
+    'res': ['cream', 'pink', 'grey', 'blue_green_tile', 'green_tile_apts', 'yellow_tile_apts', 'brown_brick_tile', 'white_tile_apts', 'grey_wash'],
+    'old': ['concrete', 'old_concrete_balcony'], 'mid': ['condo_1990s', 'hotel_tiles', 'shophouse_arcade', 'school_corridor', 'concrete'],
+    'high': ['glass_office_v2', 'stone_office'], 'brick': ['red_brick_old']}
+def ai_facade(h, hsh):
+    grp = 'high' if h > 42 else 'mid' if h > 24 else ('brick' if h < 15 and hsh % 23 == 0 else 'old' if hsh % 7 == 0 else 'res')
+    names = [n for n in AI_GROUPS[grp] if 'facade_ai_' + n in MAT]
+    if grp == 'high' and hsh % 3 == 0: return 'facade_glass'  # keep some of the drawn glass towers for variety
+    return 'facade_ai_' + names[(hsh // 7) % len(names)] if names else None
 FACADE_REPEAT = lambda mat: (12.0, 12.8) if mat.startswith('facade_ai') else (6.0, 6.4)  # metres covered by one texture tile
 MAT['storefront'] = img_mat('storefront', 'storefront', emit=0.35)
 MAT['signboards'] = img_mat('signboards', 'signboards', rough=0.4, emit=0.8)
@@ -312,7 +325,8 @@ def build_buildings():
         if ring is None or len(ring) < 3: stats['dropped'] = stats.get('dropped', 0) + 1; continue
         ring = ccw(ring); hsh = (bi * 2654435761) & 0xffffffff
         fam = ('facade_concrete' if hsh % 3 == 0 else 'facade_glass') if h > 42 else [pal[hsh % 3], 'facade_concrete', 'facade_glass'][hsh % 3] if h > 24 else ('facade_concrete' if hsh % 5 == 0 else pal[hsh % 3])
-        if AI_FOR.get(fam) in AI: fam = AI_FOR[fam]
+        if AI:  # AI facades by building height; the drawn ones remain the fallback
+            fam = ai_facade(h, hsh) or (AI_FOR[fam] if AI_FOR.get(fam) in AI else fam)
         rx, ry = FACADE_REPEAT(fam)
         base = min(dem(x, y) for x, y in ring) - 1.5; top = dem(gx, gy) + h
         n = len(ring)
