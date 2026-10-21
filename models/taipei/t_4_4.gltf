@@ -94,19 +94,19 @@
 			"name":"buildings_facade_mosaic_grey"
 		},
 		{
-			"extras":{
-				"detail":1
-			},
 			"mesh":14,
-			"name":"buildings_signboards"
-		},
-		{
-			"mesh":15,
 			"name":"buildings_facade_glass"
 		},
 		{
-			"mesh":16,
+			"mesh":15,
 			"name":"buildings_facade_mosaic_pink"
+		},
+		{
+			"extras":{
+				"detail":1
+			},
+			"mesh":16,
+			"name":"buildings_signboards"
 		}
 	],
 	"materials":[
@@ -267,29 +267,10 @@
 		},
 		{
 			"doubleSided":true,
-			"emissiveFactor":[
-				0.800000011920929,
-				0.800000011920929,
-				0.800000011920929
-			],
-			"emissiveTexture":{
-				"index":8
-			},
-			"name":"signboards",
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":9
-				},
-				"metallicFactor":0,
-				"roughnessFactor":0.4000000059604645
-			}
-		},
-		{
-			"doubleSided":true,
 			"name":"facade_glass",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":10
+					"index":8
 				},
 				"metallicFactor":0.30000001192092896,
 				"roughnessFactor":0.15000000596046448
@@ -300,10 +281,29 @@
 			"name":"facade_mosaic_pink",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":11
+					"index":9
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"emissiveFactor":[
+				0.800000011920929,
+				0.800000011920929,
+				0.800000011920929
+			],
+			"emissiveTexture":{
+				"index":10
+			},
+			"name":"signboards",
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":11
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.4000000059604645
 			}
 		}
 	],
@@ -687,7 +687,7 @@
 			]
 		},
 		{
-			"name":"buildings_signboards",
+			"name":"buildings_facade_glass",
 			"primitives":[
 				{
 					"attributes":{
@@ -714,7 +714,7 @@
 			]
 		},
 		{
-			"name":"buildings_facade_glass",
+			"name":"buildings_facade_mosaic_pink",
 			"primitives":[
 				{
 					"attributes":{
@@ -741,7 +741,7 @@
 			]
 		},
 		{
-			"name":"buildings_facade_mosaic_pink",
+			"name":"buildings_signboards",
 			"primitives":[
 				{
 					"attributes":{
@@ -844,7 +844,7 @@
 		{
 			"extensions":{
 				"EXT_texture_webp":{
-					"source":7
+					"source":8
 				}
 			},
 			"sampler":0
@@ -852,7 +852,7 @@
 		{
 			"extensions":{
 				"EXT_texture_webp":{
-					"source":8
+					"source":9
 				}
 			},
 			"sampler":0
@@ -904,11 +904,6 @@
 		},
 		{
 			"mimeType":"image/webp",
-			"name":"signboards",
-			"uri":"tex/signboards.webp"
-		},
-		{
-			"mimeType":"image/webp",
 			"name":"facade_glass",
 			"uri":"tex/facade_glass.webp"
 		},
@@ -916,6 +911,11 @@
 			"mimeType":"image/webp",
 			"name":"facade_mosaic_pink",
 			"uri":"tex/facade_mosaic_pink.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"signboards",
+			"uri":"tex/signboards.webp"
 		}
 	],
 	"accessors":[
@@ -1204,7 +1204,7 @@
 		},
 		{
 			"componentType":5126,
-			"count":5496,
+			"count":5500,
 			"max":[
 				707,
 				46.21867370605469,
@@ -1219,28 +1219,28 @@
 		},
 		{
 			"componentType":5126,
-			"count":5496,
+			"count":5500,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":5496,
+			"count":5500,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":5496,
+			"count":5500,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":8244,
+			"count":8250,
 			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
-			"count":1024,
+			"count":996,
 			"max":[
 				703.79345703125,
 				11.81767463684082,
@@ -1255,28 +1255,28 @@
 		},
 		{
 			"componentType":5126,
-			"count":1024,
+			"count":996,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":1024,
+			"count":996,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":1024,
+			"count":996,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":1536,
+			"count":1494,
 			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
-			"count":1024,
+			"count":996,
 			"max":[
 				707,
 				11.81767463684082,
@@ -1291,23 +1291,23 @@
 		},
 		{
 			"componentType":5126,
-			"count":1024,
+			"count":996,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":1024,
+			"count":996,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":1024,
+			"count":996,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":1536,
+			"count":1494,
 			"type":"SCALAR"
 		},
 		{
@@ -1348,7 +1348,7 @@
 		},
 		{
 			"componentType":5126,
-			"count":8088,
+			"count":8068,
 			"max":[
 				748,
 				76.31244659423828,
@@ -1363,28 +1363,28 @@
 		},
 		{
 			"componentType":5126,
-			"count":8088,
+			"count":8068,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":8088,
+			"count":8068,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":8088,
+			"count":8068,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":12132,
+			"count":12102,
 			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
-			"count":4032,
+			"count":4048,
 			"max":[
 				689,
 				30.357202529907227,
@@ -1399,59 +1399,23 @@
 		},
 		{
 			"componentType":5126,
-			"count":4032,
+			"count":4048,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":4032,
+			"count":4048,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":4032,
+			"count":4048,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":6048,
-			"type":"SCALAR"
-		},
-		{
-			"componentType":5126,
-			"count":1056,
-			"max":[
-				703.5661010742188,
-				18.4197998046875,
-				-693.5036010742188
-			],
-			"min":[
-				77.5,
-				9.547425270080566,
-				-1201.462890625
-			],
-			"type":"VEC3"
-		},
-		{
-			"componentType":5126,
-			"count":1056,
-			"type":"VEC3"
-		},
-		{
-			"componentType":5126,
-			"count":1056,
-			"type":"VEC2"
-		},
-		{
-			"componentType":5123,
-			"count":1056,
-			"normalized":true,
-			"type":"VEC4"
-		},
-		{
-			"componentType":5123,
-			"count":1584,
+			"count":6072,
 			"type":"SCALAR"
 		},
 		{
@@ -1492,7 +1456,7 @@
 		},
 		{
 			"componentType":5126,
-			"count":4384,
+			"count":4388,
 			"max":[
 				696,
 				30.783655166625977,
@@ -1507,23 +1471,59 @@
 		},
 		{
 			"componentType":5126,
-			"count":4384,
+			"count":4388,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":4384,
+			"count":4388,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":4384,
+			"count":4388,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":6576,
+			"count":6582,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":1088,
+			"max":[
+				703.5661010742188,
+				18.4197998046875,
+				-693.5036010742188
+			],
+			"min":[
+				77.5,
+				9.547425270080566,
+				-1194.759033203125
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":1088,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":1088,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":1088,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":1632,
 			"type":"SCALAR"
 		}
 	],
@@ -1570,48 +1570,48 @@
 		},
 		{
 			"buffer":0,
-			"byteLength":45901,
+			"byteLength":46194,
 			"byteOffset":62472
 		},
 		{
 			"buffer":0,
-			"byteLength":11582,
-			"byteOffset":108376
+			"byteLength":11392,
+			"byteOffset":108668
 		},
 		{
 			"buffer":0,
-			"byteLength":6899,
-			"byteOffset":119960
+			"byteLength":6823,
+			"byteOffset":120060
 		},
 		{
 			"buffer":0,
-			"byteLength":20638,
-			"byteOffset":126860
+			"byteLength":20982,
+			"byteOffset":126884
 		},
 		{
 			"buffer":0,
-			"byteLength":64178,
-			"byteOffset":147500
+			"byteLength":63937,
+			"byteOffset":147868
 		},
 		{
 			"buffer":0,
-			"byteLength":34049,
-			"byteOffset":211680
+			"byteLength":34289,
+			"byteOffset":211808
 		},
 		{
 			"buffer":0,
-			"byteLength":10161,
-			"byteOffset":245732
+			"byteLength":14492,
+			"byteOffset":246100
 		},
 		{
 			"buffer":0,
-			"byteLength":14296,
-			"byteOffset":255896
+			"byteLength":37221,
+			"byteOffset":260592
 		},
 		{
 			"buffer":0,
-			"byteLength":36938,
-			"byteOffset":270192
+			"byteLength":10407,
+			"byteOffset":297816
 		}
 	],
 	"samplers":[
@@ -1622,7 +1622,7 @@
 	],
 	"buffers":[
 		{
-			"byteLength":307132,
+			"byteLength":308224,
 			"uri":"t_4_4.bin"
 		}
 	]

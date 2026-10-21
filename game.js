@@ -243,10 +243,10 @@ function finishCity(M) {
     const elev = r.lay > 0 || /快速/.test(r.n), A = elev ? adjE : adj;
     let prev = -1;
     for (let i = 0; i < r.p.length; i += 2) {
-      const id = node(r.p[i], r.p[i + 1]); if (r.c <= 3 && !(r.one && r.ln === 1) && !elev) major[id] = 1; if (elev) onViaduct[id] = 1;
+      const id = node(r.p[i], r.p[i + 1]); if (r.c <= 3 && !(r.one && r.ln === 1) && !elev) major[id] = 1; if (r.lay > 0) onViaduct[id] = 1; // on a bridge or viaduct, not just an expressway at street level
       const inMap = Math.abs(X[id]) < M.sx / 2 - 20 && Math.abs(Z[id]) < M.sz / 2 - 20; // routes never leave the map
       if (!inMap) { prev = -1; continue; }
-      if (prev >= 0 && prev !== id) { const w = Math.hypot(X[id] - X[prev], Z[id] - Z[prev]) * COST[r.c] * (r.one && r.ln === 1 ? 1.6 : 1); A[prev].push(id, w); A[id].push(prev, r.one ? w * 8 : w); } // single-lane frontage roads only when needed
+      if (prev >= 0 && prev !== id) { const w = Math.hypot(X[id] - X[prev], Z[id] - Z[prev]) * COST[r.c] * (r.one && r.ln === 1 ? 1.6 : 1); A[prev].push(id, w); if (!(elev && r.one)) A[id].push(prev, r.one ? w * 8 : w); } // single-lane frontage roads only when needed; viaducts strictly one way
       prev = id;
     }
   }
@@ -360,10 +360,9 @@ function randomTrack(seed) {
 const TP_CIRCUITS = [ // street junctions in data coordinates (m east, m north of TWD97 299000 / 2766400)
   [[3239, 3774], [3913, 3406], [4745, 3209], [4971, 2370], [4077, 2450], [3732, 2478], [3516, 2781], [3156, 3318]],
   [[615, 2675], [1510, 3124], [2028, 3297], [1877, 2800], [1511, 2730]],
-  [[4312, 3718], [4760, 3709], [4745, 3209], [4207, 3247]],
-  [[4900, 3215], [5290, 3470], [5262, 3880], [4960, 3720], [4760, 3709], [4745, 3209]], // 建國高架: up the 信義路 ramp, along the viaduct, back by 仁愛路 and 新生南路
+  [[4312, 3718], [4207, 3247], [4745, 3209], [4760, 3709]], // counter-clockwise: 信義路 is one way eastbound
 ];
-const TP_ELEVATED = [false, false, false, true]; // presets that need elevated roads in the route
+const TP_ELEVATED = [false, false, false]; // presets that need elevated roads in the route (none: no viaduct in the map can be driven as a loop in its own direction)
 // nearest street node; a main carriageway within 40 m wins over a closer frontage road or lane
 function snapNode(M, x, z) { const g = M.graph; let best = 0, bd = Infinity; for (let i = 0; i < g.x.length; i++) { const d = (g.x[i] - x) ** 2 + (g.z[i] - z) ** 2 + (g.major && !g.major[i] ? 1600 : 0); if (d < bd) { bd = d; best = i; } } return best; }
 const viewSize = M => Math.max(M.sx, M.sz);
@@ -391,14 +390,28 @@ function astar(g, s, t) {
   if (!done[t]) return null;
   const path = []; for (let v = t; v >= 0; v = prev[v]) path.push(v); path.reverse(); path.cost = dist[t]; return path;
 }
+// number of U-turns along a node path: the heading reverses (> 150°) within about 30 m
+function uTurns(g, path) {
+  const P = []; for (const v of path) { const q = [g.x[v], g.z[v]], l = P[P.length - 1]; if (!l || Math.hypot(q[0] - l[0], q[1] - l[1]) > 6) P.push(q); }
+  let n = 0;
+  for (let i = 1; i + 1 < P.length; i++) {
+    let j = i + 1, run = 0; while (j < P.length - 1 && run < 30) { run += Math.hypot(P[j][0] - P[j - 1][0], P[j][1] - P[j - 1][1]); j++; }
+    const ax = P[i][0] - P[i - 1][0], az = P[i][1] - P[i - 1][1], bx = P[j][0] - P[j - 1][0], bz = P[j][1] - P[j - 1][1];
+    if ((ax * bx + az * bz) / (Math.hypot(ax, az) * Math.hypot(bx, bz) + 1e-9) < -0.87) { n++; i = j; }
+  }
+  return n;
+}
+function choosePresetNodes(M, pts) {
+  const g = M.graph, cache = new Map(), n = pts.length, nodes = pts.map(p => p.node);
+  const leg = (a, b) => { const k = a + ',' + b; if (!cache.has(k)) cache.set(k, a === b ? Object.assign([a], { cost: 0 }) : astar(g, a, b)); return cache.get(k); };
+  const score = (i, c) => { const p1 = leg(nodes[(i - 1 + n) % n], c), p2 = leg(c, nodes[(i + 1) % n]); if (!p1 || !p2) return Infinity; return p1.cost + p2.cost + 5000 * uTurns(g, p1.concat(p2.slice(1))); };
+  for (let pass = 0; pass < 2; pass++) for (let i = 0; i < n; i++) { let best = nodes[i], bs = Infinity; for (const c of pts[i].alt) { const s2 = score(i, c); if (s2 < bs) { bs = s2; best = c; } } nodes[i] = best; }
+  return pts.map((p, i) => ({ ...p, node: nodes[i] }));
+}
 function routeLoop(M, pts) {
   const g = M.graph, out = [];
-  // preset waypoints carry nearby carriageway nodes: pick, leg by leg, the one reachable in the circuit's direction
-  if (pts.every(p => p.alt)) {
-    const nodes = [pts[0].node];
-    for (let i = 1; i < pts.length; i++) { let best = pts[i].node, bc = Infinity; for (const c of pts[i].alt) { const p = astar(g, nodes[i - 1], c); if (p && p.cost < bc) { bc = p.cost; best = c; } } nodes.push(best); }
-    pts = pts.map((p, i) => ({ ...p, node: nodes[i] }));
-  }
+  // preset waypoints carry nearby carriageway nodes: pick the ones that give the cheapest legs without U-turns
+  if (pts.every(p => p.alt)) pts = choosePresetNodes(M, pts);
   for (let i = 0; i < pts.length; i++) {
     const a = pts[i].node, b = pts[(i + 1) % pts.length].node, p = a === b ? [a] : astar(g, a, b);
     if (!p) { out.push([g.x[a], g.z[a]]); continue; }
@@ -432,6 +445,10 @@ function cleanRoute(P) {
   p = resampleLoop(p, 3);
   const X = Float32Array.from(p, q => q[0]), Z = Float32Array.from(p, q => q[1]);
   smoothCirc(X, 5, 3); smoothCirc(Z, 5, 3);
+  // a rounded corner must stay in the street: the smoothed line may move at most 3 m off the road centreline,
+  // or a 90° turn on a narrow street cuts through the corner building
+  const clampDev = maxDev => { for (let i = 0; i < p.length; i++) { const dx = X[i] - p[i][0], dz = Z[i] - p[i][1], d = Math.hypot(dx, dz); if (d > maxDev) { X[i] = p[i][0] + dx / d * maxDev; Z[i] = p[i][1] + dz / d * maxDev; } } };
+  clampDev(3); smoothCirc(X, 2, 1); smoothCirc(Z, 2, 1); clampDev(3.2);
   return resampleLoop(Array.from(X, (x, i) => [x, Z[i]]), 2);
 }
 
@@ -684,22 +701,21 @@ function trackElevation(M) {
   const n = W.n, E = W.elev = new Float32Array(n), D = W.deck = new Float32Array(n), br = W.real && M.env && setup.elevated ? M.env.bridges : null;
   if (br && br.length) {
     for (let k = 0; k < n; k++) {
-      const tx = -W.lz[k], tz = W.lx[k]; let best = 3.5, h = 0, hit = null;
+      const tx = -W.lz[k], tz = W.lx[k]; let best = 3.5, h = 0, hit = null, abs = 0;
       for (const b of br) { const p = b.p;
         for (let i = 0; i + 3 < p.length; i += 2) { const x0 = p[i], z0 = p[i + 1], dx = p[i + 2] - x0, dz = p[i + 3] - z0, l2 = dx * dx + dz * dz || 1;
           if (Math.abs(dx * tx + dz * tz) / Math.sqrt(l2) < 0.85) continue;
           const f = clamp(((W.x[k] - x0) * dx + (W.z[k] - z0) * dz) / l2, 0, 1), d = Math.hypot(W.x[k] - x0 - dx * f, W.z[k] - z0 - dz * f);
-          if (d < best) { best = d; h = b.hv[i / 2] + (b.hv[i / 2 + 1] - b.hv[i / 2]) * f; hit = b; } } }
-      E[k] = h;
+          if (d < best) { best = d; const za = gridSample(M.raw, x0, z0) + b.hv[i / 2], zb = gridSample(M.raw, p[i + 2], p[i + 3]) + b.hv[i / 2 + 1]; h = b.hv[i / 2] + (b.hv[i / 2 + 1] - b.hv[i / 2]) * f; abs = za + (zb - za) * f; hit = b; } } }
+      E[k] = h; D[k] = abs;
       if (hit && h > 0.3) { W.rname[k] = hit.name || '高架道路'; W.hwL[k] = W.hwR[k] = clamp(hit.w / 2, 3.6, 13); } // the viaduct's own name and width, not the street below
     }
-    smoothCirc(E, Math.round(6 / W.ds), 2);
-    // no cliffs where the matched viaduct changes: limit the grade to 8 % in both directions (real ramps are about 5 %)
-    const lim = 0.08 * W.ds;
-    for (let pass = 0; pass < 2; pass++) { for (let i = 0; i < 2 * n; i++) { const k = i % n, p = (k - 1 + n) % n; E[k] = Math.min(E[k], E[p] + lim); } for (let i = 2 * n - 1; i >= 0; i--) { const k = i % n, q = (k + 1) % n; E[k] = Math.min(E[k], E[q] + lim); } }
   }
-  for (let k = 0; k < n; k++) { if (E[k] < 0.3) E[k] = 0; D[k] = gridSample(M.raw, W.x[k], W.z[k]) + E[k]; }
-  if (E.some(v => v > 0)) { const S = Float32Array.from(D); smoothCirc(S, Math.round(15 / W.ds), 3); for (let k = 0; k < n; k++) if (E[k] > 0) D[k] = S[k]; } // the 20 m ground grid would show through as bumps in the deck
+  for (let k = 0; k < n; k++) { if (E[k] < 0.3) E[k] = 0; if (!E[k]) D[k] = gridSample(M.raw, W.x[k], W.z[k]); }
+  if (E.some(v => v > 0)) { // only where the matched bridge changes can the deck jump: cap the grade at 12 % there
+    const lim = 0.12 * W.ds;
+    for (let pass = 0; pass < 2; pass++) { for (let i = 0; i < 2 * n; i++) { const k = i % n, p = (k - 1 + n) % n; if (E[k]) D[k] = Math.min(D[k], D[p] + lim); } for (let i = 2 * n - 1; i >= 0; i--) { const k = i % n, q = (k + 1) % n; if (E[k]) D[k] = Math.min(D[k], D[q] + lim); } }
+  }
   W.anyElev = E.some(v => v > 0); W.hwMax = Math.max(...W.hwL, ...W.hwR);
 }
 // another part of the lap (not the samples around k) within r of (x, z) and within 3 m of k's height
@@ -789,7 +805,7 @@ function buildWorld() {
   W.wallL = new Float32Array(n).fill(Infinity); W.wallR = new Float32Array(n).fill(Infinity);
   if (setup.walls) for (let k = 0; k < n; k++) for (const side of [1, -1]) {
     const hs = side > 0 ? W.hwL[k] : W.hwR[k];
-    let off = W.real ? hs + 0.5 : W.city ? hs + 3.2 : W.grav[k] === side ? hs + 17 : hs + 13; // Taipei: water barriers on the kerb line
+    let off = W.real ? (W.elev && W.elev[k] > 0 ? hs - 0.2 : hs + 0.5) : W.city ? hs + 3.2 : W.grav[k] === side ? hs + 17 : hs + 13; // Taipei: water barriers on the kerb line, on a viaduct just inside the parapet
     const wx = X[k] + LX[k] * off * side, wz = Z[k] + LZ[k] * off * side;
     if (gridSample(D, wx, wz) < off - 3 && (!W.anyElev || otherStretchNear(k, wx, wz, off - 3))) off = Infinity; // another stretch of track is nearer: leave a gap
     (side > 0 ? W.wallL : W.wallR)[k] = off;
@@ -1106,6 +1122,44 @@ function taipeiScenery(grp) {
       const lm = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, side: THREE.DoubleSide })); lm.castShadow = lm.receiveShadow = true; grp.add(lm); }
   }
 }
+// direction cues: chevron boards on the outside of each real turn, facing the approaching car; white turn arrows painted before it (Taipei)
+function cornerMarkers(grp) {
+  if (!W.corners || !W.corners.length) return;
+  const n = W.n;
+  const boards = [], arrows = [];
+  for (const c of W.corners) {
+    if (c.deg < 45) continue;
+    const len = ((c.exit - c.entry + n) % n), cnt = clamp(Math.round(len * W.ds / 14), 3, 7), side = c.left ? -1 : 1; // outside of the turn
+    for (let i = 0; i < cnt; i++) boards.push([(c.entry + Math.round(len * (i + 0.5) / cnt)) % n, side, c.left]);
+    if (W.real) for (const back of [15, 35]) arrows.push([(c.entry - Math.round(back / W.ds) + n) % n, c.left]);
+  }
+  if (boards.length) { // one mesh per arrow direction; each board faces the oncoming car (plane normal = -forward)
+    const g = new THREE.PlaneGeometry(1.3, 0.95); g.translate(0, 1.55, 0);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), s = new THREE.Vector3(1, 1, 1);
+    for (const left of [true, false]) {
+      const list = boards.filter(b => b[2] === left); if (!list.length) continue;
+      const tx = canvasTex(128, 96, (gc, w, h) => { gc.fillStyle = '#c8102e'; gc.fillRect(0, 0, w, h); gc.fillStyle = '#fff'; gc.beginPath(); const P = left ? [[94, 12], [54, 48], [94, 84], [76, 84], [36, 48], [76, 12]] : [[34, 12], [74, 48], [34, 84], [52, 84], [92, 48], [52, 12]]; gc.moveTo(...P[0]); for (const pt of P.slice(1)) gc.lineTo(...pt); gc.closePath(); gc.fill(); }, true, false);
+      const im = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ map: tx, roughness: 0.7 }), list.length);
+      list.forEach(([k, sd], i) => {
+        const hs = sd > 0 ? W.hwL[k] : W.hwR[k], wl = sd > 0 ? W.wallL[k] : W.wallR[k], off = (isFinite(wl) ? wl : hs) + 0.6, x = W.x[k] + W.lx[k] * off * sd, z = W.z[k] + W.lz[k] * off * sd;
+        p.set(x, Sq(x, z, k), z); e.set(0, Math.atan2(W.lz[k], -W.lx[k]), 0); q.setFromEuler(e); m.compose(p, q, s); im.setMatrixAt(i, m);
+      });
+      im.castShadow = true; grp.add(im);
+    }
+  }
+  if (arrows.length) { // Taiwanese lane arrow: stem with a bent head toward the turn, in the lane nearest the inside of the turn
+    const pos = [], idx = [];
+    for (const [k, left] of arrows) {
+      const sd = left ? 1 : -1, lat = sd * Math.max(1.6, (sd > 0 ? W.hwL[k] : W.hwR[k]) * 0.45), fx = -W.lz[k], fz = W.lx[k], lx = W.lx[k] * sd, lz = W.lz[k] * sd;
+      const P = (f, l) => { const x = W.x[k] + W.lx[k] * lat + fx * f + lx * l, z = W.z[k] + W.lz[k] * lat + fz * f + lz * l; return [x, Sq(x, z, k) + 0.09, z]; };
+      const shape = [[0, -0.15], [3.2, -0.15], [3.2, 0.15], [0, 0.15], [2.9, 0.0], [4.4, 1.1], [4.0, 1.4], [2.9, 0.3], [4.9, 1.9], [3.5, 2.0], [4.6, 0.9]];
+      const b = pos.length / 3; for (const [f, l] of shape) pos.push(...P(f, l));
+      idx.push(b, b + 1, b + 2, b, b + 2, b + 3, b + 4, b + 5, b + 6, b + 4, b + 6, b + 7, b + 8, b + 9, b + 10);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+    grp.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: lin(0xeaeae4), roughness: 0.55, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -10 })));
+  }
+}
 // red and white plastic water barriers (水馬), the usual Taiwanese road-closure barrier, on the kerb line
 function waterBarriers(grp) {
   const n = W.n, X = W.x, Z = W.z, spots = [];
@@ -1361,6 +1415,7 @@ function buildMeshes() {
     });
     const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true; grp.add(m);
   };
+  cornerMarkers(grp);
   if (W.real) waterBarriers(grp);
   else if (W.city) {
     const bm = new THREE.MeshStandardMaterial({ map: TEX.barrier, roughness: 0.8, side: THREE.DoubleSide });
@@ -1782,7 +1837,9 @@ function physicsStep(dt, inp) {
     if (Fdrive !== 0 && Math.sign(FxR) === Math.sign(Fdrive) && setup.tc) { FxR = Math.sign(FxR) * capR * 0.98; c.tcAct = true; }
     else if (spd > 0.5 || Fdrive !== 0) { FxR = Math.sign(FxR) * capR * 0.85; spin = true; }
   }
-  if (setup.tc && Fdrive > 0 && FxR > Math.max(0.15 * capR, Math.sqrt(Math.max(0, (0.97 * capR) ** 2 - dyR * dyR)))) { FxR = Math.max(0.15 * capR, Math.sqrt(Math.max(0, (0.97 * capR) ** 2 - dyR * dyR))); c.tcAct = true; spin = false; }
+  // beginners' traction control keeps a wider margin (80 % of the rear grip), pros' runs to the limit
+  const tcUse = setup.level === 'easy' ? 0.8 : 0.97, tcMax = Math.max(0.12 * capR, Math.sqrt(Math.max(0, (tcUse * capR) ** 2 - dyR * dyR)));
+  if (setup.tc && Fdrive > 0 && FxR > tcMax) { FxR = tcMax; c.tcAct = true; spin = false; }
   c.spin = spin; c.lockF = lockF;
   let FyF = -muF * Fzf * MF(aF, 11), FyR = -muR * Fzr * MF(aR, 12);
   const latF = Math.sqrt(Math.max(0, capF * capF - FxF * FxF)) * (lockF ? 0.3 : 1);
