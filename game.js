@@ -1987,12 +1987,12 @@ function hud(dt) {
 }
 
 /* ================= Audio ================= */
-let AC = null, eng = null, muted = false;
+let AC = null, eng = null, muted = false, volume = 0.7; // volume 0..1 scales the master gain
 function startAudio() {
   if (AC) { AC.resume && AC.resume(); return; }
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
-    const master = AC.createGain(); master.gain.value = 0.5; master.connect(AC.destination);
+    const master = AC.createGain(); master.gain.value = 0.7 * volume; master.connect(AC.destination);
     const filt = AC.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 1500; filt.Q.value = 3;
     const g = AC.createGain(); g.gain.value = 0; filt.connect(g); g.connect(master);
     const o1 = AC.createOscillator(); o1.type = 'sawtooth'; const o2 = AC.createOscillator(); o2.type = 'square'; const o3 = AC.createOscillator(); o3.type = 'sawtooth';
@@ -2001,9 +2001,18 @@ function startAudio() {
     const buf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     const ns = AC.createBufferSource(); ns.buffer = buf; ns.loop = true; const nf = AC.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 600; nf.Q.value = 0.6;
     const ng = AC.createGain(); ng.gain.value = 0; ns.connect(nf); nf.connect(ng); ng.connect(master); ns.start();
-    eng = { o1, o2, o3, filt, g, ng };
+    eng = { o1, o2, o3, filt, g, ng, master };
   } catch (e) { AC = null; }
 }
+// volume slider in the settings and the pause menu (kept in sync, saved with the preferences)
+function setVolume(v, save = true) {
+  volume = clamp(v, 0, 1);
+  for (const id of ['#vol', '#pVol']) $(id).value = Math.round(volume * 100);
+  $('#oVol').textContent = $('#oPVol').textContent = Math.round(volume * 100) + '%';
+  if (eng) eng.master.gain.setTargetAtTime(0.7 * volume, AC.currentTime, 0.05);
+  if (save) savePrefs();
+}
+['#vol', '#pVol'].forEach(id => $(id).addEventListener('input', e => { setVolume(+e.target.value / 100); if (volume > 0 && muted) { muted = false; $('#sound').checked = true; } }));
 function updateAudio() {
   if (!eng) return; const t = AC.currentTime, c = car, f = c.rpm / 60 * 3, spd = Math.hypot(c.vx, c.vy);
   eng.o1.frequency.setTargetAtTime(f, t, 0.015); eng.o2.frequency.setTargetAtTime(f / 2, t, 0.015); eng.o3.frequency.setTargetAtTime(f * 1.005, t, 0.015);
@@ -2037,7 +2046,7 @@ function readSetup() {
   TER.size = +$('#size').value; if (!TER.meters) TER.range = +$('#range').value; TER.base = +$('#base').value;
   setup.width = +$('#width').value; setup.banking = $('#banking').checked; setup.walls = $('#walls').checked; setup.aero = +$('#aero').value; setup.bias = +$('#bias').value;
   setup.tc = $('#tc').checked; setup.abs = $('#abs').checked; setup.auto = $('#auto').checked; setup.esc = $('#esc').checked; setup.brakeAssist = $('#brakeAssist').checked;
-  setup.steerSens = +$('#steer').value; setup.assist = $('#assist').checked; setup.autogas = $('#autogas').checked; muted = !$('#sound').checked;
+  setup.steerSens = +$('#steer').value; setup.assist = $('#assist').checked; setup.autogas = $('#autogas').checked; muted = !$('#sound').checked; setVolume(+$('#vol').value / 100, false);
   setup.laps = +$('#laps').value; setup.aiCount = +$('#aiCount').value; setup.aiSkill = +$('#aiSkill').value;
   if (setup.level === 'easy') Object.assign(setup, { aero: 0.5, bias: 57, tc: true, abs: true, auto: true, assist: true, esc: true, brakeAssist: true });
   savePrefs();
@@ -2258,12 +2267,12 @@ document.querySelectorAll('#steerMode button').forEach(b => b.onclick = () => { 
 document.querySelectorAll('#quality button').forEach(b => b.onclick = () => { setup.quality = b.dataset.q; document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x === b)); applyQuality(setup.quality === 'auto' ? autoLevel() : setup.quality); savePrefs(); });
 if (document.fullscreenEnabled) { $('#btnFull').hidden = false; $('#btnFull').onclick = () => { document.documentElement.requestFullscreen().then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {}); }; }
 // per-viewer preferences
-function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted, level: setup.level })); } catch (e) { /* storage unavailable */ } }
+function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted, level: setup.level, volume })); } catch (e) { /* storage unavailable */ } }
 function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem('tgp-prefs') || 'null'); if (!p) return;
     if (p.nick) $('#nick').value = p.nick; if (p.steerSens) $('#steer').value = p.steerSens; if (p.steerMode) setup.steerMode = p.steerMode; if (p.quality) setup.quality = p.quality; if (p.level === 'pro' || p.level === 'easy') setup.level = p.level;
-    $('#autogas').checked = !!p.autogas; $('#assist').checked = p.assist !== false; $('#sound').checked = p.sound !== false;
+    $('#autogas').checked = !!p.autogas; $('#assist').checked = p.assist !== false; $('#sound').checked = p.sound !== false; if (typeof p.volume === 'number') $('#vol').value = Math.round(p.volume * 100);
     document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x.dataset.q === setup.quality));
   } catch (e) { /* storage unavailable */ }
 }
