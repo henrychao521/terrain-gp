@@ -292,7 +292,7 @@ function loadTaipei() {
       env = { bridges,
         signals: o.signals.map(([x, y, nm]) => { const [a, b] = pt(x, y); return { x: a, z: b, names: nm ? nm.split('／') : [] }; }),
         crossings: o.crossings.map(([x, y]) => pt(x, y)),
-        trees: o.trees.map(([x, y, park]) => { const [a, b] = pt(x, y); return [a, b, park]; }),
+        trees: o.trees.map(([x, y, park, kind = 0, h = 90]) => { const [a, b] = pt(x, y); return [a, b, park, kind, h / 10]; }), // kind: 0 broadleaf, 1 banyan, 2 golden rain tree, 3 palm, 4 tall narrow; height m
         green: o.green.map(g => ({ kind: g[0], p: dW(g.slice(1)) })),
         landmarks: o.landmarks.map(l => ({ ...l, p: dW(l.p) })),
       };
@@ -818,7 +818,7 @@ function buildWorld() {
   buildMeshes();
   drawMinimapBase();
   $('#trkLen').textContent = (len / 1000).toFixed(3) + ' km';
-  $('#hudCredit').textContent = W.city ? '© OpenStreetMap contributors' + (M.id === 'taipei' ? ' · 內政部 DEM · 臺北市 3D 建物' + (W.activeTiles && W.activeTiles.length ? ' · 建物貼圖 AI 生成（Colab SDXL）' : '') : '') : '';
+  $('#hudCredit').textContent = W.city ? '© OpenStreetMap contributors' + (M.id === 'taipei' ? ' · 內政部 DEM · 臺北市 3D 建物' + (W.activeTiles && W.activeTiles.length ? ' · 建物貼圖 AI 生成（Colab SDXL）' : '') + (/公園路燈/.test(M.credits || '') ? ' · 行道樹：臺北市公園處' : '') : '') : '';
 }
 
 // ground shader: blends grass / dirt / rock / special by per-vertex weights, sampled in world metres with a low-frequency macro layer to hide tiling
@@ -1512,8 +1512,8 @@ function buildMeshes() {
     const cnt = spots.length; if (!cnt) return;
     const mat = foliageMat(broadleaf ? TEX.treeBroad : TEX.treeCon), trees = new THREE.InstancedMesh(treeGeo, mat, cnt);
     trees.customDepthMaterial = mat.userData.depth;
-    spots.forEach(([x, z, s], i) => {
-      const hgt = broadleaf ? 8.5 * s : 14 * s, wid = broadleaf ? 8 * s : 6 * s;
+    spots.forEach(([x, z, s, kind], i) => {
+      const hgt = broadleaf ? 8.5 * s : 14 * s, wid = (broadleaf ? 8 * s : 6 * s) * (kind === 3 ? 0.55 : kind === 4 ? 0.7 : 1);
       sc.set(wid, hgt, wid); ps.set(x, Hq(x, z) - 0.3, z); eu.set(0, tr() * Math.PI, 0); q4.setFromEuler(eu); m4.compose(ps, q4, sc);
       trees.setMatrixAt(i, m4); tc.setHSL(0.22 + tr() * 0.08, 0.25, 0.42 + tr() * 0.2); trees.setColorAt(i, tc);
     });
@@ -1535,18 +1535,20 @@ function buildMeshes() {
   if (W.real) {
     const street = [], park = [], occ = M.occ, HWg = W.hwGrid;
     const free = (x, z) => { const i = Math.floor((x + W.sx / 2) / occ.cs), j = Math.floor((z + W.sz / 2) / occ.cs); return i >= 0 && j >= 0 && i < occ.rw && j < occ.rh && !occ.a[j * occ.rw + i]; };
-    for (const [x, z, pk] of M.env.trees) {
+    for (const [x, z, pk, kind, h] of M.env.trees) {
       if (Math.abs(x) > W.sx / 2 - 4 || Math.abs(z) > W.sz / 2 - 4 || !free(x, z)) continue;
       if (gridSample(D, x, z) < gridSample(HWg, x, z) + 1.4) continue; // keep the carriageway and barrier line clear
-      (pk ? park : street).push([x, z, pk ? 0.9 + tr() * 0.5 : 0.75 + tr() * 0.35]);
+      (pk ? park : street).push([x, z, h / 9, kind]); // surveyed height; the stand-in card is 8.5 m at scale 1
     }
     const fs = placeTrees(street, true), fp = placeTrees(park, true);
-    if (PROPS && PROPS.tree_camphor) {
-      const lr = mulberry32(8), kinds = { tree_camphor: PROPS.tree_camphor, tree_banyan: PROPS.tree_banyan, tree_luan: PROPS.tree_luan }, mk = (x, z, s) => { eu.set(0, lr() * Math.PI * 2, 0); q4.setFromEuler(eu); return new THREE.Matrix4().compose(new THREE.Vector3(x, Hq(x, z) - 0.2, z), q4.clone(), new THREE.Vector3(s, s * (0.9 + lr() * 0.2), s)); };
+    if (PROPS && PROPS.tree_camphor) { // the species group of each surveyed tree picks its model; models are about 9.5 m tall
+      const MODEL = ['tree_camphor', 'tree_banyan', 'tree_luan', 'tree_palm', 'tree_tall'], NATIVE_H = [9.5, 8.5, 9.0, 9.8, 10.5];
+      const lr = mulberry32(8), kinds = {}; for (const k of MODEL) if (PROPS[k]) kinds[k] = PROPS[k];
+      const mk = (x, z, s, kind) => { const h = s * 9, f = h / NATIVE_H[kind]; eu.set(0, lr() * Math.PI * 2, 0); q4.setFromEuler(eu); return new THREE.Matrix4().compose(new THREE.Vector3(x, Hq(x, z) - 0.2, z), q4.clone(), new THREE.Vector3(f, f, f)); };
       const tint = () => new THREE.Color().setHSL(0.25, 0.1, 0.45 + lr() * 0.1).multiplyScalar(2.1);
-      const cap = COARSE ? 350 : 1200, R = COARSE ? 110 : 220;
-      if (fs) nearLod(grp, fs, street.map(([x, z, s]) => { const u = lr(); return { m: mk(x, z, s), kind: u < 0.45 ? 'tree_camphor' : u < 0.8 ? 'tree_luan' : 'tree_banyan', c: tint() }; }), kinds, cap, R);
-      if (fp) nearLod(grp, fp, park.map(([x, z, s]) => ({ m: mk(x, z, s), kind: lr() < 0.5 ? 'tree_banyan' : 'tree_camphor', c: tint() })), kinds, cap >> 1, R);
+      const cap = COARSE ? 350 : 1200, R = COARSE ? 110 : 220, item = ([x, z, s, kind]) => { const k = kinds[MODEL[kind]] ? kind : 0; return { m: mk(x, z, s, k), kind: MODEL[k], c: tint() }; };
+      if (fs) nearLod(grp, fs, street.map(item), kinds, cap, R);
+      if (fp) nearLod(grp, fp, park.map(item), kinds, cap >> 1, R);
       q4.identity();
     }
     taipeiScenery(grp);

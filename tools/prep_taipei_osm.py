@@ -7,8 +7,14 @@ Recommended source, the daily Geofabrik extract of Taiwan (ODbL), cut to the map
   curl -LO https://download.geofabrik.de/asia/taiwan-latest.osm.pbf
   osmium extract -b 121.48346,25.00303,121.54309,25.04435 -s smart -o area.osm.pbf taiwan-latest.osm.pbf
   mkdir xml && osmium cat area.osm.pbf -o xml/area.osm
-  python3 tools/prep_taipei_osm.py xml
+  python3 tools/prep_taipei_osm.py xml [tree dir]
 Overlapping tiles from api.openstreetmap.org/api/0.6/map also work.
+
+Tree dir (optional): Taipei City's street and park tree inventory, 政府資料開放授權條款第1版 (data.gov.tw/dataset/128274):
+  curl -O https://tppkl.blob.core.windows.net/blobfs/TaipeiTree.csv
+  curl -O https://tppkl.blob.core.windows.net/blobfs/TaipeiParkTree.csv
+With it, trees come from the inventory (species, height); OSM only fills wooded areas the inventory doesn't cover.
+Each tree: [x dm, y dm, park 0/1, kind (0 broadleaf, 1 banyan, 2 golden rain tree, 3 palm, 4 tall narrow), height dm].
 """
 import glob, json, math, random, sys, xml.etree.ElementTree as ET
 from pyproj import Transformer
@@ -141,6 +147,34 @@ for wid, (nds, t) in ways.items():
             for s in range(int(L // 7) + 1):
                 f = s * 7 / max(L, 1e-6); p = (ax + (bx - ax) * f, ay + (by - ay) * f)
                 if inside(p): trees.append([dm(p[0]), dm(p[1]), 0])
+# --- Taipei City tree inventory replaces the OSM trees where available
+def kind_of(sp):
+    if '欒' in sp: return 2
+    if '榕' in sp: return 1
+    if any(w in sp for w in ('椰', '棕', '海棗', '蒲葵', '檳榔')): return 3
+    if any(w in sp for w in ('楓香', '黑板', '欖仁', '白千層', '松', '杉', '落羽', '肯氏', '柏')): return 4
+    return 0
+if len(sys.argv) > 2:
+    import csv
+    city = []
+    for fn, park in (('TaipeiTree.csv', 0), ('TaipeiParkTree.csv', 1)):
+        for r in csv.DictReader(open(f'{sys.argv[2]}/{fn}', encoding='utf-8', errors='replace')):
+            try: x, y = float(r['TWD97X']) - X0, float(r['TWD97Y']) - Y0
+            except (TypeError, ValueError): continue
+            if not inside((x, y)): continue
+            h = num(r.get('TreeHeight'), 0) or 0
+            h = min(max(h, 3.0), 28.0) if h else 9.0
+            city.append([dm(x), dm(y), park, kind_of(r.get('TreeType') or ''), dm(h)])
+    cell = {}
+    for t in city: cell.setdefault((t[0] // 120, t[1] // 120), []).append(t)
+    def near_city(t):
+        cx, cy = t[0] // 120, t[1] // 120
+        return any(abs(u[0] - t[0]) < 120 and abs(u[1] - t[1]) < 120 for a in (-1, 0, 1) for b in (-1, 0, 1) for u in cell.get((cx + a, cy + b), ()))
+    wood = [t + [0, 90] for t in trees if t[2] == 1 and not near_city(t)]  # OSM forest/park scatter where the inventory has nothing within 12 m
+    print('city trees', len(city), '| OSM fill', len(wood), '| replaced OSM trees', len(trees))
+    trees = city + wood
+else:
+    trees = [t + [0, 90] for t in trees]
 print('green', len(green), 'trees', len(trees))
 
 # --- landmarks: OSM 3D building parts inside historic / heritage / museum buildings, and city gates
@@ -175,7 +209,7 @@ for wid, r, t in outlines:
                       'rc': pt.get('roof:colour') or t.get('roof:colour') or '', 'bc': pt.get('building:colour') or t.get('building:colour') or '', 'p': flat(pr[:-1])})
 print('landmark outlines', len(outlines), 'parts', len(parts), 'styled', sum(1 for p in parts if p['n'] in STYLE and p['rs'] != 'flat'))
 
-out = {'source': 'OpenStreetMap', 'credits': '道路、樹木、號誌、公園與地標：© OpenStreetMap contributors（ODbL）',
+out = {'source': 'OpenStreetMap', 'credits': '道路、號誌、公園與地標：© OpenStreetMap contributors（ODbL）' + ('；行道樹與公園樹木：臺北市政府工務局公園路燈工程管理處（政府資料開放授權條款第1版）' if len(sys.argv) > 2 else '；樹木：OpenStreetMap'),
        'roads': roads, 'bridges': bridges, 'signals': signals, 'crossings': crossings, 'green': green, 'trees': trees, 'landmarks': parts}
 json.dump(out, open('data/taipei_osm.json', 'w'), ensure_ascii=False, separators=(',', ':'))
 import os; print('wrote data/taipei_osm.json', os.path.getsize('data/taipei_osm.json') // 1024, 'KB')
