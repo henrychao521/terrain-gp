@@ -70,6 +70,39 @@ def tree(name, crown_r, crown_h, trunk_h, lumps, palette, flowers=None, spread=1
 camphor = tree('tree_camphor', 3.6, 6.0, 3.2, 9, [(0.20, 0.36, 0.14), (0.24, 0.40, 0.16), (0.18, 0.32, 0.12)])
 banyan = tree('tree_banyan', 4.6, 5.0, 2.8, 11, [(0.16, 0.32, 0.12), (0.20, 0.35, 0.14)], spread=1.15)
 luan = tree('tree_luan', 3.2, 5.4, 3.4, 8, [(0.26, 0.42, 0.16), (0.30, 0.44, 0.18)], flowers=[(0.86, 0.70, 0.12), (0.80, 0.42, 0.30), (0.74, 0.36, 0.28)])
+# tall narrow crown (楓香, 黑板樹, 小葉欖仁, 白千層, pines): stacked lumps tapering upward
+def tall_tree(name):
+    bm = bmesh.new(); col = vcolor(bm); seg = 6
+    r0 = [bm.verts.new((math.cos(2 * math.pi * i / seg) * 0.22, math.sin(2 * math.pi * i / seg) * 0.22, -0.3)) for i in range(seg)]
+    r1 = [bm.verts.new((math.cos(2 * math.pi * i / seg) * 0.1, math.sin(2 * math.pi * i / seg) * 0.1, 9.0)) for i in range(seg)]
+    for i in range(seg): bm.faces.new((r0[i], r0[(i + 1) % seg], r1[(i + 1) % seg], r1[i])).material_index = 0
+    for k in range(6):
+        z = 3.0 + k * 1.15; s = 2.2 * (1 - k / 7.5)
+        res = bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1.0); base = Vector((0.17, 0.33, 0.13)) * (0.9 + 0.1 * k / 6)
+        for v in res['verts']:
+            n = v.co.copy(); lump = 1 + 0.2 * noise.noise(n * 2.1 + Vector((0, 0, k)))
+            v.co = Vector((n.x * s * lump, n.y * s * lump, z + n.z * s * 0.7 * lump))
+        for f in {f for v in res['verts'] for f in v.link_faces}:
+            f.material_index = 1
+            for l in f.loops: sh = 0.65 + 0.35 * max(0.0, min(1.0, (l.vert.co.z - 2.5) / 8)); l[col] = (*[min(1.0, c * sh) for c in base], 1)
+    return finish(bm, name, [BARK, LEAF])
+# palm (大王椰子, 蒲葵, 海棗): smooth grey trunk, crown of drooping fronds
+def palm(name):
+    bm = bmesh.new(); col = vcolor(bm); seg = 8; H = 9.5
+    rings = [[bm.verts.new((math.cos(2 * math.pi * i / seg) * r, math.sin(2 * math.pi * i / seg) * r, z)) for i in range(seg)] for z, r in ((-0.3, 0.32), (1.0, 0.3), (5.0, 0.24), (H - 0.6, 0.22), (H, 0.28))]
+    for a, b2 in zip(rings, rings[1:]):
+        for i in range(seg): bm.faces.new((a[i], a[(i + 1) % seg], b2[(i + 1) % seg], b2[i])).material_index = 0
+    for k in range(12):  # fronds: a bent strip of quads, wider in the middle
+        ang = 2 * math.pi * k / 12 + R.uniform(-0.15, 0.15); dx, dy = math.cos(ang), math.sin(ang); px, py = -dy, dx
+        pts = []
+        for j in range(7):
+            t = j / 6; reach = 4.2 * t; droop = 1.6 * t * t - 0.8 * t; w = 0.55 * math.sin(math.pi * min(1, t * 1.1 + 0.05))
+            c = Vector((dx * reach, dy * reach, H + 0.2 - droop * 1.6)); pts.append((c + Vector((px, py, 0)) * w, c - Vector((px, py, 0)) * w))
+        for j in range(6):
+            f = bm.faces.new((bm.verts.new(pts[j][0]), bm.verts.new(pts[j + 1][0]), bm.verts.new(pts[j + 1][1]), bm.verts.new(pts[j][1]))); f.material_index = 1
+            for l in f.loops: l[col] = (0.20, 0.38 + 0.05 * (k % 3), 0.12, 1)
+    return finish(bm, name, [mat('palm_trunk', (0.62, 0.6, 0.55), 0.8), LEAF])
+tall = tall_tree('tree_tall'); palmt = palm('tree_palm')
 
 # ---------------- 水馬: hollow plastic water barrier, 1.2 m long, waisted profile, fill cap and forklift slots
 SHELL = mat('barrier_shell', (1, 1, 1), 0.5)
@@ -144,7 +177,7 @@ def signal_head():
     return finish(bm, 'signal_head', [HOUSE, LENS])
 signal = signal_head()
 
-objs = [camphor, banyan, luan, barrier, lamp, signal]
+objs = [camphor, banyan, luan, tall, palmt, barrier, lamp, signal]
 for i, o in enumerate(objs): o.location = (i * 12, 0, 0)  # spread out for previews; the game ignores node offsets
 for o in objs: print(o.name, len(o.data.polygons), 'faces')
 bpy.ops.object.select_all(action='SELECT')

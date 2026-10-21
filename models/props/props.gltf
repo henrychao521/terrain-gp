@@ -20,7 +20,9 @@
 				2,
 				3,
 				4,
-				5
+				5,
+				6,
+				7
 			]
 		}
 	],
@@ -49,7 +51,7 @@
 		},
 		{
 			"mesh":3,
-			"name":"water_barrier",
+			"name":"tree_tall",
 			"translation":[
 				36,
 				0,
@@ -58,7 +60,7 @@
 		},
 		{
 			"mesh":4,
-			"name":"street_lamp",
+			"name":"tree_palm",
 			"translation":[
 				48,
 				0,
@@ -67,9 +69,27 @@
 		},
 		{
 			"mesh":5,
-			"name":"signal_head",
+			"name":"water_barrier",
 			"translation":[
 				60,
+				0,
+				0
+			]
+		},
+		{
+			"mesh":6,
+			"name":"street_lamp",
+			"translation":[
+				72,
+				0,
+				0
+			]
+		},
+		{
+			"mesh":7,
+			"name":"signal_head",
+			"translation":[
+				84,
 				0,
 				0
 			]
@@ -96,6 +116,20 @@
 			"pbrMetallicRoughness":{
 				"metallicFactor":0,
 				"roughnessFactor":0.8500000238418579
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"palm_trunk",
+			"pbrMetallicRoughness":{
+				"baseColorFactor":[
+					0.34935078024864197,
+					0.3250369727611542,
+					0.26840952038764954,
+					1
+				],
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
 			}
 		},
 		{
@@ -318,94 +352,102 @@
 			]
 		},
 		{
-			"name":"water_barrier",
+			"name":"tree_tall",
 			"primitives":[
 				{
 					"attributes":{
 						"POSITION":23,
-						"NORMAL":24
+						"NORMAL":24,
+						"COLOR_0":25
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
 							"bufferView":6,
 							"attributes":{
 								"POSITION":0,
-								"NORMAL":1
+								"NORMAL":1,
+								"COLOR_0":2
 							}
 						}
 					},
-					"indices":25,
-					"material":2,
+					"indices":26,
+					"material":0,
 					"mode":4
 				},
 				{
 					"attributes":{
-						"POSITION":26,
-						"NORMAL":27
+						"POSITION":27,
+						"NORMAL":28,
+						"COLOR_0":29
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
 							"bufferView":7,
 							"attributes":{
 								"POSITION":0,
-								"NORMAL":1
+								"NORMAL":1,
+								"COLOR_0":2
 							}
 						}
 					},
-					"indices":28,
-					"material":3,
+					"indices":30,
+					"material":1,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"street_lamp",
+			"name":"tree_palm",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":29,
-						"NORMAL":30
+						"POSITION":31,
+						"NORMAL":32,
+						"COLOR_0":33
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
 							"bufferView":8,
 							"attributes":{
 								"POSITION":0,
-								"NORMAL":1
+								"NORMAL":1,
+								"COLOR_0":2
 							}
 						}
 					},
-					"indices":31,
-					"material":4,
+					"indices":34,
+					"material":2,
 					"mode":4
 				},
 				{
 					"attributes":{
-						"POSITION":32,
-						"NORMAL":33
+						"POSITION":35,
+						"NORMAL":36,
+						"COLOR_0":37
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
 							"bufferView":9,
 							"attributes":{
 								"POSITION":0,
-								"NORMAL":1
+								"NORMAL":1,
+								"COLOR_0":2
 							}
 						}
 					},
-					"indices":34,
-					"material":5,
+					"indices":38,
+					"material":1,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"signal_head",
+			"name":"water_barrier",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":35,
-						"NORMAL":36
+						"POSITION":39,
+						"NORMAL":40
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -416,14 +458,14 @@
 							}
 						}
 					},
-					"indices":37,
-					"material":6,
+					"indices":41,
+					"material":3,
 					"mode":4
 				},
 				{
 					"attributes":{
-						"POSITION":38,
-						"NORMAL":39
+						"POSITION":42,
+						"NORMAL":43
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -434,8 +476,90 @@
 							}
 						}
 					},
-					"indices":40,
+					"indices":44,
+					"material":4,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"street_lamp",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":45,
+						"NORMAL":46
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":12,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1
+							}
+						}
+					},
+					"indices":47,
+					"material":5,
+					"mode":4
+				},
+				{
+					"attributes":{
+						"POSITION":48,
+						"NORMAL":49
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":13,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1
+							}
+						}
+					},
+					"indices":50,
+					"material":6,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"signal_head",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":51,
+						"NORMAL":52
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":14,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1
+							}
+						}
+					},
+					"indices":53,
 					"material":7,
+					"mode":4
+				},
+				{
+					"attributes":{
+						"POSITION":54,
+						"NORMAL":55
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":15,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1
+							}
+						}
+					},
+					"indices":56,
+					"material":8,
 					"mode":4
 				}
 			]
@@ -615,6 +739,126 @@
 		{
 			"componentType":5123,
 			"count":1920,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":24,
+			"max":[
+				0.2199999988079071,
+				9,
+				0.1905255913734436
+			],
+			"min":[
+				-0.2199999988079071,
+				-0.30000001192092896,
+				-0.1905255913734436
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":24,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":24,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5123,
+			"count":36,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":1440,
+			"max":[
+				2.148695230484009,
+				9.26361083984375,
+				2.220102071762085
+			],
+			"min":[
+				-2.1543128490448,
+				1.4778562784194946,
+				-2.163686752319336
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":1440,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":1440,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5123,
+			"count":1440,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":128,
+			"max":[
+				0.3199999928474426,
+				9.5,
+				0.3199999928474426
+			],
+			"min":[
+				-0.3199999928474426,
+				-0.30000001192092896,
+				-0.3199999928474426
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":128,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":128,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5123,
+			"count":192,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":288,
+			"max":[
+				4.194008827209473,
+				9.842222213745117,
+				4.166696071624756
+			],
+			"min":[
+				-4.185658931732178,
+				8.420000076293945,
+				-4.198082447052002
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":288,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":288,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5123,
+			"count":432,
 			"type":"SCALAR"
 		},
 		{
@@ -801,38 +1045,58 @@
 		},
 		{
 			"buffer":0,
-			"byteLength":823,
+			"byteLength":289,
 			"byteOffset":55552
 		},
 		{
 			"buffer":0,
+			"byteLength":9551,
+			"byteOffset":55844
+		},
+		{
+			"buffer":0,
+			"byteLength":808,
+			"byteOffset":65396
+		},
+		{
+			"buffer":0,
+			"byteLength":1828,
+			"byteOffset":66204
+		},
+		{
+			"buffer":0,
+			"byteLength":823,
+			"byteOffset":68032
+		},
+		{
+			"buffer":0,
 			"byteLength":317,
-			"byteOffset":56376
+			"byteOffset":68856
 		},
 		{
 			"buffer":0,
 			"byteLength":1115,
-			"byteOffset":56696
+			"byteOffset":69176
 		},
 		{
 			"buffer":0,
 			"byteLength":200,
-			"byteOffset":57812
+			"byteOffset":70292
 		},
 		{
 			"buffer":0,
 			"byteLength":637,
-			"byteOffset":58012
+			"byteOffset":70492
 		},
 		{
 			"buffer":0,
 			"byteLength":723,
-			"byteOffset":58652
+			"byteOffset":71132
 		}
 	],
 	"buffers":[
 		{
-			"byteLength":59376,
+			"byteLength":71856,
 			"uri":"props.bin"
 		}
 	]
