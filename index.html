@@ -100,6 +100,16 @@ button{font:inherit;color:inherit}
 #balance.over{background:rgba(255,69,69,.2);color:var(--red)}
 .tyre-cold{color:var(--accent)}.tyre-ok{color:var(--green)}.tyre-hot{color:var(--red)}
 
+#turnHint{top:calc(var(--st) + 54px);left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:6px 14px 6px 8px;z-index:4}
+#turnHint svg{width:54px;height:54px}#turnHint path{fill:none;stroke:#ffd23f;stroke-width:9;stroke-linecap:round;stroke-linejoin:round}
+#turnHint.fast path{stroke:#ff4a4a}#turnHint div{display:grid;line-height:1.15}#turnHint b{font-size:22px;letter-spacing:.04em}#turnHint span{font:700 18px 'IBM Plex Mono',monospace;color:#cfe8ff}#turnHint small{font-size:13px;color:#aab4c0}#turnHint.fast small{color:#ff8080}
+body.previewing #tower,body.previewing #rightCol,body.previewing #tele,body.previewing #wheel,body.previewing #standings,body.previewing #touch{visibility:hidden}
+#locPill{bottom:calc(var(--sb) + 150px);left:50%;transform:translateX(-50%);font-size:13px;padding:3px 12px;border-radius:12px;background:rgba(10,14,20,.6);color:#dfe6ee;white-space:nowrap;z-index:3}
+#locCard{top:calc(var(--st) + 22%);left:50%;transform:translateX(-50%);display:grid;justify-items:center;padding:8px 22px;border-radius:6px;background:rgba(10,14,20,.72);opacity:0;transition:opacity .4s;z-index:4;pointer-events:none}
+#locCard.show{opacity:1}#locCard b{font-size:26px;letter-spacing:.06em}#locCard small,#locCard span{font-size:13px;color:#aab4c0}
+#preview{inset:auto 0 calc(var(--sb) + 18px) 0;display:flex;justify-content:center;align-items:center;gap:14px;z-index:6}
+#preview .pv{display:grid;gap:4px;padding:8px 14px;border-radius:6px;background:rgba(10,14,20,.72);min-width:240px}#preview .pv b{font-size:16px}#preview .pv span{font-size:13px;color:#aab4c0}
+#preview i{display:block;height:4px;background:#2a323c;border-radius:2px;overflow:hidden}#preview em{display:block;height:100%;width:0;background:#5bc0ff}
 #banner{top:calc(var(--st) + 30%);left:50%;transform:translateX(-50%);font-size:18px;font-weight:700;letter-spacing:.06em;padding:5px 14px;border-radius:4px;opacity:0;transition:opacity .25s;white-space:nowrap;z-index:4}
 #banner.show{opacity:1}
 #banner.bad{background:var(--red);color:#fff}#banner.good{background:var(--purple);color:#fff}#banner.info{background:var(--panel-solid);border:1px solid var(--line);color:var(--fg)}
@@ -363,6 +373,10 @@ input[type=text]{background:var(--raise);border:1px solid var(--line);color:var(
   <ol class="posrows" id="posRows"></ol>
 </div>
 <div id="banner" class="hud"></div>
+<div id="turnHint" class="hud panel" hidden><svg viewBox="-50 -50 100 100" aria-hidden="true"><path id="thArrow" d="" /></svg><div><b id="thText"></b><span id="thDist"></span><small id="thInfo"></small></div></div>
+<div id="locPill" class="hud" hidden></div>
+<div id="locCard" class="hud"><small>進入</small><b id="lcRoad"></b><span id="lcNear"></span></div>
+<div id="preview" class="hud" hidden><div class="pv"><b>賽道預覽</b><span id="pvInfo"></span><i><em id="pvBar"></em></i></div><button class="btn" id="pvSkip" type="button">跳過 ▶</button></div>
 <div id="lights" class="hud" hidden><i></i><i></i><i></i><i></i><i></i></div>
 <div id="hudCredit" class="hud"></div>
 
@@ -391,6 +405,7 @@ input[type=text]{background:var(--raise);border:1px solid var(--line);color:var(
   <div class="pcard" role="dialog" aria-label="暫停">
     <h2>暫停</h2>
     <dl class="stats"><dt>圈數</dt><dd id="pLap">–</dd><dt>最快圈</dt><dd id="pBest">–</dd><dt>上一圈</dt><dd id="pLast">–</dd></dl>
+    <div class="field"><label for="pVol">音量</label><input type="range" id="pVol" min="0" max="100" step="5" value="70"><output id="oPVol"></output></div>
     <button class="primary" id="pResume" type="button">繼續</button>
     <button class="btn" id="pRestart" type="button">重新起跑</button>
     <button class="btn" id="pSetup" type="button">賽道與車輛設定</button>
@@ -486,6 +501,7 @@ input[type=text]{background:var(--raise);border:1px solid var(--line);color:var(
               <button class="btn" data-c="0" type="button">中正紀念堂環線</button>
               <button class="btn" data-c="1" type="button">萬華艋舺環線</button>
               <button class="btn" data-c="2" type="button">大安仁愛短程</button>
+              <button class="btn" data-c="3" type="button">建國高架環線</button>
             </div>
           </div>
           <div class="group">
@@ -493,6 +509,7 @@ input[type=text]{background:var(--raise);border:1px solid var(--line);color:var(
             <div class="field"><label for="width">賽道寬度</label><input type="range" id="width" min="10" max="20" step="1" value="14"><output id="oWidth"></output></div>
             <div class="checks">
               <label><input type="checkbox" id="banking" checked>保留地形橫向傾斜（自然側傾彎）</label>
+              <label class="only-taipei"><input type="checkbox" id="elevated">路線可使用高架道路與快速道路</label>
               <label><input type="checkbox" id="walls" checked>賽道護欄（街道賽：水泥護欄與防護網；一般賽道：護欄與輪胎牆）</label>
             </div>
           </div>
@@ -588,11 +605,14 @@ input[type=text]{background:var(--raise);border:1px solid var(--line);color:var(
           </div>
           <div class="group">
             <h3>手感</h3>
+            <div class="field"><label for="vol">音量</label><input type="range" id="vol" min="0" max="100" step="5" value="70"><output id="oVol"></output></div>
             <div class="field"><label for="steer">轉向靈敏度</label><input type="range" id="steer" min="0.4" max="1.3" step="0.05" value="0.8"><output id="oSteer"></output></div>
             <div class="checks">
               <label><input type="checkbox" id="touchOn">顯示觸控按鍵（平板、觸控筆電可手動開啟）</label>
               <label><input type="checkbox" id="autogas">自動油門（只需操作轉向與煞車）</label>
-              <label><input type="checkbox" id="sound" checked>引擎音效</label>
+              <label><input type="checkbox" id="turnHints" checked>轉彎提示（彎道方向、距離與建議速度）</label>
+              <label><input type="checkbox" id="previewOn" checked>開跑前播放賽道預覽（可跳過）</label>
+              <label><input type="checkbox" id="sound" checked>引擎音效（遊戲中按 M 靜音）</label>
             </div>
           </div>
           <div class="group">

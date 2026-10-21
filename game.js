@@ -235,19 +235,22 @@ function pointInPoly(x, z, p) {
 }
 function finishCity(M) {
   // street graph for snapping and routing; expressways, bus lanes and ramps are left out of routing
-  const key = new Map(), X = [], Z = [], adj = [], major = [];
-  const node = (x, z) => { const k = Math.round(x * 2) + ',' + Math.round(z * 2); let id = key.get(k); if (id === undefined) { id = X.length; key.set(k, id); X.push(x); Z.push(z); adj.push([]); } return id; };
+  const key = new Map(), X = [], Z = [], adj = [], adjE = [], major = [], onViaduct = [];
+  const node = (x, z) => { const k = Math.round(x * 2) + ',' + Math.round(z * 2); let id = key.get(k); if (id === undefined) { id = X.length; key.set(k, id); X.push(x); Z.push(z); adj.push([]); adjE.push([]); } return id; };
   const COST = [1, 1, 1.12, 1.3, 2.2, 3];
   for (const r of M.roads) {
-    if (/快速|專用道/.test(r.n) || r.lay > 0) continue;
+    if (/專用道/.test(r.n)) continue; // bus lanes stay out
+    const elev = r.lay > 0 || /快速/.test(r.n), A = elev ? adjE : adj;
     let prev = -1;
     for (let i = 0; i < r.p.length; i += 2) {
-      const id = node(r.p[i], r.p[i + 1]); if (r.c <= 3 && !(r.one && r.ln === 1)) major[id] = 1;
-      if (prev >= 0 && prev !== id) { const w = Math.hypot(X[id] - X[prev], Z[id] - Z[prev]) * COST[r.c] * (r.one && r.ln === 1 ? 1.6 : 1); adj[prev].push(id, w); adj[id].push(prev, r.one ? w * 8 : w); } // single-lane frontage roads only when needed
+      const id = node(r.p[i], r.p[i + 1]); if (r.c <= 3 && !(r.one && r.ln === 1) && !elev) major[id] = 1; if (elev) onViaduct[id] = 1;
+      const inMap = Math.abs(X[id]) < M.sx / 2 - 20 && Math.abs(Z[id]) < M.sz / 2 - 20; // routes never leave the map
+      if (!inMap) { prev = -1; continue; }
+      if (prev >= 0 && prev !== id) { const w = Math.hypot(X[id] - X[prev], Z[id] - Z[prev]) * COST[r.c] * (r.one && r.ln === 1 ? 1.6 : 1); A[prev].push(id, w); A[id].push(prev, r.one ? w * 8 : w); } // single-lane frontage roads only when needed
       prev = id;
     }
   }
-  M.graph = { x: Float32Array.from(X), z: Float32Array.from(Z), adj, major: Uint8Array.from(X, (_, i) => major[i] ? 1 : 0) };
+  M.graph = { x: Float32Array.from(X), z: Float32Array.from(Z), adj, adjE, major: Uint8Array.from(X, (_, i) => major[i] ? 1 : 0), viaduct: Uint8Array.from(X, (_, i) => onViaduct[i] ? 1 : 0) };
   // building footprint raster (4 m) so street trees never grow inside a building
   const cs = 4, rw = Math.ceil(M.sx / cs), rh = Math.ceil(M.sz / cs), occ = new Uint8Array(rw * rh);
   for (const b of M.blds) {
@@ -283,7 +286,10 @@ function loadTaipei() {
     let blds = d.buildings.map(b => ({ h: b[0] / 10, p: toW(b.slice(1)) })), env = null;
     if (o) { // OpenStreetMap detail: carriageway widths and lanes, one-way streets, street furniture and landmarks
       roads = o.roads.map(r => ({ c: r[0], n: r[1], one: r[2], ln: r[3], w: r[4] / 10, lay: r[5], p: dW(r.slice(6)) }));
-      env = {
+      const bridges = (o.bridges || []).map(r => { const p = dW(r.slice(6)), m = p.length / 2, S = [0]; for (let i = 1; i < m; i++) S.push(S[i - 1] + Math.hypot(p[i * 2] - p[i * 2 - 2], p[i * 2 + 1] - p[i * 2 - 1]));
+        const L = S[m - 1], full = 6.5 * r[1], hv = Float32Array.from(S, s => Math.max(0.6, Math.min(full, r[3] ? s * 0.05 : full, r[4] ? (L - s) * 0.05 : full)));
+        return { lay: r[1], w: r[2] / 10, name: r[5], p, hv }; });
+      env = { bridges,
         signals: o.signals.map(([x, y, nm]) => { const [a, b] = pt(x, y); return { x: a, z: b, names: nm ? nm.split('／') : [] }; }),
         crossings: o.crossings.map(([x, y]) => pt(x, y)),
         trees: o.trees.map(([x, y, park]) => { const [a, b] = pt(x, y); return [a, b, park]; }),
@@ -355,15 +361,18 @@ const TP_CIRCUITS = [ // street junctions in data coordinates (m east, m north o
   [[3239, 3774], [3913, 3406], [4745, 3209], [4971, 2370], [4077, 2450], [3732, 2478], [3516, 2781], [3156, 3318]],
   [[615, 2675], [1510, 3124], [2028, 3297], [1877, 2800], [1511, 2730]],
   [[4312, 3718], [4760, 3709], [4745, 3209], [4207, 3247]],
+  [[4900, 3215], [5290, 3470], [5262, 3880], [4960, 3720], [4760, 3709], [4745, 3209]], // 建國高架: up the 信義路 ramp, along the viaduct, back by 仁愛路 and 新生南路
 ];
+const TP_ELEVATED = [false, false, false, true]; // presets that need elevated roads in the route
 // nearest street node; a main carriageway within 40 m wins over a closer frontage road or lane
 function snapNode(M, x, z) { const g = M.graph; let best = 0, bd = Infinity; for (let i = 0; i < g.x.length; i++) { const d = (g.x[i] - x) ** 2 + (g.z[i] - z) ** 2 + (g.major && !g.major[i] ? 1600 : 0); if (d < bd) { bd = d; best = i; } } return best; }
 const viewSize = M => Math.max(M.sx, M.sz);
 function cityPoint(M, x, z) { const id = snapNode(M, x, z), V = viewSize(M); return { u: M.graph.x[id] / V + 0.5, v: M.graph.z[id] / V + 0.5, node: id }; }
 function cityPreset(M, i) {
   const g = M.graph;
-  return TP_CIRCUITS[i].map(([X, Y]) => { const x = X - M.sx / 2, z = M.sz / 2 - Y, p = cityPoint(M, x, z), c = [];
-    for (let k = 0; k < g.x.length; k++) if ((!g.major || g.major[k]) && (g.x[k] - x) ** 2 + (g.z[k] - z) ** 2 < 45 * 45) c.push(k);
+  return TP_CIRCUITS[i].map(([X, Y]) => { const x = X - M.sx / 2, z = M.sz / 2 - Y, p = cityPoint(M, x, z), c = [], near = k => (g.x[k] - x) ** 2 + (g.z[k] - z) ** 2 < 45 * 45;
+    if (TP_ELEVATED[i] && g.viaduct) for (let k = 0; k < g.x.length; k++) if (g.viaduct[k] && near(k)) c.push(k); // elevated presets: the viaduct over the street, not the street
+    if (!c.length) for (let k = 0; k < g.x.length; k++) if ((!g.major || g.major[k]) && near(k)) c.push(k);
     c.sort((a, b) => ((g.x[a] - x) ** 2 + (g.z[a] - z) ** 2) - ((g.x[b] - x) ** 2 + (g.z[b] - z) ** 2));
     p.alt = c.length ? c.slice(0, 6) : [p.node]; return p; });
 }
@@ -376,8 +385,8 @@ function astar(g, s, t) {
   dist[s] = 0; push(0, s);
   while (heap.length) {
     const [, u] = pop(); if (done[u]) continue; done[u] = 1; if (u === t) break;
-    const a = g.adj[u];
-    for (let e = 0; e < a.length; e += 2) { const v = a[e], nd = dist[u] + a[e + 1]; if (nd < dist[v]) { dist[v] = nd; prev[v] = u; push(nd + Math.hypot(g.x[v] - hx, g.z[v] - hz), v); } }
+    for (const a of setup.elevated && g.adjE ? [g.adj[u], g.adjE[u]] : [g.adj[u]])
+      for (let e = 0; e < a.length; e += 2) { const v = a[e], nd = dist[u] + a[e + 1]; if (nd < dist[v]) { dist[v] = nd; prev[v] = u; push(nd + Math.hypot(g.x[v] - hx, g.z[v] - hz), v); } }
   }
   if (!done[t]) return null;
   const path = []; for (let v = t; v >= 0; v = prev[v]) path.push(v); path.reverse(); path.cost = dist[t]; return path;
@@ -558,7 +567,7 @@ function realWidths(M, hw) {
       for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) { const lst = grid.get((cx0 + a) + ',' + (cz0 + b)); if (!lst) continue;
         for (let e = 0; e < lst.length; e += 2) { const r = M.roads[lst[e]], i = lst[e + 1], x0 = r.p[i], z0 = r.p[i + 1], dx = r.p[i + 2] - x0, dz = r.p[i + 3] - z0, l2 = dx * dx + dz * dz || 1;
           const f = clamp(((X[k] - x0) * dx + (Z[k] - z0) * dz) / l2, 0, 1), d = Math.hypot(X[k] - x0 - dx * f, Z[k] - z0 - dz * f), par = Math.abs(dx * tx + dz * tz) / Math.sqrt(l2);
-          const score = d + (1 - par) * 20; if (score < best) { best = score; bw = r.w; bl = r.ln; bt = r.one ? 0 : 1; bn = r.n; } } }
+          const score = d + (1 - par) * 20 + (r.lay > 0 ? 0 : 0.5); if (score < best) { best = score; bw = r.w; bl = r.ln; bt = r.one ? 0 : 1; bn = r.n; } } }
       wid[k] = bw; ln[k] = bl; two[k] = bt; W.rname[k] = bn;
     }
     // junctions and short mismatches would make the width flicker: median over 30 m, then smooth
@@ -568,6 +577,143 @@ function realWidths(M, hw) {
     for (let k = 0; k < n; k++) { L[k] = R[k] = clamp(med[k] / 2, 3.6, 13); W.lanes[k] = ln[k]; W.two[k] = two[k]; }
   }
   W.hwMax = Math.max(...L, ...R);
+}
+/* ================= Corner notes, location and the preview lap ================= */
+const CORNER_WORD = ['髮夾彎', '急彎', '中彎', '緩彎', '微彎', '微彎'];
+// corners of the lap: entry/exit sample, direction, turn angle, severity (1 hairpin .. 6 gentle), suggested speed, street turned onto
+function analyzeCorners() {
+  const n = W.n, ds = W.ds, K = Float32Array.from(W.kappa); smoothCirc(K, Math.round(10 / ds), 2);
+  const on = k => Math.abs(K[k]) > 1 / 350, raw = [];
+  let k0 = 0; while (k0 < n && on(k0)) k0++;
+  if (k0 >= n) { W.corners = []; return; }
+  for (let i = 0; i < n;) {
+    const k = (k0 + i) % n; if (!on(k)) { i++; continue; }
+    const sg = Math.sign(K[k]); let j = i, ang = 0, kmax = 0;
+    while (j < n && on((k0 + j) % n) && Math.sign(K[(k0 + j) % n]) === sg) { const kk = (k0 + j) % n; ang += K[kk] * ds; kmax = Math.max(kmax, Math.abs(K[kk])); j++; }
+    raw.push({ i0: i, i1: j, ang, kmax }); i = j;
+  }
+  const merged = []; // pieces of one corner split by a short straight
+  for (const c of raw) { const p = merged[merged.length - 1]; if (p && Math.sign(p.ang) === Math.sign(c.ang) && (c.i0 - p.i1) * ds < 15) { p.i1 = c.i1; p.ang += c.ang; p.kmax = Math.max(p.kmax, c.kmax); } else merged.push({ ...c }); }
+  W.corners = merged.filter(c => Math.abs(c.ang) > 0.3).map(c => {
+    const entry = (k0 + c.i0) % n, exit = (k0 + c.i1) % n;
+    const left = (-W.lz[exit]) * W.lx[entry] + W.lx[exit] * W.lz[entry] > 0; // exit direction against the entry's left
+    const R = 1 / c.kmax, grade = R < 25 ? 1 : R < 45 ? 2 : R < 75 ? 3 : R < 120 ? 4 : R < 200 ? 5 : 6;
+    let v = Infinity; for (let i = c.i0; i <= c.i1; i++) v = Math.min(v, RACE.prof[(k0 + i) % n]);
+    const onto = W.real ? W.rname[(exit + Math.round(30 / ds)) % n] : '';
+    return { entry, exit, left, deg: Math.round(Math.abs(c.ang) * 180 / Math.PI / 5) * 5, grade, vRec: v * 3.6 * (setup.level === 'easy' ? 0.94 : 1), onto };
+  });
+  // landmarks for the location card: one point per named landmark
+  const lm = new Map(); if (W.M.env) for (const l of W.M.env.landmarks) { if (!l.n) continue; const e = lm.get(l.n) || { n: l.n, x: 0, z: 0, c: 0 }; for (let i = 0; i < l.p.length; i += 2) { e.x += l.p[i]; e.z += l.p[i + 1]; e.c++; } lm.set(l.n, e); }
+  W.lmPts = [...lm.values()].map(e => ({ n: e.n, x: e.x / e.c, z: e.z / e.c }));
+  NOTE.road = ''; NOTE.pending = ''; NOTE.run = 0;
+}
+const NOTE = { road: '', pending: '', run: 0, cardT: 0 };
+function arrowPath(left, deg) { // a stem that bends through the turn angle, with a head
+  const s = left ? -1 : 1, a = Math.min(180, Math.max(25, deg)) * Math.PI / 180, r = 20, pts = [[0, 38], [0, 6]];
+  for (let i = 1; i <= 8; i++) { const t = a * i / 8; pts.push([s * (r - r * Math.cos(t)), 6 - r * Math.sin(t)]); }
+  const [ex, ey] = pts[pts.length - 1], dx = s * Math.sin(a), dy = -Math.cos(a), hx = -dy, hy = dx;
+  return 'M' + pts.map(p => p.map(v => v.toFixed(1)).join(' ')).join(' L') + ` M${(ex - dx * 12 + hx * 9).toFixed(1)} ${(ey - dy * 12 + hy * 9).toFixed(1)} L${ex.toFixed(1)} ${ey.toFixed(1)} L${(ex - dx * 12 - hx * 9).toFixed(1)} ${(ey - dy * 12 - hy * 9).toFixed(1)}`;
+}
+// turn hint and location for the sample k (the car, or the preview camera), speed in m/s
+function drivingNotes(k, spd, dt) {
+  const n = W.n, th = $('#turnHint'), active = state.mode === 'race' || state.mode === 'lights' || state.mode === 'preview';
+  let show = false;
+  if (active && setup.turnHints !== false && W.corners && W.corners.length) {
+    let best = null, bd = Infinity;
+    for (const c of W.corners) { const d = ((c.entry - k + n) % n) * W.ds, inside = ((k - c.entry + n) % n) < ((c.exit - c.entry + n) % n); const dd = inside ? 0 : d; if (dd < bd) { bd = dd; best = c; } }
+    const reach = Math.max(140, spd * 5);
+    if (best && bd < reach) {
+      show = true;
+      $('#thArrow').setAttribute('d', arrowPath(best.left, best.deg));
+      $('#thText').textContent = (best.left ? '左' : '右') + (best.deg >= 70 && best.grade <= 3 ? '轉' : '彎') + ' ' + CORNER_WORD[best.grade - 1] + ' ' + best.deg + '°';
+      $('#thDist').textContent = bd > 0 ? Math.round(bd / 10) * 10 + ' m' : '彎中';
+      $('#thInfo').textContent = '建議 ' + Math.round(best.vRec / 5) * 5 + ' km/h' + (best.onto && best.onto !== W.rname[k] ? '・進入 ' + best.onto : '');
+      th.classList.toggle('fast', state.mode !== 'preview' && spd * 3.6 > best.vRec + 15 && bd < 150);
+    }
+  }
+  th.hidden = !show;
+  // current road, and a card when the circuit turns onto another major road
+  const pill = $('#locPill');
+  if (!W.real || !active) { pill.hidden = true; return; }
+  const road = W.rname[k] || ''; pill.hidden = !road; pill.textContent = '目前位置　' + road;
+  if (road && road !== NOTE.road) {
+    if (road === NOTE.pending) NOTE.run += spd * dt; else { NOTE.pending = road; NOTE.run = 0; }
+    if (NOTE.run > 25) {
+      const first = !NOTE.road; NOTE.road = road;
+      if (!first || state.mode === 'preview') {
+        let near = '', nd = 350; for (const p of W.lmPts) { const d = Math.hypot(p.x - W.x[k], p.z - W.z[k]); if (d < nd) { nd = d; near = p.n; } }
+        $('#lcRoad').textContent = road; $('#lcNear').textContent = near ? '附近：' + near : ''; $('#locCard').classList.add('show'); NOTE.cardT = 2.6;
+      }
+    }
+  }
+  if (NOTE.cardT > 0 && (NOTE.cardT -= dt) <= 0) $('#locCard').classList.remove('show');
+}
+// preview lap: a first-person run along the centreline, compressed to about half a minute, skippable
+const PV = { s: 0, f: 1, k: 0, dir: new THREE.Vector3(), pos: new THREE.Vector3() };
+function startPreview() {
+  let T = 0; for (let k = 0; k < W.n; k++) T += W.ds / Math.max(8, RACE.prof[k]);
+  PV.f = Math.max(1, T / 32); PV.s = 0; PV.k = 0; camInit = false;
+  $('#pvInfo').textContent = (W.len / 1000).toFixed(2) + ' km・' + W.corners.length + ' 個彎・預估單圈 ' + fmt(T);
+  $('#preview').hidden = false; $('#lights').hidden = true; document.body.classList.add('previewing'); state.mode = 'preview';
+}
+function endPreview() {
+  if (state.mode !== 'preview') return;
+  $('#preview').hidden = true; $('#turnHint').hidden = true; document.body.classList.remove('previewing'); camInit = false; NOTE.road = ''; NOTE.pending = '';
+  state.mode = 'lights'; state.lightsT = 0; state.lightsOut = 4.2 + Math.random() * 1.2; $('#lights').hidden = false;
+}
+function previewStep(dt) {
+  const n = W.n, k = Math.floor(PV.s / W.ds) % n, f = (PV.s / W.ds) % 1, k2 = (k + 1) % n;
+  PV.k = k; PV.s += Math.max(8, RACE.prof[k]) * PV.f * dt;
+  $('#pvBar').style.width = Math.min(100, PV.s / W.len * 100) + '%';
+  if (PV.s >= W.len) { endPreview(); return; }
+  const x = W.x[k] + (W.x[k2] - W.x[k]) * f, z = W.z[k] + (W.z[k2] - W.z[k]) * f, ka = (k + Math.round(28 / W.ds)) % n;
+  PV.pos.set(x, Sq(x, z, k) + 1.5, z);
+  // smooth the viewing direction, not the target point: at preview speed a lagging target ends up behind the camera
+  const want = new THREE.Vector3(W.x[ka], Sq(W.x[ka], W.z[ka], ka) + 1.0, W.z[ka]).sub(PV.pos).normalize();
+  if (!camInit) PV.dir.copy(want); else PV.dir.lerp(want, 1 - Math.exp(-dt * 5)).normalize(); camInit = true;
+  camera.position.copy(PV.pos); camera.up.copy(UP); camera.lookAt(PV.pos.x + PV.dir.x * 30, PV.pos.y + PV.dir.y * 30, PV.pos.z + PV.dir.z * 30);
+  if (Math.abs(camera.fov - 68) > 0.05) { camera.fov = 68; camera.updateProjectionMatrix(); }
+  drivingNotes(k, Math.max(8, RACE.prof[k]) * PV.f, dt);
+}
+$('#pvSkip').onclick = () => endPreview();
+$('#elevated').addEventListener('change', () => { setup.elevated = $('#elevated').checked; mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn(); });
+// deck height above the ground for each sample on an elevated road (0 elsewhere); W.deck is the surface height there
+function trackElevation(M) {
+  const n = W.n, E = W.elev = new Float32Array(n), D = W.deck = new Float32Array(n), br = W.real && M.env && setup.elevated ? M.env.bridges : null;
+  if (br && br.length) {
+    for (let k = 0; k < n; k++) {
+      const tx = -W.lz[k], tz = W.lx[k]; let best = 3.5, h = 0, hit = null;
+      for (const b of br) { const p = b.p;
+        for (let i = 0; i + 3 < p.length; i += 2) { const x0 = p[i], z0 = p[i + 1], dx = p[i + 2] - x0, dz = p[i + 3] - z0, l2 = dx * dx + dz * dz || 1;
+          if (Math.abs(dx * tx + dz * tz) / Math.sqrt(l2) < 0.85) continue;
+          const f = clamp(((W.x[k] - x0) * dx + (W.z[k] - z0) * dz) / l2, 0, 1), d = Math.hypot(W.x[k] - x0 - dx * f, W.z[k] - z0 - dz * f);
+          if (d < best) { best = d; h = b.hv[i / 2] + (b.hv[i / 2 + 1] - b.hv[i / 2]) * f; hit = b; } } }
+      E[k] = h;
+      if (hit && h > 0.3) { W.rname[k] = hit.name || '高架道路'; W.hwL[k] = W.hwR[k] = clamp(hit.w / 2, 3.6, 13); } // the viaduct's own name and width, not the street below
+    }
+    smoothCirc(E, Math.round(6 / W.ds), 2);
+    // no cliffs where the matched viaduct changes: limit the grade to 8 % in both directions (real ramps are about 5 %)
+    const lim = 0.08 * W.ds;
+    for (let pass = 0; pass < 2; pass++) { for (let i = 0; i < 2 * n; i++) { const k = i % n, p = (k - 1 + n) % n; E[k] = Math.min(E[k], E[p] + lim); } for (let i = 2 * n - 1; i >= 0; i--) { const k = i % n, q = (k + 1) % n; E[k] = Math.min(E[k], E[q] + lim); } }
+  }
+  for (let k = 0; k < n; k++) { if (E[k] < 0.3) E[k] = 0; D[k] = gridSample(M.raw, W.x[k], W.z[k]) + E[k]; }
+  if (E.some(v => v > 0)) { const S = Float32Array.from(D); smoothCirc(S, Math.round(15 / W.ds), 3); for (let k = 0; k < n; k++) if (E[k] > 0) D[k] = S[k]; } // the 20 m ground grid would show through as bumps in the deck
+  W.anyElev = E.some(v => v > 0); W.hwMax = Math.max(...W.hwL, ...W.hwR);
+}
+// another part of the lap (not the samples around k) within r of (x, z) and within 3 m of k's height
+function otherStretchNear(k, x, z, r) {
+  const n = W.n, skip = Math.round(40 / W.ds), y = W.elev[k] > 0 ? W.deck[k] : W.h[k];
+  for (let j = 0; j < n; j++) { const dk = Math.min(Math.abs(j - k), n - Math.abs(j - k)); if (dk < skip) continue;
+    if ((W.x[j] - x) ** 2 + (W.z[j] - z) ** 2 < r * r && Math.abs((W.elev[j] > 0 ? W.deck[j] : W.h[j]) - y) < 3) return true; }
+  return false;
+}
+// surface height for the track at sample k: the deck where the lap is elevated, the ground elsewhere
+const onDeck = k => W.anyElev && k >= 0 && W.elev[k % W.n] > 0;
+const Sq = (x, z, k) => onDeck(k) ? W.deck[k % W.n] : Hq(x, z);
+function normalS(x, z, k, out) {
+  if (!onDeck(k)) return normalAt(x, z, out);
+  const n = W.n, a = (k - 2 + n) % n, b = (k + 2) % n, g = (W.deck[b] - W.deck[a]) / (4 * W.ds); // the deck is flat across, sloped along
+  return out.set(g * W.lz[k], 1, -g * W.lx[k]).normalize();
 }
 function buildWorld() {
   const M = activeMap();
@@ -584,7 +730,7 @@ function buildWorld() {
     const a = (k - 1 + n) % n, b = (k + 1) % n; let tx = X[b] - X[a], tz = Z[b] - Z[a]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
     LX[k] = tz; LZ[k] = -tx; // left of travel direction
   }
-  realWidths(M, hw);
+  realWidths(M, hw); trackElevation(M);
   const rawQ = (x, z) => gridSample(raw, x, z);
   for (let k = 0; k < n; k++) {
     TH[k] = rawQ(X[k], Z[k]);
@@ -620,16 +766,16 @@ function buildWorld() {
       const dz = -W.sz / 2 + j * cz - Z[k];
       for (let i = Math.max(0, gi - rci); i <= Math.min(NX - 1, gi + rci); i++) {
         const dx = -W.sx / 2 + i * cx - X[k], d2 = dx * dx + dz * dz, o = j * NX + i;
-        if (d2 < R2 && d2 < D[o]) { D[o] = d2; HW[o] = Math.max(W.hwL[k], W.hwR[k]); tgt[o] = TH[k] + BK[k] * clamp(dx * LX[k] + dz * LZ[k], -HW[o] - 5, HW[o] + 5); }
+        if (d2 < R2 && d2 < D[o]) { D[o] = d2; HW[o] = Math.max(W.hwL[k], W.hwR[k]); tgt[o] = W.elev[k] > 0 ? NaN : TH[k] + BK[k] * clamp(dx * LX[k] + dz * LZ[k], -HW[o] - 5, HW[o] + 5); }
       }
     }
   }
   for (let i = 0; i < NX * NZ; i++) {
-    if (D[i] < 1e8) { const d = Math.sqrt(D[i]); D[i] = d; H[i] = tgt[i] + (raw[i] - tgt[i]) * smooth(HW[i] + 5, R, d); }
+    if (D[i] < 1e8) { const d = Math.sqrt(D[i]); D[i] = d; if (tgt[i] === tgt[i]) H[i] = tgt[i] + (raw[i] - tgt[i]) * smooth(HW[i] + 5, R, d); }
     else D[i] = 1e4;
   }
   W.hwGrid = HW;
-  for (let k = 0; k < n; k++) TH[k] = Hq(X[k], Z[k]);
+  for (let k = 0; k < n; k++) TH[k] = W.elev[k] > 0 ? W.deck[k] : Hq(X[k], Z[k]);
   // gravel traps on the outside of tighter corners (and the run-off past the exit); barriers per side
   if (W.wall !== Infinity && W.real) W.wall = W.hwMax + 0.5;
   W.grav = new Int8Array(n);
@@ -642,13 +788,15 @@ function buildWorld() {
   if (setup.walls) for (let k = 0; k < n; k++) for (const side of [1, -1]) {
     const hs = side > 0 ? W.hwL[k] : W.hwR[k];
     let off = W.real ? hs + 0.5 : W.city ? hs + 3.2 : W.grav[k] === side ? hs + 17 : hs + 13; // Taipei: water barriers on the kerb line
-    if (gridSample(D, X[k] + LX[k] * off * side, Z[k] + LZ[k] * off * side) < off - 3) off = Infinity; // another stretch of track is nearer: leave a gap
+    const wx = X[k] + LX[k] * off * side, wz = Z[k] + LZ[k] * off * side;
+    if (gridSample(D, wx, wz) < off - 3 && (!W.anyElev || otherStretchNear(k, wx, wz, off - 3))) off = Infinity; // another stretch of track is nearer: leave a gap
     (side > 0 ? W.wallL : W.wallR)[k] = off;
   }
   for (const arr of [W.wallL, W.wallR]) { // drop barrier fragments shorter than 30 m
     let k = 0; while (k < n) { if (!isFinite(arr[k])) { k++; continue; } let e = k; while (e < n && isFinite(arr[e])) e++; if ((e - k) * W.ds < 30 && !(k === 0 || e === n)) for (let j = k; j < e; j++) arr[j] = Infinity; k = e; }
   }
   buildProfile();
+  analyzeCorners();
   buildMeshes();
   drawMinimapBase();
   $('#trkLen').textContent = (len / 1000).toFixed(3) + ' km';
@@ -756,22 +904,23 @@ function buildTaipeiStreet(grp, ribbon, S) {
   const pos = [], col = [], idx = [];
   const quad = (r, t0, t1, c, y = 0.075) => {
     const b = pos.length / 3;
-    for (const rr of [r, r + 1]) { const k = rr % n; for (const t of [t0, t1]) { const x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t; pos.push(x, Hq(x, z) + y, z); col.push(c.r, c.g, c.b); } }
+    for (const rr of [r, r + 1]) { const k = rr % n; for (const t of [t0, t1]) { const x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t; pos.push(x, Sq(x, z, k) + y, z); col.push(c.r, c.g, c.b); } }
     idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
   };
   // a mark of length len metres starting at sample k0 (several samples)
   const mark = (k0, len, t0, t1, c) => {
     if (len >= ds) { for (let i = 0; i < Math.round(len / ds); i++) quad(k0 + i, typeof t0 === 'function' ? t0(k0 + i) : t0, typeof t1 === 'function' ? t1(k0 + i) : t1, c); return; }
     const k = k0 % n, fx = -W.lz[k], fz = W.lx[k], b = pos.length / 3; // shorter than a sample: lay it along the local tangent
-    for (const f of [0, len]) for (const t of [t0, t1]) { const x = X[k] + W.lx[k] * t + fx * f, z = Z[k] + W.lz[k] * t + fz * f; pos.push(x, Hq(x, z) + 0.075, z); col.push(c.r, c.g, c.b); }
+    for (const f of [0, len]) for (const t of [t0, t1]) { const x = X[k] + W.lx[k] * t + fx * f, z = Z[k] + W.lz[k] * t + fz * f; pos.push(x, Sq(x, z, k) + 0.075, z); col.push(c.r, c.g, c.b); }
     idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2);
   };
   const dash = r => (S[r] % 10) < 4; // 4 m line, 6 m gap
   const near = new Uint8Array(n); // samples at a crossing or junction: no lane dashes there
   // crossings and signalised junctions on the circuit
   const cross = new Set(), stops = [];
-  for (const [x, z] of env.crossings) { const k = nearestSample(x, z, 9); if (k >= 0) cross.add(k); }
-  const sigK = new Set(); for (const sg of env.signals) { const k = nearestSample(sg.x, sg.z, 18); if (k >= 0) sigK.add(k); }
+  // street furniture of the road below never lands on a viaduct deck
+  for (const [x, z] of env.crossings) { const k = nearestSample(x, z, 9); if (k >= 0 && !onDeck(k)) cross.add(k); }
+  const sigK = new Set(); for (const sg of env.signals) { const k = nearestSample(sg.x, sg.z, 18); if (k >= 0 && !onDeck(k)) sigK.add(k); }
   const crossList = [...cross].sort((a, b) => a - b).filter((k, i, a) => i === 0 || k - a[i - 1] > Math.round(12 / ds));
   for (const k of crossList) {
     const w0 = k => -W.hwR[k % n] + 0.3, w1 = k => W.hwL[k % n] - 0.3, len = 4.5, k0 = (k - Math.round(len / 2 / ds) + n) % n;
@@ -818,7 +967,7 @@ function buildTaipeiStreet(grp, ribbon, S) {
       // letters face drivers approaching along +k: text runs across the lane, its top toward the junction
       for (const [u, v] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
         const lat = c + (0.5 - u) * len, fwd = (v - 0.5) * dep, x = X[kk] + W.lx[kk] * lat + fx * fwd, z = Z[kk] + W.lz[kk] * lat + fz * fwd;
-        tp.push(x, Hq(x, z) + 0.085, z); tu.push(u, v);
+        tp.push(x, Sq(x, z, kk) + 0.085, z); tu.push(u, v);
       }
       ti.push(b, b + 2, b + 1, b + 1, b + 2, b + 3);
     }
@@ -828,7 +977,7 @@ function buildTaipeiStreet(grp, ribbon, S) {
   // kerbs and sidewalks, open where a side street joins or another part of the circuit runs alongside
   const open = side => { const o = new Uint8Array(n);
     for (let k = 0; k < n; k++) { const hs = side > 0 ? W.hwL[k] : W.hwR[k], t = (hs + 1.8) * side, x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t;
-      if (sideStreetAt(x, z, -W.lz[k], W.lx[k]) || gridSample(W.dist, x, z) < hs + 1.2) o[k] = 1; }
+      if (onDeck(k) || sideStreetAt(x, z, -W.lz[k], W.lx[k]) || gridSample(W.dist, x, z) < hs + 1.2) o[k] = 1; }
     const c = o.slice(); for (let k = 0; k < n; k++) if (c[k]) for (let q = -2; q <= 2; q++) o[(k + q + n) % n] = 1; return o; };
   const walkM = new THREE.MeshStandardMaterial({ map: TEX.walk, roughness: 0.85, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
   const kerbM = new THREE.MeshStandardMaterial({ color: lin(0xa7a49c), roughness: 0.8, side: THREE.DoubleSide });
@@ -865,7 +1014,7 @@ function taipeiScenery(grp) {
   // --- traffic lights at the circuit's signalised junctions: pole on the right-hand kerb, mast arm over the road, green name sign
   { const sig = [];
     for (const sg of env.signals) {
-      const k = nearestSample(sg.x, sg.z, 22); if (k < 0) continue;
+      const k = nearestSample(sg.x, sg.z, 22); if (k < 0 || onDeck(k)) continue;
       if (sig.some(o => Math.min(Math.abs(o.k - k), n - Math.abs(o.k - k)) * W.ds < 25)) continue;
       const base = nm => nm.replace(/[一二三四五六七八九十]+段$/, ''), own = W.rname[k];
       let cross = sg.names.filter(nm => nm && base(nm) !== base(own));
@@ -959,14 +1108,14 @@ function taipeiScenery(grp) {
 function waterBarriers(grp) {
   const n = W.n, X = W.x, Z = W.z, spots = [];
   for (const sd of [1, -1]) { const arr = sd > 0 ? W.wallL : W.wallR; let acc = 0;
-    for (let k = 0; k < n; k++) { acc += W.ds; if (!isFinite(arr[k]) || acc < 1.25) continue; acc = 0; spots.push([k, sd, arr[k]]); } }
+    for (let k = 0; k < n; k++) { acc += W.ds; if (!isFinite(arr[k]) || acc < 1.25 || onDeck(k)) continue; acc = 0; spots.push([k, sd, arr[k]]); } } // decks have parapets
   if (!spots.length) return;
   const g = new THREE.BoxGeometry(1.2, 0.8, 0.42, 1, 1, 1); g.translate(0, 0.4, 0);
   { const p = g.attributes.position; for (let i = 0; i < p.count; i++) if (p.getY(i) > 0.5) p.setZ(i, p.getZ(i) * 0.55); g.computeVertexNormals(); } // narrower at the top
   const im = new THREE.InstancedMesh(g, new THREE.MeshStandardMaterial({ roughness: 0.55 }), spots.length);
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1), red = lin(0xc4212a), wht = lin(0xf2f0ea);
   const items = [];
-  spots.forEach(([k, sd, off], i) => { const t = off * sd, x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t; p.set(x, Hq(x, z), z); e.set(0, Math.atan2(W.lx[k], W.lz[k]) + Math.PI / 2, 0); q.setFromEuler(e); m.compose(p, q, sc); im.setMatrixAt(i, m); im.setColorAt(i, i & 1 ? wht : red); items.push({ m: m.clone(), kind: 'water_barrier', c: i & 1 ? wht : red }); });
+  spots.forEach(([k, sd, off], i) => { const t = off * sd, x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t; p.set(x, Sq(x, z, k), z); e.set(0, Math.atan2(W.lx[k], W.lz[k]) + Math.PI / 2, 0); q.setFromEuler(e); m.compose(p, q, sc); im.setMatrixAt(i, m); im.setColorAt(i, i & 1 ? wht : red); items.push({ m: m.clone(), kind: 'water_barrier', c: i & 1 ? wht : red }); });
   im.castShadow = im.receiveShadow = true; grp.add(im);
   if (PROPS && PROPS.water_barrier) nearLod(grp, im, items, { water_barrier: PROPS.water_barrier }, COARSE ? 300 : 900, COARSE ? 80 : 140);
 }
@@ -1158,7 +1307,7 @@ function buildMeshes() {
   function ribbon(from, to, cols, colorAt, yOff, keep, flat, mat, metric) {
     const F = typeof from === 'function' ? from : () => from, T = typeof to === 'function' ? to : () => to;
     const g = ribbonGeo((push, I) => {
-      const vert = (r, q, cc) => { const k = r % n, f = F(k), t = f + (T(k) - f) * q / cols, x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t; return metric ? push(x, Hq(x, z) + yOff, z, t / metric, S[r] / metric, cc) : push(x, Hq(x, z) + yOff, z, q / cols, S[r] / 8, cc); };
+      const vert = (r, q, cc) => { const k = r % n, f = F(k), t = f + (T(k) - f) * q / cols, x = X[k] + W.lx[k] * t, z = Z[k] + W.lz[k] * t; return metric ? push(x, Sq(x, z, k) + yOff, z, t / metric, S[r] / metric, cc) : push(x, Hq(x, z) + yOff, z, q / cols, S[r] / 8, cc); };
       if (!flat) {
         for (let r = 0; r <= n; r++) for (let q = 0; q <= cols; q++) vert(r, q, colorAt(r % n, q));
         for (let r = 0; r < n; r++) { if (keep && !keep(r)) continue; for (let q = 0; q < cols; q++) { const a = r * (cols + 1) + q, b = a + 1, cc = a + cols + 1, d = cc + 1; I.push(a, b, cc, b, d, cc); } }
@@ -1366,7 +1515,7 @@ function buildMeshes() {
     // street lights along the circuit
     const lamps = [], lampG = new THREE.CylinderGeometry(0.09, 0.12, 9, 6); lampG.translate(0, 4.5, 0);
     const headG = new THREE.BoxGeometry(1.6, 0.2, 0.4); headG.translate(0.7, 9, 0);
-    for (let k = 0; k < n; k += Math.round(38 / W.ds)) for (const sd of [1, -1]) { const hs = sd > 0 ? W.hwL[k] : W.hwR[k], x = X[k] + W.lx[k] * (hs + 2) * sd, z = Z[k] + W.lz[k] * (hs + 2) * sd; if (!W.real || gridSample(D, x, z) > hs + 1) lamps.push([k, sd]); }
+    for (let k = 0; k < n; k += Math.round(38 / W.ds)) for (const sd of [1, -1]) { const hs = sd > 0 ? W.hwL[k] : W.hwR[k], x = X[k] + W.lx[k] * (hs + 2) * sd, z = Z[k] + W.lz[k] * (hs + 2) * sd; if (!W.real || (gridSample(D, x, z) > hs + 1 && !onDeck(k))) lamps.push([k, sd]); }
     const poles = new THREE.InstancedMesh(lampG, new THREE.MeshStandardMaterial({ color: lin(0x5d6166), roughness: 0.5, metalness: 0.7 }), lamps.length);
     const heads = new THREE.InstancedMesh(headG, new THREE.MeshStandardMaterial({ color: lin(0x4a4d52), roughness: 0.5, metalness: 0.5, emissive: lin(0x333020) }), lamps.length);
     const e = new THREE.Euler();
@@ -1552,7 +1701,7 @@ function placeCar(k, lat = 0, keepTyres = false) {
     thr: 0, brk: 0, aF: 0, aR: 0, Fzf: 0, Fzr: 0, down: 0, drag: 0, rho: 1.2, surf: 0, spin: false, lockF: false, tcAct: false, grade: 0, bankV: 0,
     tf, tr: trr, hit: 0,
   });
-  car.y = Hq(car.x, car.z);
+  car.y = Sq(car.x, car.z, car.k);
 }
 
 function physicsStep(dt, inp) {
@@ -1563,7 +1712,7 @@ function physicsStep(dt, inp) {
   const surf = al < hw ? 0 : (al < hw + 1.5 && W.kerb[loc.k]) ? 1 : (gs && Math.sign(loc.lat) === gs && al < hw + 17) ? 3 : 2; c.surf = surf;
   const off = surf === 2 && W.city; // city run-off is pavement, not grass
   const mu0 = [1.8, 1.5, off ? 1.05 : 0.85, 0.6][surf], crr = [0.012, 0.02, off ? 0.02 : 0.06, 0.18][surf];
-  const h = Hq(c.x, c.z); c.y = h; normalAt(c.x, c.z, nrm);
+  const h = Sq(c.x, c.z, loc.k); c.y = h; normalS(c.x, c.z, loc.k, nrm);
   const cp = Math.cos(c.psi), sn = Math.sin(c.psi);
   fp.set(cp, 0, -sn); fp.addScaledVector(nrm, -fp.dot(nrm)).normalize();
   lp.crossVectors(nrm, fp);
@@ -1574,7 +1723,7 @@ function physicsStep(dt, inp) {
   const v2 = c.vx * c.vx + c.vy * c.vy, spd = Math.sqrt(v2);
   const q = 0.5 * rho * v2, down = q * ae.ClA * (c.drs ? 0.84 : 1), drag = q * ae.CdA * (c.drs ? 0.80 : 1); c.down = down; c.drag = drag;
   // vertical curvature along heading: crests unload, compressions load the tyres
-  const dd = 5, hA = Hq(c.x + cp * dd, c.z - sn * dd), hB = Hq(c.x - cp * dd, c.z + sn * dd);
+  const dd = 5, ko = Math.round(dd / W.ds), hA = onDeck(loc.k) ? W.deck[(loc.k + ko) % W.n] : Hq(c.x + cp * dd, c.z - sn * dd), hB = onDeck(loc.k) ? W.deck[(loc.k - ko + W.n) % W.n] : Hq(c.x - cp * dd, c.z + sn * dd);
   c.fzc += (sp.m * c.vx * c.vx * (hA - 2 * h + hB) / (dd * dd) - c.fzc) * Math.min(1, dt / 0.06);
   const Wn = Math.max(0, sp.m * G * nrm.y + c.fzc), tr = sp.m * c.axs * sp.h / sp.L;
   const Fzf = Math.max(0, Wn * sp.b / sp.L + down * ae.front - tr), Fzr = Math.max(0, Wn * sp.a / sp.L + down * (1 - ae.front) + tr);
@@ -1703,11 +1852,12 @@ const keys = {}, touch = { l: 0, r: 0, gas: 0, brake: 0, steer: 0, sActive: fals
 let drsReq = false; const padPrev = {};
 addEventListener('keydown', e => {
   if (!$('#setup').hidden || !$('#pause').hidden) { if (e.code === 'Escape' && state.mode !== 'menu0') resume(); return; }
+  if (state.mode === 'preview' && (e.code === 'Space' || e.code === 'Enter' || e.code === 'Escape')) { endPreview(); e.preventDefault(); return; }
   keys[e.code] = true;
   if (e.code === 'Space') { drsReq = true; e.preventDefault(); }
   if (e.code === 'KeyE') shift(1);
   if (e.code === 'KeyQ') shift(-1);
-  if (e.code === 'KeyC') camMode = (camMode + 1) % 3;
+  if (e.code === 'KeyC') nextCam();
   if (e.code === 'KeyR') resetToTrack();
   if (e.code === 'KeyM') { muted = !muted; banner(muted ? '音效關閉' : '音效開啟', 'info'); }
   if (e.code === 'Escape') openMenu();
@@ -1855,11 +2005,14 @@ function banner(txt, kind) { const b = $('#banner'); b.textContent = txt; b.clas
 
 /* ================= Visuals ================= */
 let camMode = 0;
+const CAMS = ['追車視角', '遠景追車', '車手視角', '鼻錐視角', '前翼低視角', '轉播視角'];
+function nextCam() { camMode = (camMode + 1) % CAMS.length; camInit = false; tvCam.k = -1; banner(CAMS[camMode], 'info'); }
+const tvCam = { k: -1, pos: new THREE.Vector3() };
 const m4 = new THREE.Matrix4(), rt = new THREE.Vector3(), camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), camFwd = new THREE.Vector3(1, 0, 0), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
 let camInit = false, shake = 0;
 function updateCarVisual() {
   const c = car, mdl = carModel;
-  c.y = Hq(c.x, c.z); normalAt(c.x, c.z, nrm);
+  c.y = Sq(c.x, c.z, c.k); normalS(c.x, c.z, c.k, nrm);
   const cp = Math.cos(c.psi), sn = Math.sin(c.psi);
   fp.set(cp, 0, -sn); fp.addScaledVector(nrm, -fp.dot(nrm)).normalize(); rt.crossVectors(fp, nrm);
   m4.makeBasis(fp, nrm, rt); mdl.root.quaternion.setFromRotationMatrix(m4); mdl.root.position.set(c.x, c.y, c.z);
@@ -1874,23 +2027,28 @@ function updateCamera(dt) {
   const c = car, root = carModel.root;
   const fwd = tmp.set(1, 0, 0).applyQuaternion(root.quaternion), up = tmp2.set(0, 1, 0).applyQuaternion(root.quaternion);
   const spd = Math.hypot(c.vx, c.vy);
-  if (camMode === 0) {
+  if (camMode === 5) { // broadcast: fixed trackside cameras about every 180 m, switching as the car passes
+    const n = W.n, gap = Math.max(1, Math.round(180 / W.ds)), ahead = Math.round(60 / W.ds), slot = Math.floor(((c.k + ahead) % n) / gap) * gap;
+    if (slot !== tvCam.k) { tvCam.k = slot; const sd = (slot / gap) & 1 ? 1 : -1, off = ((sd > 0 ? W.hwL : W.hwR)[slot] || 6) + 6, x = W.x[slot] + W.lx[slot] * off * sd, z = W.z[slot] + W.lz[slot] * off * sd; tvCam.pos.set(x, Sq(x, z, slot) + 5.5, z); }
+    camPos.copy(tvCam.pos); camLook.copy(root.position); camLook.y += 0.6;
+  } else if (camMode === 0 || camMode === 1) {
+    const back = camMode === 0 ? 7.2 : 13, up = camMode === 0 ? 2.5 : 5.2;
     if (!camInit) camFwd.copy(fwd); else camFwd.lerp(fwd, 1 - Math.exp(-dt * 6)).normalize();
-    const want = new THREE.Vector3().copy(root.position).addScaledVector(camFwd, -7.2); want.y += 2.5;
-    const gh = Hq(want.x, want.z) + 1.2; if (want.y < gh) want.y = gh;
+    const want = new THREE.Vector3().copy(root.position).addScaledVector(camFwd, -back); want.y += up;
+    const gh = Sq(want.x, want.z, c.k) + 1.2; if (want.y < gh) want.y = gh;
     if (!camInit) camPos.copy(want); else camPos.lerp(want, 1 - Math.exp(-dt * 12));
     camLook.copy(root.position).addScaledVector(camFwd, 4); camLook.y += 0.9;
   } else {
-    const local = camMode === 1 ? [-0.05, 1.12, 0] : [0.12, 0.9, 0], ahead = camMode === 1 ? [10, 0.85, 0] : [10, 0.75, 0];
+    const local = camMode === 2 ? [-0.05, 1.12, 0] : camMode === 3 ? [0.12, 0.9, 0] : [3.1, 0.32, 0], ahead = camMode === 2 ? [10, 0.85, 0] : camMode === 3 ? [10, 0.75, 0] : [12, 0.3, 0];
     camPos.set(...local).applyQuaternion(root.quaternion).add(root.position);
     camLook.set(...ahead).applyQuaternion(root.quaternion).add(root.position);
   }
   camInit = true;
   camera.position.copy(camPos);
   if (shake > 0) camera.position.add(new THREE.Vector3((Math.random() - .5) * shake, (Math.random() - .5) * shake, (Math.random() - .5) * shake));
-  camera.up.copy(camMode === 0 ? UP : up);
+  camera.up.copy(camMode <= 1 || camMode === 5 ? UP : up);
   camera.lookAt(camLook);
-  const fov = (camMode === 2 ? 74 : 62) + clamp(spd / 90, 0, 1) * 10;
+  const fov = camMode === 5 ? clamp(40 - Math.hypot(camPos.x - root.position.x, camPos.z - root.position.z) * 0.15, 18, 40) : (camMode === 3 || camMode === 4 ? 74 : 62) + clamp(spd / 90, 0, 1) * 10;
   if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
 }
 
@@ -1941,7 +2099,9 @@ function drawG() {
 const tyreCls = T => T < 80 ? 'tyre-cold' : T > 120 ? 'tyre-hot' : 'tyre-ok';
 let hudT = 0;
 function hud(dt) {
-  hudT += dt; if (hudT < 1 / 30) return; hudT = 0;
+  hudT += dt; if (hudT < 1 / 30) return;
+  if (state.mode !== 'preview') drivingNotes(car.k, Math.hypot(car.vx, car.vy), hudT);
+  hudT = 0;
   const c = car, spd = Math.hypot(c.vx, c.vy) * 3.6;
   $('#spd').textContent = Math.round(spd);
   $('#gear').textContent = c.gear === -1 ? 'R' : c.gear;
@@ -1987,12 +2147,12 @@ function hud(dt) {
 }
 
 /* ================= Audio ================= */
-let AC = null, eng = null, muted = false;
+let AC = null, eng = null, muted = false, volume = 0.7; // volume 0..1 scales the master gain
 function startAudio() {
   if (AC) { AC.resume && AC.resume(); return; }
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
-    const master = AC.createGain(); master.gain.value = 0.5; master.connect(AC.destination);
+    const master = AC.createGain(); master.gain.value = 0.7 * volume; master.connect(AC.destination);
     const filt = AC.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 1500; filt.Q.value = 3;
     const g = AC.createGain(); g.gain.value = 0; filt.connect(g); g.connect(master);
     const o1 = AC.createOscillator(); o1.type = 'sawtooth'; const o2 = AC.createOscillator(); o2.type = 'square'; const o3 = AC.createOscillator(); o3.type = 'sawtooth';
@@ -2001,9 +2161,18 @@ function startAudio() {
     const buf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     const ns = AC.createBufferSource(); ns.buffer = buf; ns.loop = true; const nf = AC.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 600; nf.Q.value = 0.6;
     const ng = AC.createGain(); ng.gain.value = 0; ns.connect(nf); nf.connect(ng); ng.connect(master); ns.start();
-    eng = { o1, o2, o3, filt, g, ng };
+    eng = { o1, o2, o3, filt, g, ng, master };
   } catch (e) { AC = null; }
 }
+// volume slider in the settings and the pause menu (kept in sync, saved with the preferences)
+function setVolume(v, save = true) {
+  volume = clamp(v, 0, 1);
+  for (const id of ['#vol', '#pVol']) $(id).value = Math.round(volume * 100);
+  $('#oVol').textContent = $('#oPVol').textContent = Math.round(volume * 100) + '%';
+  if (eng) eng.master.gain.setTargetAtTime(0.7 * volume, AC.currentTime, 0.05);
+  if (save) savePrefs();
+}
+['#vol', '#pVol'].forEach(id => $(id).addEventListener('input', e => { setVolume(+e.target.value / 100); if (volume > 0 && muted) { muted = false; $('#sound').checked = true; } }));
 function updateAudio() {
   if (!eng) return; const t = AC.currentTime, c = car, f = c.rpm / 60 * 3, spd = Math.hypot(c.vx, c.vy);
   eng.o1.frequency.setTargetAtTime(f, t, 0.015); eng.o2.frequency.setTargetAtTime(f / 2, t, 0.015); eng.o3.frequency.setTargetAtTime(f * 1.005, t, 0.015);
@@ -2035,9 +2204,11 @@ function syncLabels() {
 }
 function readSetup() {
   TER.size = +$('#size').value; if (!TER.meters) TER.range = +$('#range').value; TER.base = +$('#base').value;
+  setup.elevated = $('#elevated').checked;
   setup.width = +$('#width').value; setup.banking = $('#banking').checked; setup.walls = $('#walls').checked; setup.aero = +$('#aero').value; setup.bias = +$('#bias').value;
   setup.tc = $('#tc').checked; setup.abs = $('#abs').checked; setup.auto = $('#auto').checked; setup.esc = $('#esc').checked; setup.brakeAssist = $('#brakeAssist').checked;
-  setup.steerSens = +$('#steer').value; setup.assist = $('#assist').checked; setup.autogas = $('#autogas').checked; muted = !$('#sound').checked;
+  setup.turnHints = $('#turnHints').checked; setup.preview = $('#previewOn').checked;
+  setup.steerSens = +$('#steer').value; setup.assist = $('#assist').checked; setup.autogas = $('#autogas').checked; muted = !$('#sound').checked; setVolume(+$('#vol').value / 100, false);
   setup.laps = +$('#laps').value; setup.aiCount = +$('#aiCount').value; setup.aiSkill = +$('#aiSkill').value;
   if (setup.level === 'easy') Object.assign(setup, { aero: 0.5, bias: 57, tc: true, abs: true, auto: true, assist: true, esc: true, brakeAssist: true });
   savePrefs();
@@ -2082,7 +2253,7 @@ function selectMap(m) {
   const go = () => {
     setup.map = m;
     document.querySelectorAll('#mapTabs .tab').forEach(t => { t.classList.toggle('sel', t.dataset.m === m); t.setAttribute('aria-selected', t.dataset.m === m); });
-    $('#terrainOpts').hidden = m !== 'terrain'; $('#taipeiOpts').hidden = m !== 'taipei'; $('#osmOpts').hidden = m !== 'osm'; $('#tpPresetGroup').hidden = m !== 'taipei';
+    $('#terrainOpts').hidden = m !== 'terrain'; $('#taipeiOpts').hidden = m !== 'taipei'; $('#osmOpts').hidden = m !== 'osm'; $('#tpPresetGroup').hidden = m !== 'taipei'; document.querySelectorAll('.only-taipei').forEach(el => { el.hidden = m !== 'taipei'; });
     $('#baseField').hidden = m === 'taipei'; $('#banking').closest('label').hidden = m !== 'terrain';
     const M = m === 'terrain' ? null : CITY[m];
     $('#mapCredit').hidden = !M; if (M) $('#mapCredit').textContent = M.credits;
@@ -2102,7 +2273,7 @@ function selectMap(m) {
   } else go();
 }
 document.querySelectorAll('#mapTabs .tab').forEach(t => t.onclick = () => { if (t.dataset.m !== setup.map || (t.dataset.m === 'osm' && !CITY.osm)) { trackPts = []; selectMap(t.dataset.m); } });
-document.querySelectorAll('#tpPresets .btn').forEach(b => b.onclick = () => { trackPts = cityPreset(CITY.taipei, +b.dataset.c); setup.reverse = false; $('#btnRev').classList.remove('sel'); mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn(); });
+document.querySelectorAll('#tpPresets .btn').forEach(b => b.onclick = () => { if (TP_ELEVATED[+b.dataset.c]) { setup.elevated = true; $('#elevated').checked = true; } trackPts = cityPreset(CITY.taipei, +b.dataset.c); setup.reverse = false; $('#btnRev').classList.remove('sel'); mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn(); });
 
 // ---- editor map
 const ed = $('#editor'); let edBase = null, edSize = 0, routePreview = null, presetCycle = 0;
@@ -2235,6 +2406,8 @@ function startRace(fromNet) {
     setupGrid();
     $('#setup').hidden = true; $('#pause').hidden = true; $('#busy').hidden = true;
     state.mode = 'lights'; state.lightsT = 0; state.lightsOut = 4.2 + Math.random() * 1.2; $('#lights').hidden = false;
+    NOTE.road = ''; NOTE.pending = '';
+    if (setup.preview !== false && setup.mode !== 'online' && W.corners) startPreview();
     if (COARSE && innerHeight > innerWidth) banner('橫向握持手機，視野更寬', 'info');
   };
   if (mapDirty) { $('#busy').textContent = setup.map !== 'terrain' ? '生成街道與建物中…' : '生成地形中…'; $('#busy').hidden = false; setTimeout(go, 30); } else go();
@@ -2245,7 +2418,7 @@ $('#menuBtn').onclick = openMenu;
 $('#pResume').onclick = resume;
 $('#pRestart').onclick = () => startRace();
 $('#pSetup').onclick = () => { $('#pause').hidden = true; $('#setup').hidden = false; drawEditor(); updateStartBtn(); };
-$('#bCam').onclick = () => { camMode = (camMode + 1) % 3; };
+$('#bCam').onclick = () => nextCam();
 $('#bReset').onclick = () => resetToTrack();
 $('#bTele').onclick = () => { $('#tele').hidden = !$('#tele').hidden; $('#bTele').classList.toggle('on', !$('#tele').hidden); };
 document.addEventListener('visibilitychange', () => { if (document.hidden) { if (state.mode === 'race' || state.mode === 'lights') openMenu(); } else if (state.mode === 'race') keepAwake(); });
@@ -2258,12 +2431,12 @@ document.querySelectorAll('#steerMode button').forEach(b => b.onclick = () => { 
 document.querySelectorAll('#quality button').forEach(b => b.onclick = () => { setup.quality = b.dataset.q; document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x === b)); applyQuality(setup.quality === 'auto' ? autoLevel() : setup.quality); savePrefs(); });
 if (document.fullscreenEnabled) { $('#btnFull').hidden = false; $('#btnFull').onclick = () => { document.documentElement.requestFullscreen().then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {}); }; }
 // per-viewer preferences
-function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted, level: setup.level })); } catch (e) { /* storage unavailable */ } }
+function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted, level: setup.level, volume, turnHints: setup.turnHints, preview: setup.preview })); } catch (e) { /* storage unavailable */ } }
 function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem('tgp-prefs') || 'null'); if (!p) return;
     if (p.nick) $('#nick').value = p.nick; if (p.steerSens) $('#steer').value = p.steerSens; if (p.steerMode) setup.steerMode = p.steerMode; if (p.quality) setup.quality = p.quality; if (p.level === 'pro' || p.level === 'easy') setup.level = p.level;
-    $('#autogas').checked = !!p.autogas; $('#assist').checked = p.assist !== false; $('#sound').checked = p.sound !== false;
+    $('#autogas').checked = !!p.autogas; $('#assist').checked = p.assist !== false; $('#sound').checked = p.sound !== false; if (typeof p.volume === 'number') $('#vol').value = Math.round(p.volume * 100); if (p.turnHints === false) $('#turnHints').checked = false; if (p.preview === false) $('#previewOn').checked = false;
     document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x.dataset.q === setup.quality));
   } catch (e) { /* storage unavailable */ }
 }
@@ -2349,13 +2522,13 @@ function poseOpponent(c) {
   const lx = W.lx[k] + (W.lx[k1] - W.lx[k]) * t, lz = W.lz[k] + (W.lz[k1] - W.lz[k]) * t;
   const x = W.x[k] + (W.x[k1] - W.x[k]) * t + lx * c.lat, z = W.z[k] + (W.z[k1] - W.z[k]) * t + lz * c.lat;
   c.k = k; c.x = x; c.z = z; c.psi = Math.atan2(-lx, -lz) + Math.atan2(c.latV, Math.max(c.v, 2));
-  poseModel(c.model, x, z, c.psi);
+  poseModel(c.model, x, z, c.psi, k);
   const tag = c.model.root.children[c.model.root.children.length - 1]; if (tag && tag.isSprite) tag.visible = camera.position.distanceToSquared(c.model.root.position) > 144;
   c.wheel += c.v / SPEC.rw * (1 / 60);
   for (const w of c.model.wheels) { w.spin.rotation.z = -c.wheel; if (w.front) w.pivot.rotation.y = Math.atan(W.kappa[k] * SPEC.L); }
 }
-function poseModel(mdl, x, z, psi) {
-  const y = Hq(x, z); normalAt(x, z, nrm);
+function poseModel(mdl, x, z, psi, k = -1) {
+  const y = Sq(x, z, k); normalS(x, z, k, nrm);
   fp.set(Math.cos(psi), 0, -Math.sin(psi)); fp.addScaledVector(nrm, -fp.dot(nrm)).normalize(); rt.crossVectors(fp, nrm);
   m4.makeBasis(fp, nrm, rt); mdl.root.quaternion.setFromRotationMatrix(m4); mdl.root.position.set(x, y, z);
 }
@@ -2532,7 +2705,7 @@ function remoteStep(dt) {
 function netShowMap(m) {
   setup.map = m;
   document.querySelectorAll('#mapTabs .tab').forEach(t => t.classList.toggle('sel', t.dataset.m === m));
-  $('#terrainOpts').hidden = m !== 'terrain'; $('#taipeiOpts').hidden = m !== 'taipei'; $('#osmOpts').hidden = m !== 'osm'; $('#tpPresetGroup').hidden = m !== 'taipei';
+  $('#terrainOpts').hidden = m !== 'terrain'; $('#taipeiOpts').hidden = m !== 'taipei'; $('#osmOpts').hidden = m !== 'osm'; $('#tpPresetGroup').hidden = m !== 'taipei'; document.querySelectorAll('.only-taipei').forEach(el => { el.hidden = m !== 'taipei'; });
   $('#baseField').hidden = m === 'taipei'; $('#banking').closest('label').hidden = m !== 'terrain';
   const M = m === 'terrain' ? null : CITY[m]; $('#mapCredit').hidden = !M; if (M) $('#mapCredit').textContent = M.credits;
 }
@@ -2639,7 +2812,8 @@ function frame(now) {
   if (state.mode === 'race' && !RACE.on) { recordGhost(); showGhost(); } else ghostModel.root.visible = false;
   const spd = Math.hypot(car.vx, car.vy);
   shake = car.surf === 3 ? Math.min(0.16, spd * 0.006) : car.surf === 2 && !W.city ? Math.min(0.1, spd * 0.003) : car.surf === 1 ? Math.min(0.05, spd * 0.0015) : 0;
-  if (state.mode === 'menu0') { const t = now / 1000 * 0.08, R = 26; camera.position.set(car.x + Math.cos(t) * R, (car.y || 0) + 9, car.z + Math.sin(t) * R); camera.up.copy(UP); camera.lookAt(car.x, (car.y || 0) + 0.5, car.z); }
+  if (state.mode === 'preview') previewStep(dt);
+  else if (state.mode === 'menu0') { const t = now / 1000 * 0.08, R = 26; camera.position.set(car.x + Math.cos(t) * R, (car.y || 0) + 9, car.z + Math.sin(t) * R); camera.up.copy(UP); camera.lookAt(car.x, (car.y || 0) + 0.5, car.z); }
   else updateCamera(dt);
   sky.position.copy(camera.position); SKY_U.time.value = now / 1000; updateTiles(dt);
   TEX.waterN.offset.set(now * 0.000011, now * 0.000006);
