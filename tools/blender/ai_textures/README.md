@@ -8,5 +8,13 @@ Stable Diffusion XL base 1.0（CreativeML Open RAIL++-M）在 Google Colab（L4�
 | facade_ai_cream / pink / grey | 馬賽克磁磚公寓立面（含鐵窗） | 寬 12 m × 高 12.8 m（約 4 層） |
 | facade_ai_concrete | 老式水泥公寓立面（含陽台） | 寬 12 m × 高 12.8 m |
 | roof_ai_0 / 1 | 平屋頂（綠色防水層） | 16 m × 16 m |
+| facade_ai_blue_green_tile / green_tile_apts / yellow_tile_apts / brown_brick_tile / white_tile_apts / grey_wash | 低樓層公寓（≤24 m）的各色磁磚、洗石子立面 | 12 m × 12.8 m |
+| facade_ai_old_concrete_balcony | 老式水泥公寓（陽台植栽） | 12 m × 12.8 m |
+| facade_ai_condo_1990s / hotel_tiles / shophouse_arcade / school_corridor | 中樓層（24–42 m）：大樓、商旅、街屋、學校 | 12 m × 12.8 m |
+| facade_ai_glass_office_v2 / stone_office | 高樓（>42 m）辦公大樓 | 12 m × 12.8 m |
+| facade_ai_red_brick_old | 老紅磚建築（偶爾用在低矮舊屋） | 12 m × 12.8 m |
+
+`normals/`：每張貼圖對應的法線圖（凹凸細節），用 Marigold Normals v1.1（OpenRAIL++）在 Colab 上計算；
+為了無縫，先把貼圖拼成 3×3 再推算、取中間一塊。
 
 出處：AI 生成（Colab SDXL）。

@@ -28,14 +28,28 @@
 				9,
 				10,
 				11,
-				12
+				12,
+				13,
+				14,
+				15,
+				16,
+				17,
+				18,
+				19,
+				20,
+				21,
+				22,
+				23,
+				24,
+				25,
+				26
 			]
 		}
 	],
 	"nodes":[
 		{
 			"mesh":0,
-			"name":"buildings_facade_ai_concrete"
+			"name":"buildings_facade_ai_red_brick_old"
 		},
 		{
 			"mesh":1,
@@ -62,7 +76,7 @@
 		},
 		{
 			"mesh":6,
-			"name":"buildings_facade_ai_pink"
+			"name":"buildings_facade_ai_grey_wash"
 		},
 		{
 			"mesh":7,
@@ -70,32 +84,92 @@
 		},
 		{
 			"mesh":8,
-			"name":"buildings_facade_ai_grey"
+			"name":"buildings_facade_ai_white_tile_apts"
 		},
 		{
 			"mesh":9,
-			"name":"buildings_facade_ai_cream"
+			"name":"buildings_facade_ai_brown_brick_tile"
 		},
 		{
 			"mesh":10,
-			"name":"buildings_facade_glass"
+			"name":"buildings_facade_ai_yellow_tile_apts"
 		},
 		{
 			"mesh":11,
-			"name":"bridges_deck"
+			"name":"buildings_facade_ai_green_tile_apts"
 		},
 		{
 			"mesh":12,
+			"name":"buildings_facade_ai_blue_green_tile"
+		},
+		{
+			"mesh":13,
+			"name":"buildings_facade_ai_grey"
+		},
+		{
+			"mesh":14,
+			"name":"buildings_facade_ai_pink"
+		},
+		{
+			"mesh":15,
+			"name":"buildings_facade_ai_cream"
+		},
+		{
+			"mesh":16,
+			"name":"buildings_facade_ai_concrete"
+		},
+		{
+			"mesh":17,
+			"name":"buildings_facade_ai_old_concrete_balcony"
+		},
+		{
+			"mesh":18,
+			"name":"buildings_facade_ai_school_corridor"
+		},
+		{
+			"mesh":19,
+			"name":"buildings_facade_ai_condo_1990s"
+		},
+		{
+			"mesh":20,
+			"name":"buildings_facade_ai_hotel_tiles"
+		},
+		{
+			"mesh":21,
+			"name":"buildings_facade_ai_glass_office_v2"
+		},
+		{
+			"mesh":22,
+			"name":"buildings_facade_ai_stone_office"
+		},
+		{
+			"mesh":23,
+			"name":"buildings_facade_glass"
+		},
+		{
+			"mesh":24,
+			"name":"buildings_facade_ai_shophouse_arcade"
+		},
+		{
+			"mesh":25,
+			"name":"bridges_deck"
+		},
+		{
+			"mesh":26,
 			"name":"bridges_concrete"
 		}
 	],
 	"materials":[
 		{
 			"doubleSided":true,
-			"name":"facade_ai_concrete",
+			"name":"facade_ai_red_brick_old",
+			"normalTexture":{
+				"index":0,
+				"scale":0.800000011920929
+			},
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":0
+					"index":1
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.800000011920929
@@ -109,12 +183,12 @@
 				0.3499999940395355
 			],
 			"emissiveTexture":{
-				"index":1
+				"index":2
 			},
 			"name":"storefront",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":2
+					"index":3
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.800000011920929
@@ -142,12 +216,12 @@
 				0.800000011920929
 			],
 			"emissiveTexture":{
-				"index":3
+				"index":4
 			},
 			"name":"signboards",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":4
+					"index":5
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.4000000059604645
@@ -156,9 +230,13 @@
 		{
 			"doubleSided":true,
 			"name":"roof_ai_0",
+			"normalTexture":{
+				"index":6,
+				"scale":0.800000011920929
+			},
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":5
+					"index":7
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.8999999761581421
@@ -169,48 +247,19 @@
 			"name":"facade_concrete",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":6
-				},
-				"metallicFactor":0,
-				"roughnessFactor":0.800000011920929
-			}
-		},
-		{
-			"doubleSided":true,
-			"name":"facade_ai_pink",
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":7
-				},
-				"metallicFactor":0,
-				"roughnessFactor":0.800000011920929
-			}
-		},
-		{
-			"doubleSided":true,
-			"name":"roof_ai_1",
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
 					"index":8
 				},
 				"metallicFactor":0,
-				"roughnessFactor":0.8999999761581421
-			}
-		},
-		{
-			"doubleSided":true,
-			"name":"facade_ai_grey",
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":9
-				},
-				"metallicFactor":0,
 				"roughnessFactor":0.800000011920929
 			}
 		},
 		{
 			"doubleSided":true,
-			"name":"facade_ai_cream",
+			"name":"facade_ai_grey_wash",
+			"normalTexture":{
+				"index":9,
+				"scale":0.800000011920929
+			},
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
 					"index":10
@@ -221,13 +270,268 @@
 		},
 		{
 			"doubleSided":true,
+			"name":"roof_ai_1",
+			"normalTexture":{
+				"index":11,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":12
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.8999999761581421
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_white_tile_apts",
+			"normalTexture":{
+				"index":13,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":14
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_brown_brick_tile",
+			"normalTexture":{
+				"index":15,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":16
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_yellow_tile_apts",
+			"normalTexture":{
+				"index":17,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":18
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_green_tile_apts",
+			"normalTexture":{
+				"index":19,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":20
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_blue_green_tile",
+			"normalTexture":{
+				"index":21,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":22
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_grey",
+			"normalTexture":{
+				"index":23,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":24
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_pink",
+			"normalTexture":{
+				"index":25,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":26
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_cream",
+			"normalTexture":{
+				"index":27,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":28
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_concrete",
+			"normalTexture":{
+				"index":29,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":30
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_old_concrete_balcony",
+			"normalTexture":{
+				"index":31,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":32
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_school_corridor",
+			"normalTexture":{
+				"index":33,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":34
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_condo_1990s",
+			"normalTexture":{
+				"index":35,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":36
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_hotel_tiles",
+			"normalTexture":{
+				"index":37,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":38
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_glass_office_v2",
+			"normalTexture":{
+				"index":39,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":40
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_stone_office",
+			"normalTexture":{
+				"index":41,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":42
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
 			"name":"facade_glass",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":11
+					"index":43
 				},
 				"metallicFactor":0.30000001192092896,
 				"roughnessFactor":0.15000000596046448
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_shophouse_arcade",
+			"normalTexture":{
+				"index":44,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":45
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
 			}
 		},
 		{
@@ -261,7 +565,7 @@
 	],
 	"meshes":[
 		{
-			"name":"buildings_facade_ai_concrete",
+			"name":"buildings_facade_ai_red_brick_old",
 			"primitives":[
 				{
 					"attributes":{
@@ -423,7 +727,7 @@
 			]
 		},
 		{
-			"name":"buildings_facade_ai_pink",
+			"name":"buildings_facade_ai_grey_wash",
 			"primitives":[
 				{
 					"attributes":{
@@ -477,7 +781,7 @@
 			]
 		},
 		{
-			"name":"buildings_facade_ai_grey",
+			"name":"buildings_facade_ai_white_tile_apts",
 			"primitives":[
 				{
 					"attributes":{
@@ -504,7 +808,7 @@
 			]
 		},
 		{
-			"name":"buildings_facade_ai_cream",
+			"name":"buildings_facade_ai_brown_brick_tile",
 			"primitives":[
 				{
 					"attributes":{
@@ -531,7 +835,7 @@
 			]
 		},
 		{
-			"name":"buildings_facade_glass",
+			"name":"buildings_facade_ai_yellow_tile_apts",
 			"primitives":[
 				{
 					"attributes":{
@@ -558,7 +862,7 @@
 			]
 		},
 		{
-			"name":"bridges_deck",
+			"name":"buildings_facade_ai_green_tile_apts",
 			"primitives":[
 				{
 					"attributes":{
@@ -585,7 +889,7 @@
 			]
 		},
 		{
-			"name":"bridges_concrete",
+			"name":"buildings_facade_ai_blue_green_tile",
 			"primitives":[
 				{
 					"attributes":{
@@ -607,6 +911,384 @@
 					},
 					"indices":64,
 					"material":12,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"buildings_facade_ai_grey",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":65,
+						"NORMAL":66,
+						"TEXCOORD_0":67,
+						"COLOR_0":68
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":13,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":69,
+					"material":13,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"buildings_facade_ai_pink",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":70,
+						"NORMAL":71,
+						"TEXCOORD_0":72,
+						"COLOR_0":73
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":14,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":74,
+					"material":14,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"buildings_facade_ai_cream",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":75,
+						"NORMAL":76,
+						"TEXCOORD_0":77,
+						"COLOR_0":78
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":15,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":79,
+					"material":15,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"buildings_facade_ai_concrete",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":80,
+						"NORMAL":81,
+						"TEXCOORD_0":82,
+						"COLOR_0":83
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":16,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":84,
+					"material":16,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"buildings_facade_ai_old_concrete_balcony",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":85,
+						"NORMAL":86,
+						"TEXCOORD_0":87,
+						"COLOR_0":88
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":17,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":89,
+					"material":17,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"buildings_facade_ai_school_corridor",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":90,
+						"NORMAL":91,
+						"TEXCOORD_0":92,
+						"COLOR_0":93
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":18,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":94,
+					"material":18,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"buildings_facade_ai_condo_1990s",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":95,
+						"NORMAL":96,
+						"TEXCOORD_0":97,
+						"COLOR_0":98
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":19,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":99,
+					"material":19,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"buildings_facade_ai_hotel_tiles",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":100,
+						"NORMAL":101,
+						"TEXCOORD_0":102,
+						"COLOR_0":103
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":20,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":99,
+					"material":20,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"buildings_facade_ai_glass_office_v2",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":104,
+						"NORMAL":105,
+						"TEXCOORD_0":106,
+						"COLOR_0":107
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":21,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":108,
+					"material":21,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"buildings_facade_ai_stone_office",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":109,
+						"NORMAL":110,
+						"TEXCOORD_0":111,
+						"COLOR_0":112
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":22,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":113,
+					"material":22,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"buildings_facade_glass",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":114,
+						"NORMAL":115,
+						"TEXCOORD_0":116,
+						"COLOR_0":117
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":23,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":118,
+					"material":23,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"buildings_facade_ai_shophouse_arcade",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":119,
+						"NORMAL":120,
+						"TEXCOORD_0":121,
+						"COLOR_0":122
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":24,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":118,
+					"material":24,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"bridges_deck",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":123,
+						"NORMAL":124,
+						"TEXCOORD_0":125,
+						"COLOR_0":126
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":25,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":113,
+					"material":25,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"bridges_concrete",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":127,
+						"NORMAL":128,
+						"TEXCOORD_0":129,
+						"COLOR_0":130
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":26,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":131,
+					"material":26,
 					"mode":4
 				}
 			]
@@ -632,14 +1314,6 @@
 		{
 			"extensions":{
 				"EXT_texture_webp":{
-					"source":1
-				}
-			},
-			"sampler":0
-		},
-		{
-			"extensions":{
-				"EXT_texture_webp":{
 					"source":2
 				}
 			},
@@ -649,6 +1323,14 @@
 			"extensions":{
 				"EXT_texture_webp":{
 					"source":2
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":3
 				}
 			},
 			"sampler":0
@@ -708,13 +1390,290 @@
 				}
 			},
 			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":10
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":11
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":12
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":13
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":14
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":15
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":16
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":17
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":18
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":19
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":20
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":21
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":22
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":23
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":24
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":25
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":26
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":27
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":28
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":29
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":30
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":31
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":32
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":33
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":34
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":35
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":36
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":37
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":38
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":39
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":40
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":41
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":42
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":43
+				}
+			},
+			"sampler":0
 		}
 	],
 	"images":[
 		{
 			"mimeType":"image/webp",
-			"name":"facade_ai_concrete",
-			"uri":"tex/facade_ai_concrete.webp"
+			"name":"facade_ai_red_brick_old_n",
+			"uri":"tex/facade_ai_red_brick_old_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_red_brick_old",
+			"uri":"tex/facade_ai_red_brick_old.webp"
 		},
 		{
 			"mimeType":"image/webp",
@@ -728,6 +1687,11 @@
 		},
 		{
 			"mimeType":"image/webp",
+			"name":"roof_ai_0_n",
+			"uri":"tex/roof_ai_0_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
 			"name":"roof_ai_0",
 			"uri":"tex/roof_ai_0.webp"
 		},
@@ -738,8 +1702,18 @@
 		},
 		{
 			"mimeType":"image/webp",
-			"name":"facade_ai_pink",
-			"uri":"tex/facade_ai_pink.webp"
+			"name":"facade_ai_grey_wash_n",
+			"uri":"tex/facade_ai_grey_wash_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_grey_wash",
+			"uri":"tex/facade_ai_grey_wash.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"roof_ai_1_n",
+			"uri":"tex/roof_ai_1_n.webp"
 		},
 		{
 			"mimeType":"image/webp",
@@ -748,8 +1722,78 @@
 		},
 		{
 			"mimeType":"image/webp",
+			"name":"facade_ai_white_tile_apts_n",
+			"uri":"tex/facade_ai_white_tile_apts_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_white_tile_apts",
+			"uri":"tex/facade_ai_white_tile_apts.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_brown_brick_tile_n",
+			"uri":"tex/facade_ai_brown_brick_tile_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_brown_brick_tile",
+			"uri":"tex/facade_ai_brown_brick_tile.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_yellow_tile_apts_n",
+			"uri":"tex/facade_ai_yellow_tile_apts_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_yellow_tile_apts",
+			"uri":"tex/facade_ai_yellow_tile_apts.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_green_tile_apts_n",
+			"uri":"tex/facade_ai_green_tile_apts_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_green_tile_apts",
+			"uri":"tex/facade_ai_green_tile_apts.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_blue_green_tile_n",
+			"uri":"tex/facade_ai_blue_green_tile_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_blue_green_tile",
+			"uri":"tex/facade_ai_blue_green_tile.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_grey_n",
+			"uri":"tex/facade_ai_grey_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
 			"name":"facade_ai_grey",
 			"uri":"tex/facade_ai_grey.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_pink_n",
+			"uri":"tex/facade_ai_pink_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_pink",
+			"uri":"tex/facade_ai_pink.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_cream_n",
+			"uri":"tex/facade_ai_cream_n.webp"
 		},
 		{
 			"mimeType":"image/webp",
@@ -758,50 +1802,130 @@
 		},
 		{
 			"mimeType":"image/webp",
+			"name":"facade_ai_concrete_n",
+			"uri":"tex/facade_ai_concrete_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_concrete",
+			"uri":"tex/facade_ai_concrete.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_old_concrete_balcony_n",
+			"uri":"tex/facade_ai_old_concrete_balcony_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_old_concrete_balcony",
+			"uri":"tex/facade_ai_old_concrete_balcony.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_school_corridor_n",
+			"uri":"tex/facade_ai_school_corridor_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_school_corridor",
+			"uri":"tex/facade_ai_school_corridor.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_condo_1990s_n",
+			"uri":"tex/facade_ai_condo_1990s_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_condo_1990s",
+			"uri":"tex/facade_ai_condo_1990s.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_hotel_tiles_n",
+			"uri":"tex/facade_ai_hotel_tiles_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_hotel_tiles",
+			"uri":"tex/facade_ai_hotel_tiles.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_glass_office_v2_n",
+			"uri":"tex/facade_ai_glass_office_v2_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_glass_office_v2",
+			"uri":"tex/facade_ai_glass_office_v2.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_stone_office_n",
+			"uri":"tex/facade_ai_stone_office_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_stone_office",
+			"uri":"tex/facade_ai_stone_office.webp"
+		},
+		{
+			"mimeType":"image/webp",
 			"name":"facade_glass",
 			"uri":"tex/facade_glass.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_shophouse_arcade_n",
+			"uri":"tex/facade_ai_shophouse_arcade_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"facade_ai_shophouse_arcade",
+			"uri":"tex/facade_ai_shophouse_arcade.webp"
 		}
 	],
 	"accessors":[
 		{
 			"componentType":5126,
-			"count":7868,
+			"count":1088,
 			"max":[
-				-1396,
-				91.39163970947266,
+				-1416,
+				19.493793487548828,
 				709
 			],
 			"min":[
-				-2108,
-				2.755500078201294,
-				-18.116376876831055
+				-1997.3477783203125,
+				3.0250000953674316,
+				62
 			],
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":7868,
+			"count":1088,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":7868,
+			"count":1088,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":7868,
+			"count":1088,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":11802,
+			"count":1632,
 			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
-			"count":5076,
+			"count":5088,
 			"max":[
 				-1390.312744140625,
 				13.021200180053711,
@@ -816,28 +1940,28 @@
 		},
 		{
 			"componentType":5126,
-			"count":5076,
+			"count":5088,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":5076,
+			"count":5088,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":5076,
+			"count":5088,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":7614,
+			"count":7632,
 			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
-			"count":5076,
+			"count":5088,
 			"max":[
 				-1388,
 				13.021200180053711,
@@ -852,28 +1976,28 @@
 		},
 		{
 			"componentType":5126,
-			"count":5076,
+			"count":5088,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":5076,
+			"count":5088,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":5076,
+			"count":5088,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":7614,
+			"count":7632,
 			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
-			"count":6072,
+			"count":6120,
 			"max":[
 				-1402.6837158203125,
 				19.60940933227539,
@@ -888,23 +2012,23 @@
 		},
 		{
 			"componentType":5126,
-			"count":6072,
+			"count":6120,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":6072,
+			"count":6120,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":6072,
+			"count":6120,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":9108,
+			"count":9180,
 			"type":"SCALAR"
 		},
 		{
@@ -981,38 +2105,38 @@
 		},
 		{
 			"componentType":5126,
-			"count":10012,
+			"count":3044,
 			"max":[
 				-1397,
-				28.703733444213867,
-				732
+				24.30351448059082,
+				695
 			],
 			"min":[
-				-2101,
-				2.6949989795684814,
-				-6
+				-2073.2177734375,
+				2.730257987976074,
+				0
 			],
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":10012,
+			"count":3044,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":10012,
+			"count":3044,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":10012,
+			"count":3044,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":15018,
+			"count":4566,
 			"type":"SCALAR"
 		},
 		{
@@ -1053,14 +2177,230 @@
 		},
 		{
 			"componentType":5126,
-			"count":9128,
+			"count":3396,
 			"max":[
 				-1388,
-				28.600000381469727,
+				28.24228286743164,
+				678
+			],
+			"min":[
+				-2108,
+				2.8320000171661377,
+				0
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":3396,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":3396,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":3396,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":5094,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":3712,
+			"max":[
+				-1396,
+				28.703733444213867,
 				706
 			],
 			"min":[
+				-2104,
+				3.0108249187469482,
+				0
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":3712,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":3712,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":3712,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":5568,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":3628,
+			"max":[
+				-1402,
+				27.85509490966797,
+				705.3204956054688
+			],
+			"min":[
+				-2090,
+				2.842217445373535,
+				-2
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":3628,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":3628,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":3628,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":5442,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":3660,
+			"max":[
+				-1390,
+				28.600000381469727,
+				706.7909545898438
+			],
+			"min":[
 				-2105,
+				3.0064001083374023,
+				7
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":3660,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":3660,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":3660,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":5490,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":3340,
+			"max":[
+				-1431,
+				27.587413787841797,
+				664
+			],
+			"min":[
+				-2097,
+				2.9709999561309814,
+				-8
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":3340,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":3340,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":3340,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":5010,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":3532,
+			"max":[
+				-1403,
+				26.431915283203125,
+				732
+			],
+			"min":[
+				-2096,
+				3.0674595832824707,
+				0
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":3532,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":3532,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":3532,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":5298,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":3100,
+			"max":[
+				-1405.0526123046875,
+				25.861665725708008,
+				694.9077758789062
+			],
+			"min":[
+				-2101,
 				2.7841498851776123,
 				-22
 			],
@@ -1068,96 +2408,374 @@
 		},
 		{
 			"componentType":5126,
-			"count":9128,
+			"count":3100,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":9128,
+			"count":3100,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":9128,
+			"count":3100,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":13692,
+			"count":4650,
 			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
-			"count":10300,
+			"count":4020,
 			"max":[
-				-1402,
-				47.91997528076172,
+				-1415,
+				29.615032196044922,
 				690
 			],
 			"min":[
-				-2104,
-				2.730257987976074,
-				-8
+				-2070.09228515625,
+				2.755500078201294,
+				-18.116376876831055
 			],
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":10300,
+			"count":4020,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":10300,
+			"count":4020,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":10300,
+			"count":4020,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":15450,
+			"count":6030,
 			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
-			"count":148,
+			"count":1964,
 			"max":[
-				-1598,
-				100.62640380859375,
-				64
+				-1460,
+				26.997737884521484,
+				703.37548828125
 			],
 			"min":[
-				-1735,
-				3.4114999771118164,
+				-2088,
+				2.783750057220459,
+				-10
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":1964,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":1964,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":1964,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":2946,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":2296,
+			"max":[
+				-1425,
+				27.478330612182617,
+				702.967041015625
+			],
+			"min":[
+				-2080,
+				2.6949989795684814,
+				-16
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":2296,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":2296,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":2296,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":3444,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":308,
+			"max":[
+				-1424,
+				37.5588264465332,
+				228
+			],
+			"min":[
+				-2038.56591796875,
+				2.7885375022888184,
+				17.308837890625
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":308,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":308,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":308,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":462,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":76,
+			"max":[
+				-2039,
+				28.84779930114746,
+				23
+			],
+			"min":[
+				-2056,
+				2.8770999908447266,
 				5
 			],
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":148,
+			"count":76,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":148,
+			"count":76,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":148,
+			"count":76,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":222,
+			"count":114,
 			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":76,
+			"max":[
+				-1468,
+				47.91997528076172,
+				178
+			],
+			"min":[
+				-1608.3438720703125,
+				4.116600036621094,
+				148
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":76,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":76,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":76,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5126,
+			"count":36,
+			"max":[
+				-1679,
+				100.62640380859375,
+				52
+			],
+			"min":[
+				-1720,
+				3.473400115966797,
+				22
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":36,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":36,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":36,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":54,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":72,
+			"max":[
+				-1703,
+				90.8958511352539,
+				64
+			],
+			"min":[
+				-1735,
+				3.4114999771118164,
+				26
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":72,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":72,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":72,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":108,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":68,
+			"max":[
+				-1667,
+				91.39163970947266,
+				46
+			],
+			"min":[
+				-1698,
+				4.085000038146973,
+				7
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":68,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":68,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":68,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":102,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":68,
+			"max":[
+				-1598,
+				29.548660278320312,
+				24
+			],
+			"min":[
+				-1617,
+				3.492500066757202,
+				5
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":68,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":68,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":68,
+			"normalized":true,
+			"type":"VEC4"
 		},
 		{
 			"componentType":5126,
@@ -1189,11 +2807,6 @@
 			"count":72,
 			"normalized":true,
 			"type":"VEC4"
-		},
-		{
-			"componentType":5123,
-			"count":108,
-			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
@@ -1235,68 +2848,138 @@
 	"bufferViews":[
 		{
 			"buffer":0,
-			"byteLength":66656,
+			"byteLength":11180,
 			"byteOffset":0
 		},
 		{
 			"buffer":0,
-			"byteLength":48097,
-			"byteOffset":66656
+			"byteLength":48245,
+			"byteOffset":11180
 		},
 		{
 			"buffer":0,
-			"byteLength":29577,
-			"byteOffset":114756
+			"byteLength":29610,
+			"byteOffset":59428
 		},
 		{
 			"buffer":0,
-			"byteLength":49638,
-			"byteOffset":144336
+			"byteLength":50035,
+			"byteOffset":89040
 		},
 		{
 			"buffer":0,
-			"byteLength":19539,
-			"byteOffset":193976
+			"byteLength":19568,
+			"byteOffset":139076
 		},
 		{
 			"buffer":0,
-			"byteLength":38606,
-			"byteOffset":213516
+			"byteLength":38602,
+			"byteOffset":158644
 		},
 		{
 			"buffer":0,
-			"byteLength":83775,
-			"byteOffset":252124
+			"byteLength":27263,
+			"byteOffset":197248
 		},
 		{
 			"buffer":0,
-			"byteLength":20892,
-			"byteOffset":335900
+			"byteLength":21011,
+			"byteOffset":224512
 		},
 		{
 			"buffer":0,
-			"byteLength":75562,
-			"byteOffset":356792
+			"byteLength":30098,
+			"byteOffset":245524
 		},
 		{
 			"buffer":0,
-			"byteLength":86274,
-			"byteOffset":432356
+			"byteLength":32213,
+			"byteOffset":275624
 		},
 		{
 			"buffer":0,
-			"byteLength":2043,
-			"byteOffset":518632
+			"byteLength":32559,
+			"byteOffset":307840
+		},
+		{
+			"buffer":0,
+			"byteLength":32589,
+			"byteOffset":340400
+		},
+		{
+			"buffer":0,
+			"byteLength":29436,
+			"byteOffset":372992
+		},
+		{
+			"buffer":0,
+			"byteLength":31167,
+			"byteOffset":402428
+		},
+		{
+			"buffer":0,
+			"byteLength":27728,
+			"byteOffset":433596
+		},
+		{
+			"buffer":0,
+			"byteLength":34470,
+			"byteOffset":461324
+		},
+		{
+			"buffer":0,
+			"byteLength":18373,
+			"byteOffset":495796
+		},
+		{
+			"buffer":0,
+			"byteLength":21998,
+			"byteOffset":514172
+		},
+		{
+			"buffer":0,
+			"byteLength":3853,
+			"byteOffset":536172
+		},
+		{
+			"buffer":0,
+			"byteLength":1257,
+			"byteOffset":540028
+		},
+		{
+			"buffer":0,
+			"byteLength":1246,
+			"byteOffset":541288
+		},
+		{
+			"buffer":0,
+			"byteLength":711,
+			"byteOffset":542536
+		},
+		{
+			"buffer":0,
+			"byteLength":1199,
+			"byteOffset":543248
+		},
+		{
+			"buffer":0,
+			"byteLength":1105,
+			"byteOffset":544448
+		},
+		{
+			"buffer":0,
+			"byteLength":1111,
+			"byteOffset":545556
 		},
 		{
 			"buffer":0,
 			"byteLength":1061,
-			"byteOffset":520676
+			"byteOffset":546668
 		},
 		{
 			"buffer":0,
 			"byteLength":11851,
-			"byteOffset":521740
+			"byteOffset":547732
 		}
 	],
 	"samplers":[
@@ -1307,7 +2990,7 @@
 	],
 	"buffers":[
 		{
-			"byteLength":533592,
+			"byteLength":559584,
 			"uri":"t_1_2.bin"
 		}
 	]
