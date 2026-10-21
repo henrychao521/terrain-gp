@@ -430,8 +430,33 @@ function resampleLoop(P, step) {
   }
   return out;
 }
-function cleanRoute(P) {
+// is the straight segment a -> b on paved road all the way? (every 2 m within a ground-level street's half width + 1 m)
+function chordOnRoad(M, a, b) {
+  if (!M.roads.length || !M.roads[0].w) return false;
+  const cs = 25, cell = (x, z) => Math.floor(x / cs) + ',' + Math.floor(z / cs);
+  if (!M._chordGrid) { M._chordGrid = new Map(); M.roads.forEach((r, ri) => { if (r.lay > 0) return; for (let i = 0; i + 3 < r.p.length; i += 2) { const k = cell((r.p[i] + r.p[i + 2]) / 2, (r.p[i + 1] + r.p[i + 3]) / 2); if (!M._chordGrid.has(k)) M._chordGrid.set(k, []); M._chordGrid.get(k).push(ri, i); } }); }
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]), steps = Math.max(1, Math.ceil(L / 2));
+  for (let s = 0; s <= steps; s++) {
+    const x = a[0] + (b[0] - a[0]) * s / steps, z = a[1] + (b[1] - a[1]) * s / steps, cx = Math.floor(x / cs), cz = Math.floor(z / cs); let ok = false;
+    for (let u = -1; u <= 1 && !ok; u++) for (let v = -1; v <= 1 && !ok; v++) { const lst = M._chordGrid.get((cx + u) + ',' + (cz + v)); if (!lst) continue;
+      for (let e = 0; e < lst.length && !ok; e += 2) { const r = M.roads[lst[e]], i = lst[e + 1], x0 = r.p[i], z0 = r.p[i + 1], dx = r.p[i + 2] - x0, dz = r.p[i + 3] - z0, l2 = dx * dx + dz * dz || 1;
+        const f = clamp(((x - x0) * dx + (z - z0) * dz) / l2, 0, 1); if (Math.hypot(x - x0 - dx * f, z - z0 - dz * f) <= r.w / 2 + 1) ok = true; } }
+    if (!ok) return false;
+  }
+  return true;
+}
+function cleanRoute(P, M) {
   let p = P.filter((q, i) => i === 0 || Math.hypot(q[0] - P[i - 1][0], q[1] - P[i - 1][1]) > 0.5);
+  if (M) { // cut across junction boxes: dual carriageways make the route zig-zag between their nodes (S, E, N, E for one left turn)
+    for (let i = 0; i < p.length - 2; i++) {
+      let len = 0, cut = -1;
+      for (let j = i + 1; j < Math.min(p.length, i + 7); j++) {
+        len += Math.hypot(p[j][0] - p[j - 1][0], p[j][1] - p[j - 1][1]); if (len > 70) break;
+        if (j >= i + 2 && len > 1.35 * Math.hypot(p[j][0] - p[i][0], p[j][1] - p[i][1]) && chordOnRoad(M, p[i], p[j])) cut = j;
+      }
+      if (cut > 0) p.splice(i + 1, cut - i - 1);
+    }
+  }
   for (let pass = 0; pass < 6; pass++) { // drop dead-end spikes (route going down a street and straight back)
     const keep = [];
     for (let i = 0; i < p.length; i++) {
@@ -563,7 +588,7 @@ function activeMap() {
 }
 function centreline(M) {
   const V = viewSize(M), pts = setup.reverse ? trackPts.slice().reverse() : trackPts;
-  if (M.kind === 'city') return cleanRoute(routeLoop(M, pts));
+  if (M.kind === 'city') return cleanRoute(routeLoop(M, pts), M);
   const curve = new THREE.CatmullRomCurve3(pts.map(p => new THREE.Vector3((p.u - 0.5) * V, 0, (p.v - 0.5) * V)), true, 'centripetal', 0.5);
   curve.arcLengthDivisions = 4000;
   const n = Math.max(240, Math.round(curve.getLength() / 2)), sp = curve.getSpacedPoints(n); sp.pop();
@@ -685,16 +710,18 @@ function previewStep(dt) {
   PV.k = k; PV.s += Math.max(8, RACE.prof[k]) * PV.f * dt;
   $('#pvBar').style.width = Math.min(100, PV.s / W.len * 100) + '%';
   if (PV.s >= W.len) { endPreview(); return; }
-  const x = W.x[k] + (W.x[k2] - W.x[k]) * f, z = W.z[k] + (W.z[k2] - W.z[k]) * f, ka = (k + Math.round(28 / W.ds)) % n;
+  const e = RACE.line ? RACE.line[k] + (RACE.line[k2] - RACE.line[k]) * f : 0, ka = (k + Math.round(28 / W.ds)) % n, ea = RACE.line ? RACE.line[ka] : 0;
+  const x = W.x[k] + (W.x[k2] - W.x[k]) * f + W.lx[k] * e, z = W.z[k] + (W.z[k2] - W.z[k]) * f + W.lz[k] * e;
   PV.pos.set(x, Sq(x, z, k) + 1.5, z);
   // smooth the viewing direction, not the target point: at preview speed a lagging target ends up behind the camera
-  const want = new THREE.Vector3(W.x[ka], Sq(W.x[ka], W.z[ka], ka) + 1.0, W.z[ka]).sub(PV.pos).normalize();
+  const ax = W.x[ka] + W.lx[ka] * ea, az = W.z[ka] + W.lz[ka] * ea, want = new THREE.Vector3(ax, Sq(ax, az, ka) + 1.0, az).sub(PV.pos).normalize();
   if (!camInit) PV.dir.copy(want); else PV.dir.lerp(want, 1 - Math.exp(-dt * 5)).normalize(); camInit = true;
   camera.position.copy(PV.pos); camera.up.copy(UP); camera.lookAt(PV.pos.x + PV.dir.x * 30, PV.pos.y + PV.dir.y * 30, PV.pos.z + PV.dir.z * 30);
   if (Math.abs(camera.fov - 68) > 0.05) { camera.fov = 68; camera.updateProjectionMatrix(); }
   drivingNotes(k, Math.max(8, RACE.prof[k]) * PV.f, dt);
 }
 $('#pvSkip').onclick = () => endPreview();
+$('#lineGuide').addEventListener('change', () => { setup.lineGuide = $('#lineGuide').checked; if (W.lineMesh) W.lineMesh.visible = setup.lineGuide; savePrefs(); });
 $('#elevated').addEventListener('change', () => { setup.elevated = $('#elevated').checked; mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn(); });
 // deck height above the ground for each sample on an elevated road (0 elsewhere); W.deck is the surface height there
 function trackElevation(M) {
@@ -1378,9 +1405,9 @@ function buildMeshes() {
   }
   const asph = lin(0x8a8a8c), asph2 = lin(0x77777a), white = lin(0xf0f0f0), red = lin(0xc8202a), green = lin(0x2c9a46), black = lin(0x151515);
   // asphalt: darker rubber on the racing line, streaky braking marks where the speed profile drops
-  const ar = mulberry32(5), shade = Array.from({ length: n }, () => ar()), line = new Float32Array(n), brake = new Float32Array(n), ahead = Math.round(25 / W.ds);
+  const ar = mulberry32(5), shade = Array.from({ length: n }, () => ar()), line = new Float32Array(n), brake = new Float32Array(n);
   const hL = k => W.hwL[k % n], hR = k => -W.hwR[k % n];
-  for (let k = 0; k < n; k++) { line[k] = clamp(RACE.ks[(k + ahead) % n] * 650, -(W.hwR[k] - 1.6), W.hwL[k] - 1.6); const v0 = RACE.prof[k], v1 = RACE.prof[(k + Math.round(40 / W.ds)) % n]; brake[k] = clamp((v0 - v1) / 25, 0, 1); }
+  for (let k = 0; k < n; k++) { line[k] = RACE.line[k]; const v0 = RACE.prof[k], v1 = RACE.prof[(k + Math.round(40 / W.ds)) % n]; brake[k] = clamp((v0 - v1) / 25, 0, 1); }
   smoothCirc(line, 6, 2); smoothCirc(brake, 4, 2);
   const AC = 20, tmpC = new THREE.Color();
   ribbon(hR, hL, AC, (k, q) => {
@@ -1389,6 +1416,14 @@ function buildMeshes() {
     return tmpC.copy(asph).lerp(asph2, shade[k] * 0.4).multiplyScalar(1 - rub * 0.22 - streak * 0.32 + edge).clone();
   }, 0.05, null, false,
     new THREE.MeshStandardMaterial({ vertexColors: true, map: TEX.asphalt2, normalMap: TEX.asphaltN, normalScale: new THREE.Vector2(0.55, 0.55), roughness: 0.8, envMapIntensity: 0.5, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }), 6);
+  { // racing-line guide painted over the asphalt: green where the line accelerates, yellow through the corner, red under braking
+    const V = RACE.lineProf, la = Math.max(1, Math.round(5 / W.ds)), cG = new THREE.Color(0x2fd05a), cY = new THREE.Color(0xffc21a), cR = new THREE.Color(0xff3b30), ph = new Float32Array(n);
+    for (let k = 0; k < n; k++) { const dv = V[(k + la) % n] - V[k]; ph[k] = dv < -0.25 ? -1 : dv > 0.12 || V[k] > 92 ? 1 : 0; }
+    smoothCirc(ph, 2, 1);
+    W.lineMesh = ribbon(k => RACE.line[k] - 0.55, k => RACE.line[k] + 0.55, 1, k => ph[k] < 0 ? cY.clone().lerp(cR, -ph[k]) : cY.clone().lerp(cG, ph[k]), 0.07, null, false,
+      new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }), 6);
+    W.lineMesh.receiveShadow = false; W.lineMesh.visible = setup.lineGuide !== false;
+  }
   const gravM = new THREE.MeshStandardMaterial({ map: TEX.gravel, roughness: 1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
   for (const sd of [1, -1]) { const keepG = r => W.grav[r] === sd && W.grav[(r + 1) % n] === sd; ribbon(sd > 0 ? hw + 1.5 : -hw - 17, sd > 0 ? hw + 17 : -hw - 1.5, 4, () => white, 0.035, keepG, false, gravM, 5); }
   if (W.real) buildTaipeiStreet(grp, ribbon, S); // Taiwanese road markings, kerbs, sidewalks, water barriers
@@ -2268,7 +2303,7 @@ function readSetup() {
   setup.elevated = $('#elevated').checked;
   setup.width = +$('#width').value; setup.banking = $('#banking').checked; setup.walls = $('#walls').checked; setup.aero = +$('#aero').value; setup.bias = +$('#bias').value;
   setup.tc = $('#tc').checked; setup.abs = $('#abs').checked; setup.auto = $('#auto').checked; setup.esc = $('#esc').checked; setup.brakeAssist = $('#brakeAssist').checked;
-  setup.turnHints = $('#turnHints').checked; setup.preview = $('#previewOn').checked;
+  setup.turnHints = $('#turnHints').checked; setup.preview = $('#previewOn').checked; setup.lineGuide = $('#lineGuide').checked;
   setup.steerSens = +$('#steer').value; setup.assist = $('#assist').checked; setup.autogas = $('#autogas').checked; muted = !$('#sound').checked; setVolume(+$('#vol').value / 100, false);
   setup.laps = +$('#laps').value; setup.aiCount = +$('#aiCount').value; setup.aiSkill = +$('#aiSkill').value;
   if (setup.level === 'easy') Object.assign(setup, { aero: 0.5, bias: 57, tc: true, abs: true, auto: true, assist: true, esc: true, brakeAssist: true });
@@ -2492,12 +2527,12 @@ document.querySelectorAll('#steerMode button').forEach(b => b.onclick = () => { 
 document.querySelectorAll('#quality button').forEach(b => b.onclick = () => { setup.quality = b.dataset.q; document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x === b)); applyQuality(setup.quality === 'auto' ? autoLevel() : setup.quality); savePrefs(); });
 if (document.fullscreenEnabled) { $('#btnFull').hidden = false; $('#btnFull').onclick = () => { document.documentElement.requestFullscreen().then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {}); }; }
 // per-viewer preferences
-function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted, level: setup.level, volume, turnHints: setup.turnHints, preview: setup.preview })); } catch (e) { /* storage unavailable */ } }
+function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted, level: setup.level, volume, turnHints: setup.turnHints, preview: setup.preview, lineGuide: setup.lineGuide })); } catch (e) { /* storage unavailable */ } }
 function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem('tgp-prefs') || 'null'); if (!p) return;
     if (p.nick) $('#nick').value = p.nick; if (p.steerSens) $('#steer').value = p.steerSens; if (p.steerMode) setup.steerMode = p.steerMode; if (p.quality) setup.quality = p.quality; if (p.level === 'pro' || p.level === 'easy') setup.level = p.level;
-    $('#autogas').checked = !!p.autogas; $('#assist').checked = p.assist !== false; $('#sound').checked = p.sound !== false; if (typeof p.volume === 'number') $('#vol').value = Math.round(p.volume * 100); if (p.turnHints === false) $('#turnHints').checked = false; if (p.preview === false) $('#previewOn').checked = false;
+    $('#autogas').checked = !!p.autogas; $('#assist').checked = p.assist !== false; $('#sound').checked = p.sound !== false; if (typeof p.volume === 'number') $('#vol').value = Math.round(p.volume * 100); if (p.turnHints === false) $('#turnHints').checked = false; if (p.preview === false) $('#previewOn').checked = false; if (p.lineGuide === false) $('#lineGuide').checked = false;
     document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x.dataset.q === setup.quality));
   } catch (e) { /* storage unavailable */ }
 }
@@ -2541,17 +2576,75 @@ function nameTag(text, color) {
 }
 function disposeModel(m) { scene.remove(m.root); m.root.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); }
 function gridSlot(i) { const n = W.n; return { k: ((n - 8 - i * 5) % n + n) % n, lat: (i % 2 ? -1 : 1) * Math.min(2.8, Math.min(W.hwL[((n - 8 - i * 5) % n + n) % n], W.hwR[((n - 8 - i * 5) % n + n) % n]) - 1.8) }; }
-// Speed the circuit allows at each sample: cornering limit with downforce, then braking (backward) and traction (forward) passes
-function buildProfile() {
-  const n = W.n, ds = W.ds, ae = aeroOf(0.5), kA = 0.5 * 1.2 * ae.ClA / SPEC.m, mu = 1.72, v = new Float32Array(n);
-  const K = Float32Array.from(W.kappa, Math.abs); smoothCirc(K, 3, 2);
+// Speed a path allows at each sample: cornering limit with downforce, then braking (backward) and traction (forward) passes.
+// K = |curvature| along the path, step[k] = path length from sample k to k + 1
+function speedProfile(K, step) {
+  const n = W.n, ae = aeroOf(0.5), kA = 0.5 * 1.2 * ae.ClA / SPEC.m, mu = 1.72, v = new Float32Array(n);
   for (let k = 0; k < n; k++) v[k] = Math.min(94, K[k] > mu * kA + 1e-5 ? Math.sqrt(mu * G / (K[k] - mu * kA)) : 94);
   for (let pass = 0; pass < 3; pass++) {
-    for (let i = 2 * n - 1; i >= 0; i--) { const k = i % n, nk = (k + 1) % n, ab = mu * (G + kA * v[nk] * v[nk]) * 0.82; v[k] = Math.min(v[k], Math.sqrt(v[nk] * v[nk] + 2 * ab * ds)); }
-    for (let i = 0; i < 2 * n; i++) { const k = i % n, pk = (k - 1 + n) % n, gr = (W.h[k] - W.h[pk]) / ds; v[k] = Math.min(v[k], Math.sqrt(v[pk] * v[pk] + 2 * Math.max(0.5, accelAt(v[pk]) - G * gr) * ds)); }
+    for (let i = 2 * n - 1; i >= 0; i--) { const k = i % n, nk = (k + 1) % n, ab = mu * (G + kA * v[nk] * v[nk]) * 0.82; v[k] = Math.min(v[k], Math.sqrt(v[nk] * v[nk] + 2 * ab * step[k])); }
+    for (let i = 0; i < 2 * n; i++) { const k = i % n, pk = (k - 1 + n) % n, gr = (W.h[k] - W.h[pk]) / step[pk]; v[k] = Math.min(v[k], Math.sqrt(v[pk] * v[pk] + 2 * Math.max(0.5, accelAt(v[pk]) - G * gr) * step[pk])); }
   }
+  return v;
+}
+// Minimum-curvature racing line: lateral offset (+ = left) minimising the summed squared second difference of the path,
+// 1.6 m inside each edge. Gauss-Seidel with over-relaxation, coarse to fine: plain relaxation barely moves the long, gentle shapes.
+function racingLine() {
+  const n = W.n, ds = W.ds, E = new Float32Array(n);
+  for (const spacing of [64, 32, 16, 8]) {
+    const h = Math.max(1, Math.round(spacing / ds)), m = Math.max(8, Math.floor(n / h));
+    const idx = Int32Array.from({ length: m }, (_, i) => Math.round(i * n / m) % n);
+    const cx = new Float64Array(m), cz = new Float64Array(m), lx = new Float64Array(m), lz = new Float64Array(m), lo = new Float64Array(m), hi = new Float64Array(m), e = new Float64Array(m);
+    for (let i = 0; i < m; i++) {
+      const k = idx[i], w = Math.max(1, Math.round(4 / ds)); let a = Infinity, b = Infinity;
+      for (let o = -w; o <= w; o++) { const j = (k + o + n) % n; a = Math.min(a, W.hwR[j]); b = Math.min(b, W.hwL[j]); } // narrowest width near the node
+      cx[i] = W.x[k]; cz[i] = W.z[k]; lx[i] = W.lx[k]; lz[i] = W.lz[k]; lo[i] = -Math.max(0, a - 1.6); hi[i] = Math.max(0, b - 1.6); e[i] = clamp(E[k], lo[i], hi[i]);
+    }
+    const px = i => cx[i] + lx[i] * e[i], pz = i => cz[i] + lz[i] * e[i], w = new Float64Array(m).fill(1);
+    const dx = i => px((i - 1 + m) % m) - 2 * px(i) + px((i + 1) % m), dz = i => pz((i - 1 + m) % m) - 2 * pz(i) + pz((i + 1) % m);
+    // weighted sum of w_i |D_i|^2; on the finest level the weights grow with the curvature (iteratively reweighted), which
+    // trades a little overall smoothness for flatter peaks: the tightest point of a corner is what sets its speed
+    for (let round = 0; round < (spacing === 8 ? 6 : 1); round++) {
+      if (round) { let mean = 0; for (let i = 0; i < m; i++) mean += Math.hypot(dx(i), dz(i)) / m; for (let i = 0; i < m; i++) { const r = Math.hypot(dx(i), dz(i)) / (mean || 1); w[i] = 1 + r * r; } }
+      for (let it = 0; it < 3000; it++) {
+        let moved = 0;
+        for (let i = 0; i < m; i++) {
+          const a1 = (i - 1 + m) % m, b1 = (i + 1) % m, wa = w[a1], wi = w[i], wb = w[b1];
+          // d/de_i of sum w_j |D_j|^2: point i is in D[i-1], D[i], D[i+1] with weights 1, -2, 1
+          const rx = wa * dx(a1) - 2 * wi * dx(i) + wb * dx(b1), rz = wa * dz(a1) - 2 * wi * dz(i) + wb * dz(b1);
+          const ne = clamp(e[i] - 1.7 * (lx[i] * rx + lz[i] * rz) / (wa + 4 * wi + wb), lo[i], hi[i]); moved = Math.max(moved, Math.abs(ne - e[i])); e[i] = ne;
+        }
+        if (moved < 2e-4) break;
+      }
+    }
+    for (let i = 0; i < m; i++) { // every sample, for the next level's start and the result
+      const k0 = idx[i], span = ((idx[(i + 1) % m] - k0 + n) % n) || n;
+      for (let j = 0; j < span; j++) E[(k0 + j) % n] = e[i] + (e[(i + 1) % m] - e[i]) * j / span;
+    }
+  }
+  smoothCirc(E, Math.max(1, Math.round(4 / ds)), 2);
+  for (let k = 0; k < n; k++) E[k] = clamp(E[k], -Math.max(0, W.hwR[k] - 1.4), Math.max(0, W.hwL[k] - 1.4));
+  const X = k => W.x[k] + W.lx[k] * E[k], Z = k => W.z[k] + W.lz[k] * E[k];
+  const step = new Float32Array(n), K = new Float32Array(n), st = 3, hx = new Float32Array(n), hz = new Float32Array(n);
+  for (let k = 0; k < n; k++) { const b = (k + 1) % n; step[k] = Math.max(0.05, Math.hypot(X(b) - X(k), Z(b) - Z(k))); }
+  for (let k = 0; k < n; k++) { const a = (k - 1 + n) % n, b = (k + 1) % n, tx = X(b) - X(a), tz = Z(b) - Z(a), l = Math.hypot(tx, tz) || 1; hx[k] = tx / l; hz[k] = tz / l; }
+  for (let k = 0; k < n; k++) { // turn of the heading over +-st samples, per metre of path (as the centreline's kappa)
+    const a = (k - st + n) % n, b = (k + st) % n; let s2 = 0; for (let j = -st; j < st; j++) s2 += step[(k + j + n) % n];
+    K[k] = Math.abs(Math.atan2(hx[a] * hz[b] - hz[a] * hx[b], hx[a] * hx[b] + hz[a] * hz[b])) / s2;
+  }
+  smoothCirc(K, 3, 2); smoothCirc(K, 3, 2);
+  return { E, K, step };
+}
+function buildProfile() {
+  const n = W.n, ds = W.ds;
+  const K = Float32Array.from(W.kappa, Math.abs); smoothCirc(K, 3, 2);
+  RACE.prof = speedProfile(K, new Float32Array(n).fill(ds)); // centreline pace: turn hints, brake assist, the preview lap
+  const L = racingLine(); RACE.line = L.E; RACE.lineStep = L.step; RACE.lineProf = speedProfile(L.K, L.step);
+  // computer drivers take the line but keep their old lap times: the line is 2-5 % quicker and the difficulty slider was tuned without it
+  let tc = 0, tl = 0; for (let k = 0; k < n; k++) { tc += ds / RACE.prof[k]; tl += L.step[k] / RACE.lineProf[k]; }
+  RACE.linePace = clamp(tl / tc, 0.9, 1);
   const ks = Float32Array.from(W.kappa); smoothCirc(ks, Math.round(30 / ds), 2);
-  RACE.prof = v; RACE.ks = ks;
+  RACE.ks = ks;
 }
 const accelAt = v => clamp(SPEC.Pmax * 0.82 / (SPEC.m * Math.max(v, 4)), 0, 12.5) - 0.5 * 1.2 * 1.43 * v * v / SPEC.m;
 function clearOpponents() { RACE.cars.forEach(c => disposeModel(c.model)); RACE.cars = []; }
@@ -2600,10 +2693,10 @@ function opponentsStep(dt) {
   for (const r of NET.remote.values()) if (r.inRace) others.push({ s: r.prog, lat: r.lat || 0, v: r.v || 0 });
   for (const c of RACE.cars) {
     if (state.t < c.delay) { poseOpponent(c); continue; }
-    const sm = ((c.s % L) + L) % L, k = Math.floor(sm / W.ds) % n, ahead = (k + Math.round(25 / W.ds)) % n;
+    const sm = ((c.s % L) + L) % L, k = Math.floor(sm / W.ds) % n;
     const cool = c.finT >= 0 ? 0.75 : 1;
-    const hwk = Math.min(W.hwL[k], W.hwR[k]);
-    let vT = RACE.prof[k] * c.skill * cool, latT = clamp(RACE.ks[ahead] * 650, -(hwk - 1.6), hwk - 1.6);
+    const hwk = Math.min(W.hwL[k], W.hwR[k]), lead = (k + Math.round(Math.max(6, c.v * 0.7) / W.ds)) % n;
+    let vT = RACE.lineProf[k] * RACE.linePace * c.skill * cool, latT = RACE.line[lead];
     for (const o of others) {
       if (o === c) continue;
       const d = wrapGap(o.s - c.s);
@@ -2613,8 +2706,8 @@ function opponentsStep(dt) {
       }
     }
     if (c.v < vT) c.v = Math.min(vT, c.v + accelAt(c.v) * (0.88 + 0.12 * c.skill) * dt); else c.v = Math.max(vT, c.v - 34 * dt);
-    c.latV = clamp((latT - c.lat) * 1.1, -3.2, 3.2); c.lat = clamp(c.lat + c.latV * dt, -(hwk - 1), hwk - 1);
-    c.s += c.v * dt;
+    c.latV = clamp((latT - c.lat) * 1.1, -3.2, 3.2); c.lat = clamp(c.lat + c.latV * dt, -(W.hwR[k] - 1), W.hwL[k] - 1);
+    c.s += c.v * dt * W.ds / RACE.lineStep[k]; // c.s is centreline distance; the line is shorter through a corner
     const done = Math.floor(c.s / L);
     if (done > c.lap) {
       if (c.lap >= 0) c.best = Math.min(c.best, state.t - c.lapT0);
