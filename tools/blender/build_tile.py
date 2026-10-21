@@ -30,9 +30,9 @@ B = lambda X, Y: (X - SX / 2, Y - SY / 2)  # data -> blender xy
 inside = lambda X, Y: X0 <= X <= X1 and Y0 <= Y <= Y1
 
 # ---------- materials
-def img_mat(name, file, rough=0.8, emit=0.0, metal=0.0):
+def img_mat(name, file, rough=0.8, emit=0.0, metal=0.0, path=None):
     m = bpy.data.materials.new(name); m.use_nodes = True; nt = m.node_tree; bsdf = nt.nodes['Principled BSDF']
-    tex = nt.nodes.new('ShaderNodeTexImage'); tex.image = bpy.data.images.load(f'{TEX}/{file}.png'); tex.extension = 'REPEAT'
+    tex = nt.nodes.new('ShaderNodeTexImage'); tex.image = bpy.data.images.load(path or f'{TEX}/{file}.png'); tex.extension = 'REPEAT'
     nt.links.new(tex.outputs['Color'], bsdf.inputs['Base Color']); bsdf.inputs['Roughness'].default_value = rough; bsdf.inputs['Metallic'].default_value = metal
     if emit: nt.links.new(tex.outputs['Color'], bsdf.inputs['Emission Color']); bsdf.inputs['Emission Strength'].default_value = emit
     return m
@@ -41,6 +41,13 @@ def col_mat(name, rgb, rough=0.7, metal=0.0):
     b.inputs['Base Color'].default_value = (*[c ** 2.2 for c in rgb], 1); b.inputs['Roughness'].default_value = rough; b.inputs['Metallic'].default_value = metal; return m
 MAT = {k: img_mat(k, k) for k in ('facade_mosaic_cream', 'facade_mosaic_pink', 'facade_mosaic_grey', 'facade_concrete', 'roof')}
 MAT['facade_glass'] = img_mat('facade_glass', 'facade_glass', rough=0.15, metal=0.3)
+# AI-generated facades and roofs (tools/blender/ai_textures, SDXL on Colab) replace the drawn ones when present
+AI_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai_textures')
+AI = {k: os.path.join(AI_DIR, k + '.jpg') for k in ('facade_ai_cream', 'facade_ai_pink', 'facade_ai_grey', 'facade_ai_concrete', 'roof_ai_0', 'roof_ai_1')}
+AI = {k: v for k, v in AI.items() if os.path.exists(v)}
+for k, v in AI.items(): MAT[k] = img_mat(k, k, path=v, rough=0.9 if k.startswith('roof') else 0.8)
+AI_FOR = {'facade_mosaic_cream': 'facade_ai_cream', 'facade_mosaic_pink': 'facade_ai_pink', 'facade_mosaic_grey': 'facade_ai_grey', 'facade_concrete': 'facade_ai_concrete'}
+FACADE_REPEAT = lambda mat: (12.0, 12.8) if mat.startswith('facade_ai') else (6.0, 6.4)  # metres covered by one texture tile
 MAT['storefront'] = img_mat('storefront', 'storefront', emit=0.35)
 MAT['signboards'] = img_mat('signboards', 'signboards', rough=0.4, emit=0.8)
 MAT['tile_blue'] = img_mat('tile_blue', 'tile_blue', rough=0.3); MAT['tile_gold'] = img_mat('tile_gold', 'tile_gold', rough=0.3); MAT['tile_orange'] = img_mat('tile_orange', 'tile_orange', rough=0.35)
@@ -305,6 +312,8 @@ def build_buildings():
         if ring is None or len(ring) < 3: stats['dropped'] = stats.get('dropped', 0) + 1; continue
         ring = ccw(ring); hsh = (bi * 2654435761) & 0xffffffff
         fam = ('facade_concrete' if hsh % 3 == 0 else 'facade_glass') if h > 42 else [pal[hsh % 3], 'facade_concrete', 'facade_glass'][hsh % 3] if h > 24 else ('facade_concrete' if hsh % 5 == 0 else pal[hsh % 3])
+        if AI_FOR.get(fam) in AI: fam = AI_FOR[fam]
+        rx, ry = FACADE_REPEAT(fam)
         base = min(dem(x, y) for x, y in ring) - 1.5; top = dem(gx, gy) + h
         n = len(ring)
         street = []
@@ -314,6 +323,7 @@ def build_buildings():
             nx_, ny_ = (by - ay) / L, -(bx - ax) / L  # outward normal of a CCW ring
             street.append(street_dist((ax + bx) / 2 + nx_ * 4, (ay + by) / 2 + ny_ * 4) < 6)
         lowrise = h <= 40 and fam != 'facade_glass'
+        painted_grilles = fam.startswith('facade_ai')  # the AI facades already show window grilles; 3D cages would not line up with them
         arcade = lowrise and h >= 7
         g0 = base + 1.5 + 4.5  # top of the ground floor
         inner = offset_ring(ring, [3.0 if (arcade and street[i]) else 0 for i in range(n)]) if arcade and any(street) else ring
@@ -323,7 +333,7 @@ def build_buildings():
             A, Bp = B(ax, ay), B(bx, by)
             low = g0 if arcade else base
             # upper facade
-            bld.quad(fam, (*A, low), (*Bp, low), (*Bp, top), (*A, top), [(per / 6, (low - base) / 6.4), ((per + L) / 6, (low - base) / 6.4), ((per + L) / 6, (top - base) / 6.4), (per / 6, (top - base) / 6.4)])
+            bld.quad(fam, (*A, low), (*Bp, low), (*Bp, top), (*A, top), [(per / rx, (low - base) / ry), ((per + L) / rx, (low - base) / ry), ((per + L) / rx, (top - base) / ry), (per / rx, (top - base) / ry)])
             if arcade:
                 (ix, iy), (jx, jy) = inner[i], inner[(i + 1) % n]; Ai, Bi = B(ix, iy), B(jx, jy); Li = math.hypot(jx - ix, jy - iy)
                 bld.quad('storefront' if street[i] else fam, (*Ai, base), (*Bi, base), (*Bi, g0), (*Ai, g0), [(0, 0), (Li / 12, 0), (Li / 12, 1), (0, 1)] if street[i] else None)
@@ -342,7 +352,7 @@ def build_buildings():
                     for k in range(int(L // 3)):
                         if R.random() > 0.55: continue
                         f = (k + 0.5) * 3 / L; px, py = ax + (bx - ax) * f + nx_ * 0.2, ay + (by - ay) * f + ny_ * 0.2
-                        inst('cage', *B(px, py), zf + 0.6, yaw); stats['cages'] += 1
+                        if not painted_grilles: inst('cage', *B(px, py), zf + 0.6, yaw); stats['cages'] += 1
                         if R.random() < 0.35: inst('ac', *B(px + ux * 0.9 + nx_ * 0.25, py + uy * 0.9 + ny_ * 0.25), zf + 0.15, yaw)
                 if h < 30:
                     for k in range(int(L // 7)):
@@ -361,7 +371,9 @@ def build_buildings():
                         stats['signs'] += 1
             per += L
         # flat roof, rooftop water tank and stair hut
-        bld.face('roof', [(*B(x, y), top) for x, y in ring], [((x - X0) / 8, (y - Y0) / 8) for x, y in ring])
+        roofs = [k for k in ('roof_ai_0', 'roof_ai_1') if k in AI]
+        rm, rs = (roofs[hsh % len(roofs)], 16) if roofs else ('roof', 8)
+        bld.face(rm, [(*B(x, y), top) for x, y in ring], [((x - X0) / rs, (y - Y0) / rs) for x, y in ring])
         if h < 60 and R.random() < 0.6:
             inst('tank', *B(gx + R.uniform(-2, 2), gy + R.uniform(-2, 2)), top + 0.3, 0.0)
         if h < 60 and R.random() < 0.4:

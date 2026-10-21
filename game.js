@@ -818,7 +818,7 @@ function buildWorld() {
   buildMeshes();
   drawMinimapBase();
   $('#trkLen').textContent = (len / 1000).toFixed(3) + ' km';
-  $('#hudCredit').textContent = W.city ? '© OpenStreetMap contributors' + (M.id === 'taipei' ? ' · 內政部 DEM · 臺北市 3D 建物' : '') : '';
+  $('#hudCredit').textContent = W.city ? '© OpenStreetMap contributors' + (M.id === 'taipei' ? ' · 內政部 DEM · 臺北市 3D 建物' + (W.activeTiles && W.activeTiles.length ? ' · 建物貼圖 AI 生成（Colab SDXL）' : '') : '') : '';
 }
 
 // ground shader: blends grass / dirt / rock / special by per-vertex weights, sampled in world metres with a low-frequency macro layer to hide tiling
