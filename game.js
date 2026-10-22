@@ -695,7 +695,7 @@ const PV = { s: 0, f: 1, k: 0, dir: new THREE.Vector3(), pos: new THREE.Vector3(
 function startPreview() {
   let T = 0; for (let k = 0; k < W.n; k++) T += W.ds / Math.max(8, RACE.prof[k]);
   PV.f = Math.max(1, T / 32); PV.s = 0; PV.k = 0; camInit = false;
-  $('#pvInfo').textContent = (W.len / 1000).toFixed(2) + ' km・' + W.corners.length + ' 個彎・預估單圈 ' + fmt(T);
+  $('#pvInfo').textContent = (W.len / 1000).toFixed(2) + ' km・' + W.corners.length + ' 個彎・預估單圈 ' + fmt(T) + (state.best < Infinity ? '・你的最快圈 ' + fmt(state.best) : '');
   $('#preview').hidden = false; $('#lights').hidden = true; document.body.classList.add('previewing'); state.mode = 'preview';
   bannerT = 0; $('#banner').classList.remove('show'); // the hold-sideways hint waits for the end of the preview, it would cover the road cards
 }
@@ -840,6 +840,7 @@ function buildWorld() {
   for (const arr of [W.wallL, W.wallR]) { // drop barrier fragments shorter than 30 m
     let k = 0; while (k < n) { if (!isFinite(arr[k])) { k++; continue; } let e = k; while (e < n && isFinite(arr[e])) e++; if ((e - k) * W.ds < 30 && !(k === 0 || e === n)) for (let j = k; j < e; j++) arr[j] = Infinity; k = e; }
   }
+  W.tid = trackId();
   buildProfile();
   analyzeCorners();
   buildMeshes();
@@ -2112,9 +2113,11 @@ function finishLap() {
   if (state.lap > 0 && state.secIdx === 2) {
     sectorDone(2); state.last = lt;
     if (state.valid) {
+      const sb = state.secBest.join(), pb = lt < state.best;
       for (let i = 0; i < 3; i++) state.secBest[i] = Math.min(state.secBest[i], state.secCur[i]);
-      if (lt < state.best) { state.best = lt; state.ghostBest = state.ghostRec; state.bestTimes = state.curTimes; banner('最快圈 ' + fmt(lt), 'good'); }
+      if (pb) { state.best = lt; state.ghostBest = state.ghostRec; state.bestTimes = state.curTimes; banner('最快圈 ' + fmt(lt), 'good'); }
       else banner('圈速 ' + fmt(lt), 'info');
+      if (!RACE.on && (pb || state.secBest.join() !== sb)) saveBest();
     } else banner('圈速 ' + fmt(lt) + ' · 無效', 'bad');
     state.secLast = state.secCur.slice();
   }
@@ -2132,12 +2135,63 @@ function recordGhost() {
 const gA = new THREE.Quaternion(), gB = new THREE.Quaternion();
 function showGhost() {
   const g = state.ghostBest; if (!g || g.length < 2 || state.mode !== 'race') { ghostModel.root.visible = false; return; }
-  const t = state.t - state.lapStart; let i = Math.min(g.length - 2, Math.floor(t / 0.05));
+  const t = state.t - state.lapStart; let i = Math.min(g.length - 2, Math.floor(t / (g[g.length - 1][0] || 1) * (g.length - 1))); // samples are frame-aligned, not exactly 0.05 s apart
   while (i > 0 && g[i][0] > t) i--; while (i < g.length - 2 && g[i + 1][0] < t) i++;
   const a = g[i], b = g[i + 1], f = clamp((t - a[0]) / (b[0] - a[0]), 0, 1);
   ghostModel.root.visible = t < g[g.length - 1][0];
   ghostModel.root.position.set(a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f, a[3] + (b[3] - a[3]) * f);
   gA.set(a[4], a[5], a[6], a[7]); gB.set(b[4], b[5], b[6], b[7]); ghostModel.root.quaternion.copy(gA).slerp(gB, f);
+}
+// solo best lap per track, kept in localStorage: time, sector bests, per-sample times and the ghost; the 10 most recently driven tracks
+const BEST_KEY = 'tgp-best:', BEST_IDX = 'tgp-best-idx', BEST_MAX = 10;
+function trackId() { // hash of the lap as built (centreline, surface height, widths, banking, barriers): a reversed or edited route is another track
+  let h = 0x811c9dc5 ^ W.n; const mix = v => { h = Math.imul(h ^ Math.round(v), 16777619); };
+  for (let k = 0; k < W.n; k++) { mix(W.x[k] * 10); mix(W.z[k] * 10); mix(W.h[k] * 10); mix(W.hwL[k] * 10); mix(W.hwR[k] * 10); mix(W.bank[k] * 1000); }
+  mix(setup.walls ? 1 : 0);
+  return setup.map + '-' + W.n + '-' + (h >>> 0).toString(36);
+}
+const b64 = a => { const u = new Uint8Array(a.buffer, a.byteOffset, a.byteLength); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+const unb64 = (s, T) => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new T(u.buffer); };
+// ghost rows as int16 deltas, 16 bytes per row: time in ms, position in cm (from the first row, kept in o), quaternion * 32767
+function packGhost(g) {
+  while (g.length > 6000) g = g.filter((_, i) => i % 2 === 0); // over ~6 min: every other row, keeps a record near 150 KB
+  const d = new Int16Array(g.length * 8), o = g.length ? [1, 2, 3].map(c => Math.round(g[0][c] * 100)) : [0, 0, 0], p = o.slice(); let pt = 0;
+  g.forEach((r, i) => {
+    const j = i * 8; d[j] = clamp(Math.round(r[0] * 1000) - pt, 0, 32767); pt += d[j];
+    for (let c = 0; c < 3; c++) { d[j + 1 + c] = clamp(Math.round(r[c + 1] * 100) - p[c], -32768, 32767); p[c] += d[j + 1 + c]; }
+    for (let c = 0; c < 4; c++) d[j + 4 + c] = Math.round(clamp(r[c + 4], -1, 1) * 32767);
+  });
+  return { o, d: b64(d) };
+}
+function unpackGhost(G) {
+  const d = unb64(G.d, Int16Array), p = G.o.slice(), g = []; let pt = 0;
+  for (let j = 0; j < d.length; j += 8) { pt += d[j]; for (let c = 0; c < 3; c++) p[c] += d[j + 1 + c]; g.push([pt / 1000, p[0] / 100, p[1] / 100, p[2] / 100, d[j + 4] / 32767, d[j + 5] / 32767, d[j + 6] / 32767, d[j + 7] / 32767]); }
+  return g;
+}
+function bestIdx() { try { const a = JSON.parse(localStorage.getItem(BEST_IDX) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+function setBestIdx(idx) { try { while (idx.length > BEST_MAX) localStorage.removeItem(BEST_KEY + idx.pop()); localStorage.setItem(BEST_IDX, JSON.stringify(idx)); } catch (e) { /* storage unavailable */ } }
+function saveBest() {
+  if (!W.tid || !(state.best < Infinity) || !state.bestTimes) return;
+  try {
+    const rec = JSON.stringify({ v: 1, best: state.best, sec: state.secBest, n: W.n, bt: b64(state.bestTimes), g: packGhost(state.ghostBest || []) }), idx = bestIdx().filter(x => x !== W.tid);
+    for (;;) { try { localStorage.setItem(BEST_KEY + W.tid, rec); break; } catch (e) { if (!idx.length) return; localStorage.removeItem(BEST_KEY + idx.pop()); } } // full: drop the least recently driven track and retry
+    idx.unshift(W.tid); setBestIdx(idx);
+  } catch (e) { /* storage unavailable */ }
+}
+function loadBest() {
+  if (!W.tid) return;
+  try {
+    const r = JSON.parse(localStorage.getItem(BEST_KEY + W.tid) || 'null'); if (!r || r.v !== 1 || r.n !== W.n || !(r.best > 0)) return;
+    const bt = unb64(r.bt, Float32Array), g = unpackGhost(r.g), sec = [0, 1, 2].map(i => r.sec[i] > 0 ? r.sec[i] : Infinity); if (bt.length !== W.n) return;
+    Object.assign(state, { best: r.best, secBest: sec, bestTimes: bt, ghostBest: g });
+    setBestIdx([W.tid, ...bestIdx().filter(x => x !== W.tid)]);
+    banner('本賽道最快圈 ' + fmt(r.best), 'info');
+  } catch (e) { /* storage unavailable or a damaged record */ }
+}
+function clearBest() {
+  try { localStorage.removeItem(BEST_KEY + W.tid); } catch (e) { /* storage unavailable */ }
+  setBestIdx(bestIdx().filter(x => x !== W.tid));
+  Object.assign(state, { best: Infinity, secBest: [Infinity, Infinity, Infinity], bestTimes: null, ghostBest: null });
 }
 let bannerT = 0;
 function banner(txt, kind) { const b = $('#banner'); b.textContent = txt; b.className = 'hud show ' + kind; bannerT = 2.2; }
@@ -2533,7 +2587,13 @@ function openMenu() {
   $('#pLap').textContent = state.lap || '–'; $('#pBest').textContent = fmt(state.best); $('#pLast').textContent = fmt(state.last);
   $('#pause').hidden = false; for (const k in keys) keys[k] = false;
   $('#pRestart').hidden = setup.mode === 'online' && !NET.isHost;
+  const cb = $('#pClearBest'); cb.hidden = RACE.on || !(state.best < Infinity); cb.textContent = '清除此賽道紀錄'; delete cb.dataset.arm;
 }
+// two taps: the first arms the button, the second clears the stored best lap and ghost of this track
+$('#pClearBest').onclick = () => {
+  const cb = $('#pClearBest'); if (!cb.dataset.arm) { cb.dataset.arm = '1'; cb.textContent = '再按一次確認清除'; return; }
+  clearBest(); cb.hidden = true; $('#pBest').textContent = fmt(state.best); banner('已清除此賽道紀錄', 'info');
+};
 function resume() { if (mapDirty && !$('#setup').hidden) return; $('#setup').hidden = true; $('#pause').hidden = true; state.mode = prevMode; startAudio(); keepAwake(); }
 function keepAwake() { try { if (navigator.wakeLock && !wakeLock) navigator.wakeLock.request('screen').then(l => { wakeLock = l; l.addEventListener('release', () => { wakeLock = null; }); }).catch(() => {}); } catch (e) { /* not offered here */ } }
 function startRace(fromNet) {
@@ -2542,7 +2602,7 @@ function startRace(fromNet) {
   const go = () => {
     if (mapDirty) { buildWorld(); mapDirty = false; }
     resetRace(); camInit = false; fpsProbe.reset();
-    setupGrid();
+    setupGrid(); if (!RACE.on) loadBest();
     $('#setup').hidden = true; $('#pause').hidden = true; $('#busy').hidden = true;
     state.mode = 'lights'; state.lightsT = 0; state.lightsOut = 4.2 + Math.random() * 1.2; $('#lights').hidden = false;
     NOTE.road = ''; NOTE.pending = '';
