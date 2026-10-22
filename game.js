@@ -697,7 +697,7 @@ function arrowPath(left, deg) { // a stem that bends through the turn angle, wit
 function drivingNotes(k, spd, dt) {
   const n = W.n, th = $('#turnHint'), active = state.mode === 'race' || state.mode === 'lights' || state.mode === 'preview';
   let show = false;
-  if (active && setup.turnHints !== false && W.corners && W.corners.length) {
+  if (active && (setup.turnHints !== false || TUT.on) && W.corners && W.corners.length) {
     let best = null, bd = Infinity;
     for (const c of W.corners) { const d = ((c.entry - k + n) % n) * W.ds, inside = ((k - c.entry + n) % n) < ((c.exit - c.entry + n) % n); const dd = inside ? 0 : d; if (dd < bd) { bd = dd; best = c; } }
     const reach = Math.max(140, spd * 5);
@@ -1490,7 +1490,7 @@ function buildMeshes() {
   { // racing-line guide painted over the asphalt: green where the line accelerates, yellow through the corner, red under braking
     const V = RACE.lineProf, la = Math.max(1, Math.round(5 / W.ds)), cG = new THREE.Color(0x2fd05a), cY = new THREE.Color(0xffc21a), cR = new THREE.Color(0xff3b30), ph = new Float32Array(n);
     for (let k = 0; k < n; k++) { const dv = V[(k + la) % n] - V[k]; ph[k] = dv < -0.25 ? -1 : dv > 0.12 || V[k] > 92 ? 1 : 0; }
-    smoothCirc(ph, 2, 1);
+    smoothCirc(ph, 2, 1); W.linePh = ph; // the tutorial watches for the red stretches
     W.lineMesh = ribbon(k => RACE.line[k] - 0.55, k => RACE.line[k] + 0.55, 1, k => ph[k] < 0 ? cY.clone().lerp(cR, -ph[k]) : cY.clone().lerp(cG, ph[k]), 0.07, null, false,
       new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.72, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 }), 6);
     W.lineMesh.receiveShadow = false; W.lineMesh.visible = setup.lineGuide !== false;
@@ -2066,6 +2066,7 @@ function readInput(dt) {
     for (const i of [0, 1, 2, 3, 4, 5, 9]) { const now = pr(i); if (now && !was(i)) { if (i === 5 || i === 1) shift(1); if (i === 4 || i === 2) shift(-1); if (i === 0) drsReq = true; if (i === 3) camMode = (camMode + 1) % 3; if (i === 9) openMenu(); } padPrev[p.index + ':' + i] = now; }
   }
   if (touch.sActive) { const a = Math.abs(touch.steer); sK = Math.sign(touch.steer) * Math.pow(Math.max(0, a - 0.04) / 0.96, 1.25); }
+  inp.uB = bK; // what the player pressed, before auto throttle and the brake assist
   if (setup.autogas && car.gear !== -1 && state.mode === 'race') tK = bK > 0 ? 0 : 1;
   if (RACE.done) { tK = 0; bK = 0.35; sK = 0; }
   if (analog) { inp.thr = tK; inp.brk = bK; }
@@ -2629,6 +2630,7 @@ function updateStartBtn() {
     $('#btnStart').textContent = !inRoom ? '先加入房間' : NET.isHost ? `開始比賽（${n} 人）` : '等待房主開始';
   }
   $('#btnResume').hidden = !(state.mode === 'menu' && !mapDirty);
+  $('#tutReplay').disabled = !ok; // the lesson runs solo, so only the track matters
 }
 let prevMode = 'race', wakeLock = null;
 function openMenu() {
@@ -2655,7 +2657,7 @@ function startRace(fromNet) {
     $('#setup').hidden = true; $('#pause').hidden = true; $('#busy').hidden = true;
     state.mode = 'lights'; state.lightsT = 0; state.lightsOut = 4.2 + Math.random() * 1.2; $('#lights').hidden = false;
     NOTE.road = ''; NOTE.pending = '';
-    if (setup.preview !== false && setup.mode !== 'online' && W.corners) startPreview();
+    if (setup.preview !== false && setup.mode !== 'online' && W.corners && !TUT.on) startPreview();
     if (COARSE && innerHeight > innerWidth && state.mode !== 'preview') banner('橫向握持手機，視野更寬', 'info');
   };
   if (mapDirty) { $('#busy').textContent = setup.map !== 'terrain' ? '生成街道與建物中…' : '生成地形中…'; $('#busy').hidden = false; setTimeout(go, 30); } else go();
@@ -2679,12 +2681,12 @@ document.querySelectorAll('#steerMode button').forEach(b => b.onclick = () => { 
 document.querySelectorAll('#quality button').forEach(b => b.onclick = () => { setup.quality = b.dataset.q; document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x === b)); applyQuality(setup.quality === 'auto' ? autoLevel() : setup.quality); savePrefs(); });
 if (document.fullscreenEnabled) { $('#btnFull').hidden = false; $('#btnFull').onclick = () => { document.documentElement.requestFullscreen().then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {}); }; }
 // per-viewer preferences
-function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted, level: setup.level, volume, turnHints: setup.turnHints, preview: setup.preview, lineGuide: setup.lineGuide, tod: ATMO.tod, rain: ATMO.rain })); } catch (e) { /* storage unavailable */ } }
+function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted, level: setup.level, volume, turnHints: setup.turnHints, preview: setup.preview, lineGuide: setup.lineGuide, tod: ATMO.tod, rain: ATMO.rain, tut: TUT.done })); } catch (e) { /* storage unavailable */ } }
 function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem('tgp-prefs') || 'null'); if (!p) return;
     if (p.nick) $('#nick').value = p.nick; if (p.steerSens) $('#steer').value = p.steerSens; if (p.steerMode) setup.steerMode = p.steerMode; if (p.quality) setup.quality = p.quality; if (p.level === 'pro' || p.level === 'easy') setup.level = p.level;
-    $('#autogas').checked = !!p.autogas; $('#assist').checked = p.assist !== false; $('#sound').checked = p.sound !== false; if (typeof p.volume === 'number') $('#vol').value = Math.round(p.volume * 100); if (p.turnHints === false) $('#turnHints').checked = false; if (p.preview === false) $('#previewOn').checked = false; if (p.lineGuide === false) $('#lineGuide').checked = false; if (ATMO_P[p.tod]) { ATMO.tod = p.tod; $('#tod').value = p.tod; } if (p.rain) { ATMO.rain = true; $('#weather').value = 'rain'; }
+    $('#autogas').checked = !!p.autogas; $('#assist').checked = p.assist !== false; $('#sound').checked = p.sound !== false; if (typeof p.volume === 'number') $('#vol').value = Math.round(p.volume * 100); if (p.turnHints === false) $('#turnHints').checked = false; if (p.preview === false) $('#previewOn').checked = false; if (p.lineGuide === false) $('#lineGuide').checked = false; if (ATMO_P[p.tod]) { ATMO.tod = p.tod; $('#tod').value = p.tod; } if (p.rain) { ATMO.rain = true; $('#weather').value = 'rain'; } TUT.done = !!p.tut;
     document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x.dataset.q === setup.quality));
   } catch (e) { /* storage unavailable */ }
 }
@@ -3134,6 +3136,99 @@ function applyRaceMode() {
   netUi();
 }
 
+/* ================= First-run tutorial ================= */
+// a guided first lap: one card at a time, each advancing when the player actually does the thing; skippable, replayable from the settings.
+// Cards go in order, except braking, which cuts in as soon as a red stretch comes up once the colours have been explained.
+const TUT = { on: false, done: false, s: null, did: {}, t: 0, hl: null, L: 0, R: 0, brk: 0, inRed: false, miss: 0, red: true, cam: 0, camN: 0, camT: 0, hv: 0, hintVis: null, paused: false, stuck: 0, note: '', noteT: 0 };
+const KEY = s => `<kbd>${s}</kbd>`, SW = (c, t) => `<span class="tsw ${c}">${t}</span>`;
+const tutTouch = () => document.body.classList.contains('touch'); // same switch as the on-screen controls (on by default when COARSE)
+const TUT_STEPS = [
+  { id: 'gas', title: '踩油門', hl: () => tutTouch() && !setup.autogas ? '#tGas' : null,
+    text: () => setup.autogas ? '已開啟自動油門：紅燈熄滅後，車子會自己往前開。' : tutTouch() ? '紅燈全部熄滅就出發：按住右下角綠色的「油門」。' : `紅燈全部熄滅就出發：按住 ${KEY('↑')} 或 ${KEY('W')} 踩油門。` },
+  { id: 'steer', title: '轉方向', hl: () => tutTouch() ? (setup.steerMode === 'drag' ? '#steerRail' : '#steerBtns') : null,
+    text: () => !tutTouch() ? `按 ${KEY('←')} ${KEY('→')} 或 ${KEY('A')} ${KEY('D')} 轉方向，讓車子留在路面上。左右都試試看。` : setup.steerMode === 'drag' ? '手指按住畫面左半邊，往左右拖就會轉彎，拖越遠轉越多。左右都試試看。' : '按左下角的 ◀ ▶ 轉方向，讓車子留在路面上。左右都試試看。' },
+  { id: 'line', title: '路上的顏色線', hl: () => null,
+    text: () => `路上的彩色線是建議路線：${SW('g', '綠')} 踩油門，${SW('y', '黃')} 放開油門準備轉彎，${SW('r', '紅')} 要煞車。` },
+  { id: 'hint', title: '轉彎提示', hl: () => '#turnHint',
+    text: () => $('#turnHint').hidden ? '快到彎道時，畫面上方會出現轉彎提示卡。' : '上方的卡片說的是下一個彎：往哪邊轉、還有多遠、建議速度。箭頭變紅就是太快，要煞車。' },
+  { id: 'cam', title: '換視角', hl: () => '#bCam',
+    text: () => (tutTouch() ? '按右上角的眼睛按鈕' : `按 ${KEY('C')} 或右上角的眼睛按鈕`) + '換視角，選一個最順手的。多按幾次會換回來。' },
+  { id: 'pause', title: '暫停', hl: () => '#menuBtn',
+    text: () => (tutTouch() ? '按右上角的 ‖' : `按 ${KEY('Esc')} 或右上角的 ‖`) + ' 可以暫停，暫停選單能調音量、重新起跑。試一次，再按「繼續」回來。' },
+  { id: 'brake', title: '紅色，煞車！', hl: () => tutTouch() ? '#tBrake' : null,
+    text: () => tutTouch() ? '開到紅色那段，按住右下角紅色的「煞車」，慢下來再轉彎。' : `開到紅色那段，按住 ${KEY('↓')} 或 ${KEY('S')} 煞車，慢下來再轉彎。` },
+  { id: 'end', title: '教學完成！', hl: () => null,
+    text: () => '照著顏色線跑完這一圈吧！想再看一次教學，到設定的「操作」頁。' },
+];
+const TUT_BY = Object.fromEntries(TUT_STEPS.map(s => [s.id, s]));
+// distance to the red (braking) stretch of the guide line within range metres ahead of the car, -1 if none
+function redAhead(range) { const P = W.linePh; if (!P) return -1; const n = W.n, m = Math.round(range / W.ds); for (let o = 0; o <= m; o++) if (P[(car.k + o) % n] < -0.5) return o * W.ds; return -1; }
+function tutOffer() { $('#tutOffer').hidden = false; requestAnimationFrame(() => $('#toGo').focus()); }
+function tutBegin() {
+  $('#tutOffer').hidden = true; if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  if (setup.mode !== 'solo') { setup.mode = 'solo'; applyRaceMode(); } // the lesson is a solo lap
+  Object.assign(TUT, { on: true, did: {}, paused: false, stuck: 0 }); tutGo(TUT_STEPS[0]); startRace();
+}
+function tutGo(s) {
+  Object.assign(TUT, { s, t: 0, L: 0, R: 0, brk: 0, inRed: false, miss: 0, cam: camMode, camN: 0, camT: 0, hv: 0, hintVis: null, red: !!W.linePh && W.linePh.some(v => v < -0.5) });
+  if (s.id === 'end') { TUT.done = true; savePrefs(); }
+  $('#tutNo').textContent = s.id === 'end' ? '' : (Object.keys(TUT.did).length + 1) + '/' + (TUT_STEPS.length - 1); $('#tutTitle').textContent = s.title; $('#tutText').innerHTML = s.text();
+  $('#tutSkip').textContent = s.id === 'end' ? '關閉' : '跳過教學'; $('#tutChk').hidden = s.id !== 'steer'; $('#tcL').classList.remove('ok'); $('#tcR').classList.remove('ok');
+  tutNote(''); tutHl(null);
+}
+function tutNext() { TUT.did[TUT.s.id] = true; if (!TUT.red) TUT.did.brake = true; tutGo(TUT_STEPS.find(s => !TUT.did[s.id])); } // a track without a braking zone skips that card
+function tutNote(html, secs = 0) { if (TUT.note !== html) { TUT.note = html; $('#tutNote').innerHTML = html; } TUT.noteT = secs; }
+function tutHl(sel) { const el = sel ? $(sel) : null; if (el === TUT.hl) return; if (TUT.hl) TUT.hl.classList.remove('tut-hl'); TUT.hl = el; if (el) el.classList.add('tut-hl'); }
+function tutStop(save) {
+  TUT.on = false; $('#tut').hidden = true; document.body.classList.remove('tut-on'); tutHl(null); $('#bReset').classList.remove('tut-hl');
+  if (W.lineMesh) W.lineMesh.visible = setup.lineGuide !== false;
+  if (save) { TUT.done = true; savePrefs(); }
+}
+function tutStep(dt) {
+  if (!TUT.on) return;
+  if (RACE.on) { tutStop(true); return; } // a race against others ends the lesson
+  const s = TUT.s, live = (state.mode === 'race' || state.mode === 'lights') && $('#setup').hidden && $('#pause').hidden, el = $('#tut');
+  if (s.id === 'pause' && state.mode === 'menu') TUT.paused = true;
+  if (el.hidden === live) { el.hidden = !live; document.body.classList.toggle('tut-on', live); }
+  if (!live) { tutHl(null); return; }
+  if (W.lineMesh) W.lineMesh.visible = true; // the lesson shows the guides even if they were switched off
+  TUT.t += dt; const spd = Math.hypot(car.vx, car.vy) * 3.6, race = state.mode === 'race'; let next = false;
+  // a red stretch coming up: braking cuts in (but not while the camera or the pause is being tried)
+  if (race && TUT.red && !TUT.did.brake && (s.id === 'line' && TUT.t > 4 || s.id === 'hint' || s.id === 'cam' && !TUT.camN || s.id === 'pause' && !TUT.paused) && redAhead(110) >= 0) {
+    if (s.id === 'line') TUT.did.line = true; tutGo(TUT_BY.brake); return;
+  }
+  switch (s.id) {
+    case 'gas': next = race && spd > 50; break;
+    case 'steer':
+      if (race && inp.steer > 0.25 && (TUT.L += dt) > 0.3) $('#tcL').classList.add('ok');
+      if (race && inp.steer < -0.25 && (TUT.R += dt) > 0.3) $('#tcR').classList.add('ok');
+      next = TUT.t > 2 && TUT.L > 0.3 && TUT.R > 0.3 || TUT.t > 25; break;
+    case 'line': next = TUT.t > 6; break;
+    case 'hint': { const vis = !$('#turnHint').hidden; if (vis !== TUT.hintVis) { TUT.hintVis = vis; $('#tutText').innerHTML = s.text(); } if (vis) TUT.hv += dt; next = TUT.hv > 4.5 || TUT.hv > 2 && !vis || TUT.t > 40 || !W.corners.length; break; }
+    case 'cam': if (camMode !== TUT.cam) { TUT.cam = camMode; TUT.camN++; TUT.camT = 0; } TUT.camT += dt; next = TUT.camN > 0 && TUT.camT > 2.5; break;
+    case 'pause': next = TUT.paused; break;
+    case 'brake': { // brake on (or just before) a red stretch; a miss counts once past the whole zone (it can come in pieces); after three, move on
+      if (inp.uB > 0.5 && redAhead(70) >= 0) TUT.brk += dt;
+      if (TUT.brk > 0.2) { next = true; break; }
+      if (W.linePh[car.k] < -0.5) TUT.inRed = true;
+      else if (TUT.inRed && redAhead(150) < 0) { TUT.inRed = false; if (++TUT.miss >= 3) next = true; else tutNote('這次沒踩到煞車，下一段紅色再試一次。', 6); }
+      break;
+    }
+    case 'end': if (TUT.t > 9) { tutStop(false); return; } break;
+  }
+  if (next) { tutNext(); return; }
+  // stopped against a wall or off the road: point at the reset
+  if (race && s.id !== 'gas') TUT.stuck = spd < 4 ? TUT.stuck + dt : 0;
+  const stuck = TUT.stuck > 4; $('#bReset').classList.toggle('tut-hl', stuck);
+  if (stuck) tutNote(tutTouch() ? '卡住了？按右上角的 ↺ 回到賽道。' : `卡住了？按 ${KEY('R')} 或右上角的 ↺ 回到賽道。`, 0.1);
+  else if (TUT.noteT > 0 && (TUT.noteT -= dt) <= 0) tutNote('');
+  tutHl(s.hl());
+}
+$('#toGo').onclick = () => tutBegin();
+$('#toNo').onclick = () => { $('#tutOffer').hidden = true; TUT.done = true; savePrefs(); };
+$('#tutReplay').onclick = () => tutBegin();
+$('#tutSkip').onclick = () => { const end = TUT.s.id === 'end'; tutStop(true); if (!end) banner('已跳過教學，設定的「操作」頁可以重看', 'info'); };
+
 /* ================= Main loop ================= */
 let last = performance.now(), acc = 0;
 function frame(now) {
@@ -3168,6 +3263,7 @@ function frame(now) {
   TEX.waterN.offset.set(now * 0.000011, now * 0.000006);
   if (POST.on && POST.comp) { POST.grade.uniforms.time.value = (now / 1000) % 100; POST.comp.render(); } else renderer.render(scene, camera);
   if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) $('#banner').classList.remove('show'); }
+  tutStep(dt);
   remoteStep(dt); netTick(dt);
   hud(dt); standingsHud(dt); updateAudio();
 }
@@ -3181,6 +3277,7 @@ if (!COARSE && innerWidth >= 900) { $('#tele').hidden = false; $('#bTele').class
 drawEditorBase();
 buildWorld(); mapDirty = false;
 resetRace(); placeCar(3, 0);
+if (!TUT.done) tutOffer();
 requestAnimationFrame(() => { drawEditor(); updateStartBtn(); });
 requestAnimationFrame(frame);
 })();

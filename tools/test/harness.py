@@ -126,6 +126,8 @@ class Game:
     def __init__(self, browser, url, needs=(), viewport=(1000, 600), dpr=1):
         self.url, self.needs = url, needs
         self.pg = browser.new_page(viewport={'width': viewport[0], 'height': viewport[1]}, device_scale_factor=dpr)
+        # a fresh profile would get the first-run tutorial offer over the menus: mark it as seen (other prefs stay default)
+        self.pg.add_init_script("try { if (!localStorage.getItem('tgp-prefs')) localStorage.setItem('tgp-prefs', JSON.stringify({ tut: true })); } catch (e) {}")
         self.errors, self.warnings = [], []
         self.pg.on('pageerror', lambda e: self.errors.append('pageerror: ' + str(e)[:300]))
         self.pg.on('console', self._console)
