@@ -703,32 +703,32 @@
 		},
 		{
 			"componentType":5126,
-			"count":6962,
+			"count":5710,
 			"max":[
-				4.8973236083984375,
-				8.442279815673828,
-				4.886919021606445
+				5.627126216888428,
+				8.528792381286621,
+				5.69319486618042
 			],
 			"min":[
-				-4.690458297729492,
-				-0.04313293471932411,
-				-4.695330619812012
+				-5.759989261627197,
+				-0.07963526248931885,
+				-5.731142520904541
 			],
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":6962,
+			"count":5710,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":6962,
+			"count":5710,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":10443,
+			"count":10593,
 			"type":"SCALAR"
 		},
 		{
@@ -1055,68 +1055,68 @@
 		},
 		{
 			"buffer":0,
-			"byteLength":64157,
+			"byteLength":52637,
 			"byteOffset":58332
 		},
 		{
 			"buffer":0,
 			"byteLength":54128,
-			"byteOffset":122492
+			"byteOffset":110972
 		},
 		{
 			"buffer":0,
 			"byteLength":56342,
-			"byteOffset":176620
+			"byteOffset":165100
 		},
 		{
 			"buffer":0,
 			"byteLength":45144,
-			"byteOffset":232964
+			"byteOffset":221444
 		},
 		{
 			"buffer":0,
 			"byteLength":823,
-			"byteOffset":278108
+			"byteOffset":266588
 		},
 		{
 			"buffer":0,
 			"byteLength":317,
-			"byteOffset":278932
+			"byteOffset":267412
 		},
 		{
 			"buffer":0,
 			"byteLength":1115,
-			"byteOffset":279252
+			"byteOffset":267732
 		},
 		{
 			"buffer":0,
 			"byteLength":200,
-			"byteOffset":280368
+			"byteOffset":268848
 		},
 		{
 			"buffer":0,
 			"byteLength":637,
-			"byteOffset":280568
+			"byteOffset":269048
 		},
 		{
 			"buffer":0,
 			"byteLength":723,
-			"byteOffset":281208
+			"byteOffset":269688
 		},
 		{
 			"buffer":0,
 			"byteLength":643,
-			"byteOffset":281932
+			"byteOffset":270412
 		},
 		{
 			"buffer":0,
 			"byteLength":855,
-			"byteOffset":282576
+			"byteOffset":271056
 		},
 		{
 			"buffer":0,
 			"byteLength":303,
-			"byteOffset":283432
+			"byteOffset":271912
 		}
 	],
 	"samplers":[
@@ -1127,7 +1127,7 @@
 	],
 	"buffers":[
 		{
-			"byteLength":283736,
+			"byteLength":272216,
 			"uri":"props.bin"
 		}
 	]

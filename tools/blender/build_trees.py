@@ -2,24 +2,25 @@
 models in tools/blender/trees/ (build_props.py puts them in props.gltf), plus a side-view impostor atlas the game draws on
 crossed cards beyond the near range.
 
-  blender -b --factory-startup --python tools/blender/build_trees.py -- <dir with camphor/luan/palm/tall .glb> <repo root>
+  blender -b --factory-startup --python tools/blender/build_trees.py -- <dir with camphor/banyan/luan/palm/tall .glb> <repo root>
 
 TRELLIS foliage is thousands of thin open leaf shells: a plain decimate eats them. So each tree is thickened, voxel
 remeshed into one closed hull, decimated, and the original's colour is baked onto the hull.
-The banyan has no model of its own (SDXL kept drawing bonsai or cropped trunks): it is the camphor, wider and darker,
-which is also how the two read from a car in Taipei - broad evergreen domes.
 """
 import bpy, sys, os, math, json
 import numpy as np
 
 src, root = sys.argv[sys.argv.index('--') + 1:][:2]
-TREES = [  # game kind order; height (m) as NATIVE_H in game.js; voxel size as a fraction of the height (sparse crowns
-    # need coarser voxels so neighbouring leaves merge into clumps instead of falling apart into flakes)
-    ('tree_camphor', 'camphor', 9.5, (1, 1, 1), (1, 1, 1), 0.006),
-    ('tree_banyan', 'camphor', 8.5, (1.4, 1.4, 1), (0.7, 0.8, 0.66), 0.006),
-    ('tree_luan', 'luan', 9.0, (1, 1, 1), (1, 1, 1), 0.013),
-    ('tree_palm', 'palm', 9.8, (1, 1, 1), (1, 1, 1), 0.006),
-    ('tree_tall', 'tall', 10.5, (1, 1, 1), (1, 1, 1), 0.013),
+TREES = [  # game kind order; height (m) as NATIVE_H in game.js; stretch; colour grade (see load); voxel size as a fraction
+    # of the height (sparse crowns and wide dense domes need coarser voxels so neighbouring leaves merge into clumps
+    # instead of falling apart into flakes, and so the hull decimates down to the face budget)
+    ('tree_camphor', 'camphor', 9.5, (1, 1, 1), None, 0.006),
+    # banyan: an open-grown park tree, so its crown is narrowed a little to a pruned street tree's (1.34 x the height);
+    # the photo was taken under a hazy overcast sky: lift the crown to a deep green, keep the trunk a pale grey
+    ('tree_banyan', 'banyan', 8.5, (0.85, 0.85, 1), ((1.05, 1.45, 1.1, 1.6), (1.5, 1.45, 1.55, 0.4), 0.2), 0.012),
+    ('tree_luan', 'luan', 9.0, (1, 1, 1), None, 0.013),
+    ('tree_palm', 'palm', 9.8, (1, 1, 1), None, 0.006),
+    ('tree_tall', 'tall', 10.5, (1, 1, 1), None, 0.013),
 ]
 FACES, TEX = 3500, 512
 out_models = os.path.join(root, 'tools/blender/trees'); os.makedirs(out_models, exist_ok=True)
@@ -32,8 +33,10 @@ def select(*objs):
     bpy.context.view_layer.objects.active = objs[-1]
 
 
-def load(name, height, stretch, tint):
-    """the TRELLIS model as one mesh: base centre at the origin, `height` metres tall, optionally stretched and tinted"""
+def load(name, height, stretch, grade):
+    """the TRELLIS model as one mesh: base centre at the origin, `height` metres tall, optionally stretched and colour graded.
+    grade = (crown, trunk, split): each (r, g, b, saturation) applied to the texture colour in the material, the crown one
+    above `split` (a fraction of the height) and the trunk one below, so the bake and the atlas render both pick it up"""
     before = set(bpy.data.objects); bpy.ops.import_scene.gltf(filepath=os.path.join(src, name + '.glb'))
     meshes = [o for o in bpy.data.objects if o not in before and o.type == 'MESH']; select(*meshes)
     if len(meshes) > 1: bpy.ops.object.join()
@@ -41,11 +44,24 @@ def load(name, height, stretch, tint):
     co = np.array([v.co for v in o.data.vertices]); mn, mx = co.min(0), co.max(0); s = height / (mx[2] - mn[2])
     co = (co - [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, mn[2]]) * s * np.array(stretch)
     o.data.vertices.foreach_set('co', co.ravel().astype(np.float32)); o.data.update()
-    if tint != (1, 1, 1):
+    if grade:
         nt = o.data.materials[0].node_tree; bsdf = next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED')
         tex = next(l.from_node for l in nt.links if l.to_socket == bsdf.inputs['Base Color'] and l.from_node.type == 'TEX_IMAGE')
-        img = tex.image.copy(); px = np.array(img.pixels[:], dtype=np.float32).reshape(-1, 4); px[:, :3] *= np.array(tint, dtype=np.float32)
-        img.pixels = px.ravel().tolist(); tex.image = img
+        rgba = lambda sockets, nm: next(x for x in sockets if x.type == 'RGBA' and (nm is None or x.name == nm))
+        def mix(blend, fac, a, b):
+            m = nt.nodes.new('ShaderNodeMix'); m.data_type = 'RGBA'; m.blend_type = blend
+            for sock, v in ((m.inputs['Factor'], fac), (rgba(m.inputs, 'A'), a), (rgba(m.inputs, 'B'), b)):
+                if isinstance(v, bpy.types.NodeSocket): nt.links.new(v, sock)
+                else: sock.default_value = v
+            return rgba(m.outputs, None)
+        def adjust(r, g, b, sat):
+            hs = nt.nodes.new('ShaderNodeHueSaturation'); hs.inputs['Saturation'].default_value = sat
+            nt.links.new(mix('MULTIPLY', 1.0, tex.outputs['Color'], (r, g, b, 1)), hs.inputs['Color']); return hs.outputs['Color']
+        crown, trunk, split = grade
+        tc = nt.nodes.new('ShaderNodeTexCoord'); xyz = nt.nodes.new('ShaderNodeSeparateXYZ'); nt.links.new(tc.outputs['Object'], xyz.inputs[0])
+        mr = nt.nodes.new('ShaderNodeMapRange'); mr.inputs['From Min'].default_value = (split - 0.04) * height; mr.inputs['From Max'].default_value = (split + 0.04) * height
+        nt.links.new(xyz.outputs['Z'], mr.inputs['Value'])
+        nt.links.new(mix('MIX', mr.outputs['Result'], adjust(*trunk), adjust(*crown)), bsdf.inputs['Base Color'])
     return o
 
 
@@ -72,9 +88,9 @@ def low_poly(hi, name, height, voxf):
 
 
 info = []
-for name, srcname, height, stretch, tint, voxf in TREES:
+for name, srcname, height, stretch, grade, voxf in TREES:
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    hi = load(srcname, height, stretch, tint); lo = low_poly(hi, name, height, voxf)
+    hi = load(srcname, height, stretch, grade); lo = low_poly(hi, name, height, voxf)
     co = np.array([v.co for v in lo.data.vertices]); w = float(max(np.ptp(co[:, 0]), np.ptp(co[:, 1])))
     info.append({'name': name, 'faces': len(lo.data.polygons), 'w': round(w, 2), 'h': round(float(co[:, 2].max()), 2)})
     select(lo); bpy.ops.export_scene.gltf(filepath=os.path.join(out_models, name + '.glb'), use_selection=True, export_yup=True, export_image_format='WEBP')
@@ -90,8 +106,8 @@ sc.render.resolution_x, sc.render.resolution_y = CELL * len(TREES), CELL; sc.ren
 sc.view_settings.view_transform = 'Standard'
 w = bpy.data.worlds.new('w'); sc.world = w; w.use_nodes = True; w.node_tree.nodes['Background'].inputs[0].default_value = (1, 1, 1, 1); w.node_tree.nodes['Background'].inputs[1].default_value = 1.0
 cells = []
-for i, (name, srcname, height, stretch, tint, _) in enumerate(TREES):
-    o = load(srcname, height, stretch, tint); o.name = name
+for i, (name, srcname, height, stretch, grade, _) in enumerate(TREES):
+    o = load(srcname, height, stretch, grade); o.name = name
     co = np.array([v.co for v in o.data.vertices]); f = max(float(np.ptp(co[:, 0])), float(np.ptp(co[:, 1])), float(co[:, 2].max())) * 1.03
     o.scale = (1 / f,) * 3; o.location = (i + 0.5, 0, 0)  # cell i spans x in [i, i + 1], z in [0, 1]
     cells.append({'name': name, 'size': round(f, 2)})
