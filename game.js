@@ -1693,7 +1693,7 @@ function loft(secs, seg = 24, e = 3) {
 const SPEC = {
   m: 850, Iz: 1100, L: 3.6, a: 1.944, b: 1.656, h: 0.30, rw: 0.36,
   ratios: [17.1, 12.5, 9.87, 8.15, 6.93, 6.15, 5.43, 4.79], rev: -15, eta: 0.92,
-  Pmax: 880000, idle: 4000, limiter: 15000, upAt: 11900, maxBrake: 72000,
+  Pmax: 760000, idle: 4000, limiter: 15000, upAt: 11900, maxBrake: 72000,
 };
 function buildCar(color, ghost, lite) {
   const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
@@ -1806,7 +1806,8 @@ function mergeParts(group, keep) {
 
 /* ================= Car state & physics ================= */
 const setup = { level: 'easy', mode: 'solo', laps: 3, aiCount: 5, aiSkill: 0.45, map: 'terrain', width: 14, banking: true, walls: false, steerSens: 0.8, assist: true, steerMode: 'drag', autogas: false, quality: 'auto', aero: 0.5, bias: 57, tc: true, abs: true, auto: true, esc: true, brakeAssist: true, color: '#d7263d', reverse: false };
-const aeroOf = a => ({ CdA: 1.10 + a * 0.65, ClA: 2.9 + a * 2.2, front: 0.42 });
+// calibrated against 2024 F1 qualifying laps (OpenF1 telemetry, tools/f1/): ~310 km/h flat out, 0.7 g at 270 km/h, ~5.5 g fast corners
+const aeroOf = a => ({ CdA: 1.25 + a * 0.7, ClA: 3.6 + a * 2.4, front: 0.42 });
 const car = {};
 let carModel = buildCar(setup.color, false); scene.add(carModel.root);
 let ghostModel = buildCar(0xffffff, true); scene.add(ghostModel.root); ghostModel.root.visible = false;
@@ -1848,7 +1849,7 @@ function physicsStep(dt, inp) {
   const gs = W.grav[loc.k];
   const surf = al < hw ? 0 : (al < hw + 1.5 && W.kerb[loc.k]) ? 1 : (gs && Math.sign(loc.lat) === gs && al < hw + 17) ? 3 : 2; c.surf = surf;
   const off = surf === 2 && W.city; // city run-off is pavement, not grass
-  const mu0 = [1.8, 1.5, off ? 1.05 : 0.85, 0.6][surf], crr = [0.012, 0.02, off ? 0.02 : 0.06, 0.18][surf];
+  const mu0 = [1.9, 1.55, off ? 1.05 : 0.85, 0.6][surf], crr = [0.012, 0.02, off ? 0.02 : 0.06, 0.18][surf];
   const h = Sq(c.x, c.z, loc.k); c.y = h; normalS(c.x, c.z, loc.k, nrm);
   const cp = Math.cos(c.psi), sn = Math.sin(c.psi);
   fp.set(cp, 0, -sn); fp.addScaledVector(nrm, -fp.dot(nrm)).normalize();
@@ -2622,7 +2623,7 @@ function gridSlot(i) { const n = W.n; return { k: ((n - 8 - i * 5) % n + n) % n,
 // Speed a path allows at each sample: cornering limit with downforce, then braking (backward) and traction (forward) passes.
 // K = |curvature| along the path, step[k] = path length from sample k to k + 1
 function speedProfile(K, step) {
-  const n = W.n, ae = aeroOf(0.5), kA = 0.5 * 1.2 * ae.ClA / SPEC.m, mu = 1.72, v = new Float32Array(n);
+  const n = W.n, ae = aeroOf(0.5), kA = 0.5 * 1.2 * ae.ClA / SPEC.m, mu = 1.72, v = new Float32Array(n); // below the tyres' tarmac peak (1.9): this pace also sets the beginner brake assist
   for (let k = 0; k < n; k++) v[k] = Math.min(94, K[k] > mu * kA + 1e-5 ? Math.sqrt(mu * G / (K[k] - mu * kA)) : 94);
   for (let pass = 0; pass < 3; pass++) {
     for (let i = 2 * n - 1; i >= 0; i--) { const k = i % n, nk = (k + 1) % n, ab = mu * (G + kA * v[nk] * v[nk]) * 0.82; v[k] = Math.min(v[k], Math.sqrt(v[nk] * v[nk] + 2 * ab * step[k])); }
@@ -2681,15 +2682,20 @@ function racingLine() {
 function buildProfile() {
   const n = W.n, ds = W.ds;
   const K = Float32Array.from(W.kappa, Math.abs); smoothCirc(K, 3, 2);
+  const paceRef = speedProfile(K, new Float32Array(n).fill(ds)); // plain centreline pace: the yardstick for the computer drivers' speed
+  { // a short sharp corner (a junction cut, say) averages away in the smoothing: keep most of its local peak
+    const raw = Float32Array.from(W.kappa, Math.abs), w = Math.max(2, Math.round(8 / ds));
+    for (let k = 0; k < n; k++) { let m = 0; for (let o = -w; o <= w; o++) m = Math.max(m, raw[(k + o + n) % n]); K[k] = Math.max(K[k], 0.85 * m); }
+  }
   RACE.prof = speedProfile(K, new Float32Array(n).fill(ds)); // centreline pace: turn hints, brake assist, the preview lap
   const L = racingLine(); RACE.line = L.E; RACE.lineStep = L.step; RACE.lineProf = speedProfile(L.K, L.step);
   // computer drivers take the line but keep their old lap times: the line is 2-5 % quicker and the difficulty slider was tuned without it
-  let tc = 0, tl = 0; for (let k = 0; k < n; k++) { tc += ds / RACE.prof[k]; tl += L.step[k] / RACE.lineProf[k]; }
+  let tc = 0, tl = 0; for (let k = 0; k < n; k++) { tc += ds / paceRef[k]; tl += L.step[k] / RACE.lineProf[k]; }
   RACE.linePace = clamp(tl / tc, 0.9, 1);
   const ks = Float32Array.from(W.kappa); smoothCirc(ks, Math.round(30 / ds), 2);
   RACE.ks = ks;
 }
-const accelAt = v => clamp(SPEC.Pmax * 0.82 / (SPEC.m * Math.max(v, 4)), 0, 12.5) - 0.5 * 1.2 * 1.43 * v * v / SPEC.m;
+const accelAt = v => clamp(SPEC.Pmax * 0.82 / (SPEC.m * Math.max(v, 4)), 0, 12.5) - 0.5 * 1.2 * aeroOf(0.5).CdA * v * v / SPEC.m;
 function clearOpponents() { RACE.cars.forEach(c => disposeModel(c.model)); RACE.cars = []; }
 function setupGrid() {
   clearOpponents(); $('#results').hidden = true;
