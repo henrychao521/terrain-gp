@@ -570,7 +570,7 @@ function applyAtmo() {
   envRefresh();
 }
 // post-processing (high quality): multisampled render → subtle bloom → grade (vignette, saturation, grain, sRGB out)
-let qLevel = null; // graphics quality level, set by applyQuality
+let qLevel = null, qTier = -1; // graphics quality level and auto tier (-1: a fixed level), set by applyQuality
 const POST = { comp: null, on: false, grade: null, bloom: null };
 const GradeShader = {
   uniforms: { tDiffuse: { value: null }, time: { value: 0 }, res: { value: new THREE.Vector2(1, 1) } },
@@ -596,7 +596,7 @@ function setupPost() {
   } catch (e) { POST.comp = null; return false; }
 }
 function resize() {
-  const w = innerWidth, h = innerHeight; if (qLevel) renderer.setPixelRatio(pixelRatioFor(qLevel)); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  const w = innerWidth, h = innerHeight; if (qLevel) renderer.setPixelRatio(pixelRatioNow()); renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
   if (POST.comp) { POST.comp.setPixelRatio(renderer.getPixelRatio()); POST.comp.setSize(w, h); POST.grade.uniforms.res.value.set(w, h); }
 }
 addEventListener('resize', resize); resize();
@@ -1344,6 +1344,7 @@ function loadTreeAtlas() {
 }
 // near the camera an instanced item shows its Blender model; the cheap stand-in (far mesh) keeps the rest
 const LODS = [];
+let lodK = 1, detailR = 450; // set by applyQuality: share of the near-model budget, range of the tiles' street detail (m)
 function nearLod(grp, far, items, kinds, cap, radius) {
   // items: [{ m: Matrix4 model transform, kind, c?: Color }]; kinds: { name: parts }
   const meshes = {};
@@ -1358,9 +1359,9 @@ function updateLods() {
     const L = LODS[li];
     if (L.grp !== W.group) { LODS.splice(li, 1); continue; }
     if (L.at.distanceToSquared(camera.position) < 25) continue; L.at.copy(camera.position);
-    const cx = camera.position.x, cz = camera.position.z, near = [];
-    L.items.forEach((it, i) => { const e = it.m.elements, d = (e[12] - cx) ** 2 + (e[14] - cz) ** 2; if (d < L.r2) near.push([d, i]); });
-    near.sort((a, b) => a[0] - b[0]); if (near.length > L.cap) near.length = L.cap;
+    const cx = camera.position.x, cz = camera.position.z, near = [], cap = Math.max(1, Math.round(L.cap * lodK)), r2 = L.r2 * lodK; // fewer and closer at the lower auto tiers
+    L.items.forEach((it, i) => { const e = it.m.elements, d = (e[12] - cx) ** 2 + (e[14] - cz) ** 2; if (d < r2) near.push([d, i]); });
+    near.sort((a, b) => a[0] - b[0]); if (near.length > cap) near.length = cap;
     const now = new Set(near.map(n => n[1])), arr = L.far.instanceMatrix.array, cnt = {};
     for (const i of L.shown) if (!now.has(i)) for (let j = 0; j < 16; j++) arr[i * 16 + j] = L.farOrig[i * 16 + j];
     for (const i of now) ZERO.toArray(arr, i * 16);
@@ -1376,7 +1377,7 @@ function updateTiles(dt) {
   updateLods();
   if (!W.tiles || !W.tiles.length) return;
   for (const T of W.tiles) {
-    const near = Math.hypot(camera.position.x - T.cx, camera.position.z - T.cz) - T.r < 450;
+    const near = Math.hypot(camera.position.x - T.cx, camera.position.z - T.cz) - T.r < detailR;
     if (near !== T.near) { T.near = near; for (const o of T.sc.userData.detail) o.visible = near; }
   }
 }
@@ -1601,7 +1602,7 @@ function buildMeshes() {
     // nearest tiles to the start line first; window cages, signs and other street detail only on tiles near the camera
     W.tiles = [];
     const order = W.activeTiles.map(t => ({ t, d: Math.hypot((t.x0 + t.x1) / 2 - X[0], (t.z0 + t.z1) / 2 - Z[0]) })).sort((a, b) => a.d - b.d);
-    for (const { t } of order) loadTile(t.file, M).then(sc => { if (W.group !== grp) return; grp.add(sc); W.tiles.push({ sc, cx: (t.x0 + t.x1) / 2, cz: (t.z0 + t.z1) / 2, r: Math.hypot(t.x1 - t.x0, t.z1 - t.z0) / 2, near: null }); }).catch(e => console.warn('tile', t.file, e));
+    for (const { t } of order) loadTile(t.file, M).then(sc => { if (W.group !== grp) return; grp.add(sc); autoHold(1.5); W.tiles.push({ sc, cx: (t.x0 + t.x1) / 2, cz: (t.z0 + t.z1) / 2, r: Math.hypot(t.x1 - t.x0, t.z1 - t.z0) / 2, near: null }); }).catch(e => console.warn('tile', t.file, e));
     const inst = (list, geo, mat, set) => { if (!list.length) return; const im = new THREE.InstancedMesh(geo, mat, list.length), mm = new THREE.Matrix4(), qq = new THREE.Quaternion(), vv = new THREE.Vector3(), ss = new THREE.Vector3(), ee = new THREE.Euler(); list.forEach((it, i) => { set(it, vv, ee, ss); qq.setFromEuler(ee); mm.compose(vv, qq, ss); im.setMatrixAt(i, mm); }); im.castShadow = im.receiveShadow = true; grp.add(im); };
     const tankG = new THREE.CylinderGeometry(0.75, 0.75, 1.4, 12); tankG.translate(0, 1.6, 0);
     inst(props.tank, tankG, new THREE.MeshStandardMaterial({ color: lin(0xd5d9dd), roughness: 0.3, metalness: 0.8 }), ([x, y, z, sc], v, e, sv) => { v.set(x, y, z); e.set(0, 0, 0); sv.set(sc, sc, sc); });
@@ -2652,7 +2653,7 @@ function startRace(fromNet) {
   readSetup(); startAudio(); keepAwake();
   const go = () => {
     if (mapDirty) { buildWorld(); mapDirty = false; }
-    resetRace(); camInit = false; fpsProbe.reset();
+    resetRace(); camInit = false; autoHold(4);
     setupGrid(); if (!RACE.on) loadBest();
     $('#setup').hidden = true; $('#pause').hidden = true; $('#busy').hidden = true;
     state.mode = 'lights'; state.lightsT = 0; state.lightsOut = 4.2 + Math.random() * 1.2; $('#lights').hidden = false;
@@ -2678,7 +2679,7 @@ document.querySelectorAll('.step').forEach(b => b.onclick = () => {
   document.querySelectorAll('.pane').forEach(p => { p.hidden = p.dataset.pane !== b.dataset.pane; });
 });
 document.querySelectorAll('#steerMode button').forEach(b => b.onclick = () => { setup.steerMode = b.dataset.s; applyControls(); savePrefs(); });
-document.querySelectorAll('#quality button').forEach(b => b.onclick = () => { setup.quality = b.dataset.q; document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x === b)); applyQuality(setup.quality === 'auto' ? autoLevel() : setup.quality); savePrefs(); });
+document.querySelectorAll('#quality button').forEach(b => b.onclick = () => { setup.quality = b.dataset.q; document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x === b)); setQuality(); savePrefs(); });
 if (document.fullscreenEnabled) { $('#btnFull').hidden = false; $('#btnFull').onclick = () => { document.documentElement.requestFullscreen().then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {}); }; }
 // per-viewer preferences
 function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted, level: setup.level, volume, turnHints: setup.turnHints, preview: setup.preview, lineGuide: setup.lineGuide, tod: ATMO.tod, rain: ATMO.rain, tut: TUT.done })); } catch (e) { /* storage unavailable */ } }
@@ -2690,31 +2691,76 @@ function loadPrefs() {
     document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x.dataset.q === setup.quality));
   } catch (e) { /* storage unavailable */ }
 }
-// graphics quality: pixel ratio and shadow map size; "auto" steps down when the frame rate stays low
+// graphics quality: pixel ratio, shadow map, post-processing; "auto" starts at the device default and follows the frame time
 const autoLevel = () => COARSE ? 'mid' : 'high';
 // pixel ratio for a quality level, also capped by total pixels so big Retina screens don't render 6 MP through the bloom chain
 function pixelRatioFor(level) {
   const dprMax = level === 'high' ? 2 : level === 'mid' ? 1.5 : 1, maxPx = level === 'high' ? 3.7e6 : level === 'mid' ? 2.4e6 : 1.3e6;
   return Math.max(1, Math.min(window.devicePixelRatio || 1, dprMax, Math.sqrt(maxPx / (innerWidth * innerHeight))));
 }
-function applyQuality(level) {
-  if (level === qLevel) return; qLevel = level;
-  renderer.setPixelRatio(pixelRatioFor(level));
-  const shadows = level !== 'low', size = level === 'high' ? 2048 : 1024;
-  if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
-  sun.shadow.mapSize.set(size, size); sun.castShadow = shadows;
-  POST.on = level === 'high' && setupPost();
-  if (renderer.shadowMap.enabled !== shadows) { renderer.shadowMap.enabled = shadows; scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => { m.needsUpdate = true; }); }); }
-  resize();
+// the auto ladder, best first: named level (shadows, post), render scale on its pixel ratio, share of the near-model budget
+// (trees, barriers), range of the tiles' street detail (m). Tiers 0, 2 and 4 are exactly the fixed high, mid and low.
+const QTIERS = [
+  { q: 'high', rs: 1, lod: 1, det: 450 }, { q: 'high', rs: 0.85, lod: 1, det: 450 }, { q: 'mid', rs: 1, lod: 1, det: 450 }, { q: 'mid', rs: 0.85, lod: 1, det: 450 },
+  { q: 'low', rs: 1, lod: 1, det: 450 }, { q: 'low', rs: 0.85, lod: 0.5, det: 300 }, { q: 'low', rs: 0.7, lod: 0.25, det: 200 }];
+function pixelRatioNow() {
+  if (qTier < 0) return pixelRatioFor(qLevel);
+  let pr = Infinity; for (let i = AQ.start; i <= qTier; i++) pr = Math.min(pr, pixelRatioFor(QTIERS[i].q) * QTIERS[i].rs); // never more pixels than a better tier (1x screens)
+  return Math.max(0.6, pr);
+}
+function applyQuality(level, tier = -1) { // a fixed level ('low' | 'mid' | 'high'), or a tier of the auto ladder
+  const T = QTIERS[tier], lv = T ? T.q : level; if (lv === qLevel && tier === qTier) return;
+  qTier = T ? tier : -1; lodK = T ? T.lod : 1; detailR = T ? T.det : 450; LODS.forEach(L => L.at.set(1e9, 0, 0)); // near models re-picked on the next tile tick
+  if (lv !== qLevel) {
+    qLevel = lv; const shadows = lv !== 'low', size = lv === 'high' ? 2048 : 1024;
+    if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+    sun.shadow.mapSize.set(size, size); sun.castShadow = shadows;
+    POST.on = lv === 'high' && setupPost();
+    if (renderer.shadowMap.enabled !== shadows) { renderer.shadowMap.enabled = shadows; scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => { m.needsUpdate = true; }); }); }
+  }
+  resize(); qualityHint();
   if (POST.bloom) POST.bloom.strength = (ATMO_P[ATMO.tod] || ATMO_P.day).bloom; // a fresh composer starts with the daytime bloom
 }
-const fpsProbe = { t: 0, n: 0, reset() { this.t = 0; this.n = 0; } };
-function probeFps(dt) {
-  if (setup.quality !== 'auto' || state.mode !== 'race' || qLevel === 'low') return;
-  fpsProbe.t += dt; fpsProbe.n++;
-  if (fpsProbe.t >= 4) {
-    const fps = fpsProbe.n / fpsProbe.t; fpsProbe.reset();
-    if (fps < 28) { applyQuality(qLevel === 'high' ? 'mid' : 'low'); banner('已降低畫質以維持流暢', 'info'); }
+// auto: rAF intervals while racing, in one-second windows. Four windows in a row with the 95th percentile above 22 ms step one
+// tier down; forty in a row under 20 ms (no dropped frames) step one back up. A tier that has to be left again after such a
+// step up is not offered a third time. When three step downs in a row leave the frame time as it was although the main
+// thread has time to spare (a 30 Hz cap), they are undone and auto stays put for the session.
+// Not measured: the first seconds after a world build, a new tile, a change or a resume; stalls.
+const AQ = { start: 0, ceil: 0, hold: 0, on: false, buf: new Float32Array(512), n: 0, t: 0, b: 0, t0: 0, busy: 0, win: [], bad: 0, good: 0, upTo: [], check: null, useless: 0, from: 0, frozen: false, msg: '' };
+function setQuality() {
+  if (setup.quality !== 'auto') { applyQuality(setup.quality); return; }
+  AQ.start = AQ.ceil = AQ.from = QTIERS.findIndex(T => T.q === autoLevel());
+  Object.assign(AQ, { hold: 0, on: false, n: 0, t: 0, b: 0, win: [], bad: 0, good: 0, upTo: [], check: null, useless: 0, frozen: false, msg: '' });
+  applyQuality(null, AQ.start);
+}
+function qualityHint() { const el = $('#qNow'); if (el) el.textContent = setup.quality === 'auto' && qTier > AQ.start ? '目前已自動調低 ' + (qTier - AQ.start) + ' 級。' : ''; }
+function autoHold(s) { AQ.hold = Math.max(AQ.hold, s); AQ.n = AQ.t = AQ.b = 0; }
+function autoStep(tier, msg) { applyQuality(null, tier); AQ.bad = AQ.good = 0; AQ.win = []; autoHold(2.5); AQ.msg = msg; }
+function autoQuality(rawDt) { // first thing in a frame: rawDt is the previous frame's interval, AQ.busy its time in frame()
+  AQ.t0 = performance.now();
+  if (AQ.msg && bannerT <= 0 && state.mode === 'race') { banner(AQ.msg, 'info'); AQ.msg = ''; } // after the race's own banners
+  if (setup.quality !== 'auto' || qTier < 0 || AQ.frozen) return;
+  if (state.mode !== 'race' || RACE.done || document.hidden) { AQ.on = false; return; }
+  if (!AQ.on) { AQ.on = true; autoHold(1.5); }
+  if (rawDt > 0.25) { autoHold(1); return; } // a stall or a hidden tab, not a frame rate
+  if (AQ.hold > 0) { AQ.hold -= rawDt; return; }
+  AQ.buf[AQ.n++ & 511] = rawDt * 1000; AQ.b += AQ.busy; if ((AQ.t += rawDt) < 1) return;
+  const n = Math.min(AQ.n, 512), p95 = AQ.buf.slice(0, n).sort()[Math.floor(n * 0.95)];
+  AQ.win.push({ mean: AQ.t * 1000 / AQ.n, busy: AQ.b / AQ.n }); if (AQ.win.length > 4) AQ.win.shift(); AQ.n = AQ.t = AQ.b = 0;
+  const avg = k => AQ.win.reduce((s, w) => s + w[k], 0) / AQ.win.length, c = AQ.check;
+  if (c && ++c.w === 3) { // three windows after a step down, against the slow ones before it
+    AQ.check = null;
+    if (avg('mean') > c.mean * 0.96 && c.busy < c.mean * 0.5) { if (++AQ.useless === 1) AQ.from = c.from; } else AQ.useless = 0;
+    if (AQ.useless >= 3) { AQ.frozen = true; autoStep(AQ.from, '已恢復原本畫質'); return; }
+  }
+  AQ.bad = p95 > 22 ? AQ.bad + 1 : 0; AQ.good = p95 < 20 ? AQ.good + 1 : 0;
+  if (AQ.bad >= 4 && qTier < QTIERS.length - 1) {
+    if (AQ.upTo[qTier]) AQ.ceil = qTier + 1; // this tier already had its second chance
+    AQ.check = { w: 0, mean: avg('mean'), busy: avg('busy'), from: qTier };
+    autoStep(qTier + 1, '畫面自動調整為流暢模式');
+  } else if (AQ.good >= 40 && qTier > AQ.ceil) {
+    AQ.upTo[qTier - 1] = 1; AQ.check = null; AQ.useless = 0;
+    autoStep(qTier - 1, '畫面很順，自動提高畫質');
   }
 }
 
@@ -3234,7 +3280,7 @@ let last = performance.now(), acc = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   const rawDt = (now - last) / 1000, dt = Math.min(0.05, rawDt); last = now;
-  probeFps(rawDt);
+  autoQuality(rawDt);
   if (state.mode === 'race' || state.mode === 'lights') readInput(dt);
   if (state.mode === 'lights') {
     state.lightsT += dt; const on = Math.min(5, Math.floor(state.lightsT / 0.8)), out = state.lightsT >= state.lightsOut;
@@ -3266,13 +3312,14 @@ function frame(now) {
   tutStep(dt);
   remoteStep(dt); netTick(dt);
   hud(dt); standingsHud(dt); updateAudio();
+  AQ.busy = performance.now() - AQ.t0;
 }
 
 /* ================= Boot ================= */
 genPreset('hills', TER.seed);
 trackPts = randomTrack(20251019);
 loadPrefs(); applyLevel(); readSetup(); syncLabels(); applyControls(); applyRaceMode();
-applyQuality(setup.quality === 'auto' ? autoLevel() : setup.quality);
+setQuality();
 if (!COARSE && innerWidth >= 900) { $('#tele').hidden = false; $('#bTele').classList.add('on'); }
 drawEditorBase();
 buildWorld(); mapDirty = false;
