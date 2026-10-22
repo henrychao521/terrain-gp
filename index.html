@@ -117,6 +117,7 @@ body.previewing #tower,body.previewing #rightCol,body.previewing #tele,body.prev
 #lights{top:calc(var(--st) + 104px);left:50%;transform:translateX(-50%);display:flex;gap:8px;padding:8px 12px;border-radius:6px;background:#050608;border:1px solid #222;z-index:4}
 #lights i{width:24px;height:24px;border-radius:50%;background:#2a0b0b;border:2px solid #111}
 #lights i.on{background:#ff2a2a;box-shadow:0 0 16px #ff2a2a}
+#turnHint:not([hidden]) ~ #lights{top:calc(var(--st) + 140px)} /* start lights drop below a turn hint instead of covering it */
 #hudCredit{bottom:calc(var(--sb) + 2px);left:50%;transform:translateX(-50%);font-family:var(--f-body);font-size:9px;color:rgba(233,237,243,.55);white-space:nowrap;text-shadow:0 1px 2px #000}
 
 /* ---------- touch controls ---------- */
@@ -304,6 +305,27 @@ input[type=text]{background:var(--raise);border:1px solid var(--line);color:var(
   .mapcol{position:sticky;top:0;align-self:start}
   .sh-foot{padding:12px 26px;border-radius:0 0 10px 10px}
 }
+/* ---------- first-run tutorial: a coach card under the timing tower, clear of the road ahead, the turn hint, the start lights and the thumbs ---------- */
+#tut{top:calc(var(--st) + 136px);left:calc(var(--sl) + 8px);width:min(300px,max(220px,calc(50vw - 110px)));box-sizing:border-box;padding:2px 4px 10px 12px;z-index:5;display:flex;flex-direction:column;gap:4px;font-family:var(--f-body);border-color:rgba(255,210,63,.5)}
+.tu-h{display:flex;align-items:center;gap:8px}
+#tutNo{font:600 13px var(--f-data);color:var(--yellow)}#tutNo:empty{display:none}
+#tutTitle{flex:1;min-width:0;font-size:16px;color:var(--yellow)}
+#tutSkip{pointer-events:auto;flex:none;min-height:44px;padding:0 10px;font-size:13px;background:rgba(23,29,40,.85)} /* .hud ignores the pointer; the skip button must not */
+#tutText,#tutNote{margin:0;padding-right:8px;font-size:14px;line-height:1.55;color:#dfe6ee}
+#tutNote{font-size:13px;color:var(--yellow)}#tutNote:empty{display:none}
+#tut kbd{font-size:13px;padding:0 6px}
+.tsw{padding:0 5px;border-radius:3px;font-weight:700}.tsw.g{background:#2fd05a;color:#03240f}.tsw.y{background:#ffc21a;color:#2a2200}.tsw.r{background:#ff3b30;color:#fff}
+#tutChk{display:flex;gap:8px}#tutChk span{font-size:12px;line-height:1.5;padding:0 12px;border-radius:12px;border:1px solid var(--line);color:var(--muted)}#tutChk span.ok{background:var(--green);border-color:var(--green);color:#03240f}
+.tut-hl{outline:3px solid var(--yellow);outline-offset:3px;animation:tutPulse .9s ease-in-out infinite alternate}
+@keyframes tutPulse{to{outline-color:rgba(255,210,63,.15)}}
+body.tut-on #tele{visibility:hidden} /* phones: the telemetry panel would sit under the card */
+body.tut-on .zhint{display:none} /* the card says the same, and needs the room on short screens */
+@media (max-height:370px){#tutText{font-size:13px;line-height:1.45}}
+#tutOffer{position:fixed;inset:0;z-index:25;background:rgba(5,7,10,.6);display:grid;place-items:center;overflow:auto;padding:calc(var(--st) + 12px) max(12px,var(--sr)) calc(var(--sb) + 12px) max(12px,var(--sl))}
+#tutOffer .pcard{width:min(380px,100%)}#tutOffer .hint{margin:0}
+@media (min-width:900px) and (min-height:560px){#tut{top:calc(var(--st) + 204px);left:calc(var(--sl) + 8px);width:340px}#tutTitle{font-size:18px}#tutText{font-size:15px}body.tut-on #tele{visibility:visible}}
+@media (orientation:portrait) and (max-width:700px){#tut{top:calc(var(--st) + 212px);right:calc(var(--sr) + 8px);width:auto}}
+@media (prefers-reduced-motion:reduce){.tut-hl{animation:none}}
 #busy{position:fixed;inset:0;z-index:30;display:grid;place-items:center;background:rgba(5,7,10,.55);font-family:var(--f-display);font-size:20px;letter-spacing:.12em;font-weight:700;text-align:center;padding:16px}
 @media (prefers-reduced-motion:reduce){#banner,#steerRail{transition:none}}
 </style>
@@ -376,6 +398,12 @@ input[type=text]{background:var(--raise);border:1px solid var(--line);color:var(
 </div>
 <div id="banner" class="hud"></div>
 <div id="turnHint" class="hud panel" hidden><svg viewBox="-50 -50 100 100" aria-hidden="true"><path id="thArrow" d="" /></svg><div><b id="thText"></b><span id="thDist"></span><small id="thInfo"></small></div></div>
+<div id="tut" class="hud panel" hidden role="status" aria-live="polite">
+  <div class="tu-h"><span id="tutNo"></span><b id="tutTitle"></b><button class="btn" id="tutSkip" type="button">跳過教學</button></div>
+  <p id="tutText"></p>
+  <div id="tutChk" hidden><span id="tcL">◀ 左</span><span id="tcR">右 ▶</span></div>
+  <p id="tutNote"></p>
+</div>
 <div id="locPill" class="hud" hidden></div>
 <div id="locCard" class="hud"><small>進入</small><b id="lcRoad"></b><span id="lcNear"></span></div>
 <div id="preview" class="hud" hidden><div class="pv"><b>賽道預覽</b><span id="pvInfo"></span><i><em id="pvBar"></em></i></div><button class="btn" id="pvSkip" type="button">跳過 ▶</button></div>
@@ -589,6 +617,11 @@ input[type=text]{background:var(--raise);border:1px solid var(--line);color:var(
         </div>
 
         <div class="pane" data-pane="play" hidden>
+          <div class="group">
+            <h3>新手教學</h3>
+            <p class="hint">跟著提示實際跑一圈，學會油門、煞車、方向，還有路上顏色線和轉彎提示的意思。</p>
+            <button class="btn" id="tutReplay" type="button">重新跑一次新手教學</button>
+          </div>
           <div class="group only-touch">
             <h3>觸控操作</h3>
             <div class="seg" id="steerMode" style="grid-template-columns:repeat(2,minmax(0,1fr))">
@@ -642,6 +675,15 @@ input[type=text]{background:var(--raise);border:1px solid var(--line);color:var(
       <button class="btn" id="btnResume" type="button" hidden>繼續</button>
       <button class="primary" id="btnStart" type="button">開始比賽</button>
     </footer>
+  </div>
+</div>
+<div id="tutOffer" hidden>
+  <div class="pcard" role="dialog" aria-labelledby="toTitle">
+    <h2 id="toTitle">第一次開賽車？</h2>
+    <p class="hint">跟著教學實際跑一圈，大約一分鐘：學會油門、煞車、轉方向，還有路上顏色線和轉彎提示的意思。</p>
+    <button class="primary" id="toGo" type="button">帶我跑一圈</button>
+    <button class="btn" id="toNo" type="button">我會開，先不用</button>
+    <p class="hint">之後也可以在設定的「操作」頁重看。</p>
   </div>
 </div>
 <div id="busy" hidden>生成地形中…</div>
