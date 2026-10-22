@@ -35,8 +35,8 @@ def img_mat(name, file, rough=0.8, emit=0.0, metal=0.0, path=None):
     m = bpy.data.materials.new(name); m.use_nodes = True; nt = m.node_tree; bsdf = nt.nodes['Principled BSDF']
     tex = nt.nodes.new('ShaderNodeTexImage'); tex.image = bpy.data.images.load(path or f'{TEX}/{file}.png'); tex.extension = 'REPEAT'
     nt.links.new(tex.outputs['Color'], bsdf.inputs['Base Color']); bsdf.inputs['Roughness'].default_value = rough; bsdf.inputs['Metallic'].default_value = metal
-    npath = os.path.join(AI_DIR, 'normals', name + '_n.jpg') if path else None
-    if npath and os.path.exists(npath):  # Marigold normal map computed on Colab (tools/blender/ai_textures/normals)
+    npath = os.path.join(AI_DIR, 'normals', name + '_n.jpg') if path else f'{TEX}/{file}_n.png'  # AI textures keep theirs in ai_textures/normals
+    if npath and os.path.exists(npath):  # Marigold normal map computed on Colab
         nimg = nt.nodes.new('ShaderNodeTexImage'); nimg.image = bpy.data.images.load(npath); nimg.image.colorspace_settings.name = 'Non-Color'; nimg.extension = 'REPEAT'
         nmap = nt.nodes.new('ShaderNodeNormalMap'); nmap.inputs['Strength'].default_value = 0.8
         nt.links.new(nimg.outputs['Color'], nmap.inputs['Color']); nt.links.new(nmap.outputs['Normal'], bsdf.inputs['Normal'])
@@ -63,6 +63,9 @@ def ai_facade(h, hsh):
 FACADE_REPEAT = lambda mat: (12.0, 12.8) if mat.startswith('facade_ai') else (6.0, 6.4)  # metres covered by one texture tile
 MAT['storefront'] = img_mat('storefront', 'storefront', emit=0.35)
 MAT['signboards'] = img_mat('signboards', 'signboards', rough=0.4, emit=0.8)
+MAT['signs_h'] = img_mat('signs_h', 'signs_h', rough=0.4, emit=0.6)
+SHOP_AI = sorted(f[:-4] for f in os.listdir(TEX) if f.startswith('storefront_ai_') and f.endswith('.png') and not f.endswith('_n.png'))  # make_textures.py composites
+for k in SHOP_AI: MAT[k] = img_mat(k, k, emit=0.25)
 MAT['tile_blue'] = img_mat('tile_blue', 'tile_blue', rough=0.3); MAT['tile_gold'] = img_mat('tile_gold', 'tile_gold', rough=0.3); MAT['tile_orange'] = img_mat('tile_orange', 'tile_orange', rough=0.35)
 for k, rgb, r, mt in [('cage', (0.55, 0.56, 0.55), 0.5, 0.6), ('ac', (0.86, 0.86, 0.83), 0.6, 0), ('ceiling', (0.62, 0.6, 0.56), 0.9, 0), ('column', (0.7, 0.68, 0.63), 0.8, 0),
                       ('tank', (0.82, 0.84, 0.86), 0.3, 0.8), ('marble', (0.93, 0.92, 0.89), 0.35, 0), ('stone', (0.62, 0.58, 0.52), 0.85, 0), ('lacquer', (0.56, 0.1, 0.08), 0.45, 0),
@@ -71,8 +74,8 @@ for k, rgb, r, mt in [('cage', (0.55, 0.56, 0.55), 0.5, 0.6), ('ac', (0.86, 0.86
     MAT[k] = col_mat(k, rgb, r, mt)
 
 # ---------- mesh builder: one bmesh per material keeps the export to one primitive per material
-DETAIL = {'signboards'}
-INST = {'cage': [], 'ac': [], 'column': [], 'tank': []}
+DETAIL = {'signboards', 'signs_h'}
+INST = {'cage': [], 'ac': [], 'column': [], 'tank': [], 'scooter': []}
 def inst(kind, bx, by, z, yaw):  # blender coords -> int16 decimetres from the tile's south-west corner
     ox, oy = B(X0, Y0); INST[kind].extend((round((bx - ox) * 10), round((by - oy) * 10), round(z * 10), round(((yaw + math.pi) % (2 * math.pi) - math.pi) * 10000)))
 WALL_FACES = (0, 1, 3, 5)  # box faces kept for things fixed to a wall: the two ends, the front and the underside
@@ -350,13 +353,30 @@ def build_buildings():
             bld.quad(fam, (*A, low), (*Bp, low), (*Bp, top), (*A, top), [(per / rx, (low - base) / ry), ((per + L) / rx, (low - base) / ry), ((per + L) / rx, (top - base) / ry), (per / rx, (top - base) / ry)])
             if arcade:
                 (ix, iy), (jx, jy) = inner[i], inner[(i + 1) % n]; Ai, Bi = B(ix, iy), B(jx, jy); Li = math.hypot(jx - ix, jy - iy)
-                bld.quad('storefront' if street[i] else fam, (*Ai, base), (*Bi, base), (*Bi, g0), (*Ai, g0), [(0, 0), (Li / 12, 0), (Li / 12, 1), (0, 1)] if street[i] else None)
+                shop = SHOP_AI[(hsh // 3 + i) % len(SHOP_AI)] if SHOP_AI and hsh % 5 else 'storefront'
+                bld.quad(shop if street[i] else fam, (*Ai, base), (*Bi, base), (*Bi, g0), (*Ai, g0), [(0, 0), (Li / 12, 0), (Li / 12, 1), (0, 1)] if street[i] else None)
                 if street[i]:  # arcade ceiling and columns along the kerb side
                     bld.quad('ceiling', (*A, g0), (*Ai, g0), (*Bi, g0), (*Bp, g0)); stats['arcades'] += 1
+                    ux, uy = (bx - ax) / L, (by - ay) / L; nx_, ny_ = uy, -ux  # along the street, and out of the building
                     for k in range(int(L // 4.2) + 1):
                         f = min(1, (k * 4.2 + 0.3) / max(L, 0.1)); px, py = ax + (bx - ax) * f, ay + (by - ay) * f
-                        ux, uy = (bx - ax) / L, (by - ay) / L; px -= uy * 0.35; py += ux * 0.35
+                        px -= uy * 0.35; py += ux * 0.35
                         inst('column', *B(px, py), base, math.atan2(uy, ux))
+                    # 橫式招牌: one lit sign per bay on the fascia above the arcade
+                    for k in range(int(L // 4.2)):
+                        if R.random() < 0.25: continue
+                        s0, s1 = k * 4.2 + 0.45, k * 4.2 + 4.05; zs = g0 + 0.15 + R.choice((0, 0, 0.3))
+                        p0 = B(ax + ux * s0 + nx_ * 0.12, ay + uy * s0 + ny_ * 0.12); p1 = B(ax + ux * s1 + nx_ * 0.12, ay + uy * s1 + ny_ * 0.12)
+                        si = R.randrange(32); u0, v0 = (si % 4) / 4, 1 - (si // 4 + 1) / 8
+                        bld.quad('signs_h', (*p0, zs), (*p1, zs), (*p1, zs + 1.0), (*p0, zs + 1.0), [(u0, v0), (u0 + 0.25, v0), (u0 + 0.25, v0 + 0.125), (u0, v0 + 0.125)]); stats['hsigns'] = stats.get('hsigns', 0) + 1
+                    # 機車 parked side by side across the arcade, nose to the shops or to the street, gaps here and there
+                    s = 0.9
+                    while s < L - 0.9:
+                        if R.random() < 0.5: s += R.uniform(1.5, 4.0); continue
+                        px, py = ax + ux * s - nx_ * 1.55, ay + uy * s - ny_ * 1.55
+                        yaw = math.atan2(-ny_, -nx_) + (math.pi if R.random() < 0.5 else 0) + R.uniform(-0.15, 0.15)
+                        inst('scooter', *B(px, py), dem(px, py), yaw); stats['scooters'] = stats.get('scooters', 0) + 1
+                        s += R.uniform(0.68, 0.8)
             # street-face details on walk-ups: window cages, AC units, vertical signboards
             if lowrise and street[i] and L > 4:
                 ux, uy = (bx - ax) / L, (by - ay) / L; nx_, ny_ = uy, -ux; yaw = math.atan2(uy, ux)

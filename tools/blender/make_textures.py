@@ -93,6 +93,37 @@ def signboards(name):
         for j, ch in enumerate(wtxt): d.text((x0 + 64, y0 + 30 + step * j + step // 2), ch, font=tc_font(min(84, step - 8)), fill=fg, anchor='mm')
     im.save(f'{OUT}/{name}.png')
 
+SIGN_WORDS = ['藥局', '牙醫診所', '小兒科', '眼科', '早餐店', '自助餐', '牛肉麵', '水餃', '便當', '咖啡', '茶飲', '烘焙坊', '眼鏡行', '鐘錶',
+              '銀樓', '當舖', '五金行', '水電行', '機車行', '輪胎', '書局', '文具', '補習班', '才藝教室', '美髮', '洗衣', '花店', '房屋仲介', '彩券行',
+              '中醫診所', '鹹酥雞', '滷味', '火鍋', '燒臘', '豆漿', '電器行']
+def signs_h(name):
+    """32 horizontal shop signs (橫式招牌) hung on the arcade fascia, 512 x 128 each, laid out 4 x 8."""
+    W, H = 2048, 1024; im = Image.new('RGB', (W, H)); d = ImageDraw.Draw(im)
+    pal = [((200, 30, 36), (255, 245, 210)), ((250, 250, 245), (200, 20, 30)), ((20, 70, 160), (255, 255, 255)), ((250, 210, 30), (160, 20, 20)),
+           ((20, 120, 70), (255, 255, 230)), ((255, 255, 255), (20, 60, 150)), ((240, 120, 20), (255, 255, 255)), ((30, 30, 34), (250, 220, 60))]
+    words = R.sample(SIGN_WORDS, 32)
+    for i, wtxt in enumerate(words):
+        x0, y0 = (i % 4) * 512, (i // 4) * 128; bg, fg = pal[R.randrange(len(pal))]
+        d.rectangle([x0, y0, x0 + 511, y0 + 127], fill=bg); d.rectangle([x0 + 5, y0 + 5, x0 + 506, y0 + 122], outline=fg, width=4)
+        size = min(92, 420 // max(len(wtxt), 2)); d.text((x0 + 256, y0 + 64), wtxt, font=tc_font(size), fill=fg, anchor='mm')
+    im.save(f'{OUT}/{name}.png')
+
+def storefront_ai(ai_dir):
+    """AI shop fronts (tools/blender/ai_textures/shop_ai_*.jpg, no lettering) under a drawn shop-name band, 4 bays x 4.5 m;
+    their Marigold normal maps get a flat band to match."""
+    for f in sorted(os.listdir(ai_dir)):
+        if not (f.startswith('shop_ai_') and f.endswith('.jpg')): continue
+        name = 'storefront_ai_' + f[8:-4]; W, H, band = 1024, 384, 70
+        im = Image.new('RGB', (W, H)); d = ImageDraw.Draw(im); fnt = tc_font(46)
+        im.paste(Image.open(os.path.join(ai_dir, f)).convert('RGB').resize((W, H - band), Image.LANCZOS), (0, band))
+        for b, word in enumerate(R.sample(SHOPS, 4)):
+            x0 = b * 256; d.rectangle([x0, 0, x0 + 255, band], fill=(R.randint(30, 220), R.randint(30, 200), R.randint(30, 200)))
+            d.text((x0 + 128, band // 2 + 1), word, font=fnt, fill=(255, 255, 250) if R.random() < 0.7 else (250, 230, 40), anchor='mm')
+        im.save(f'{OUT}/{name}.png')
+        nf = os.path.join(ai_dir, 'normals', f[:-4] + '_n.jpg')
+        if os.path.exists(nf):
+            nm = Image.new('RGB', (W, H), (128, 128, 255)); nm.paste(Image.open(nf).convert('RGB').resize((W, H - band), Image.LANCZOS), (0, band)); nm.save(f'{OUT}/{name}_n.png')
+
 def roof(name):
     W = 256; im = Image.new('RGB', (W, W), (128, 126, 120)); d = ImageDraw.Draw(im)
     for _ in range(40): x, y = R.randrange(W), R.randrange(W); d.ellipse([x, y, x + R.randint(10, 60), y + R.randint(10, 60)], fill=(R.choice([95, 120, 140]), R.choice([118, 128, 140]), R.choice([96, 120, 128])))
@@ -110,5 +141,6 @@ mosaic_walkup('facade_mosaic_cream', (214, 204, 182), (186, 176, 156))
 mosaic_walkup('facade_mosaic_pink', (204, 176, 168), (176, 150, 142))
 mosaic_walkup('facade_mosaic_grey', (176, 178, 176), (150, 152, 150))
 glass_office('facade_glass'); concrete_old('facade_concrete'); storefront('storefront'); signboards('signboards'); roof('roof')
+signs_h('signs_h'); storefront_ai(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai_textures'))
 glazed('tile_blue', (28, 62, 128), (70, 120, 196)); glazed('tile_gold', (176, 120, 30), (236, 186, 70)); glazed('tile_orange', (150, 70, 30), (210, 120, 60))
 print('textures in', OUT, sorted(os.listdir(OUT)))
