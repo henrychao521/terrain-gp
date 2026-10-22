@@ -30,6 +30,7 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 # thresholds (README.md, "各項檢查")
 AI_CONTACT_PER_240S = 12.0  # summed car-to-car contact seconds, scaled to a 240 s race
 AI_OFFROAD_PER_240S = 2.0   # summed off-road seconds of all computer cars, scaled to a 240 s race
+AI_PLAYER_CONTACT_PER_240S = 1.0  # computer cars touching the player's car parked on the grid, scaled to a 240 s race
 AI_SCALE_MIN_SECS = 120     # shorter runs are judged as if they lasted this long: the start alone has some contact
 
 
@@ -126,7 +127,7 @@ def track(br, url, rep, presets, walls, line, tile_timeout, shots=None):
 NEEDS_AI = ['W', 'RACE', 'state', 'setup', 'setupGrid', 'opponentsStep', 'wrapGap', 'car', 'CITY']
 
 
-def ai(br, url, rep, presets, seeds, secs, count, skill, max_contact, max_offroad):
+def ai(br, url, rep, presets, seeds, secs, count, skill, max_contact, max_offroad, max_player=AI_PLAYER_CONTACT_PER_240S):
     scale = 240 / max(secs, AI_SCALE_MIN_SECS)
     for c in presets:
         for seed in seeds:
@@ -141,7 +142,8 @@ def ai(br, url, rep, presets, seeds, secs, count, skill, max_contact, max_offroa
                 if abs(r['skillSetting'] - skill) > 1e-6 or r['cars'] != count:
                     raise H.HarnessError(f'the race ran with skill {r["skillSetting"]} / {r["cars"]} cars, not {skill} / {count}')
                 r = {'preset': c, 'name': name, 'seed': seed, 'secs': secs, **r,
-                     'contactPer240s': round(r['contactSec'] * scale, 1), 'offroadPer240s': round(r['offroadSec'] * scale, 1)}
+                     'contactPer240s': round(r['contactSec'] * scale, 1), 'offroadPer240s': round(r['offroadSec'] * scale, 1),
+                     'playerContactPer240s': round(r['playerContactSec'] * scale, 2)}
                 tag = f'preset {c} seed {seed}'
                 if r['lappedCars']:
                     rep.fail(f'{tag}: {r["lappedCars"]} computer car(s) a lap or more behind the leader (spread {r["spread"]} m, lap {r["trackM"]} m)')
@@ -149,6 +151,8 @@ def ai(br, url, rep, presets, seeds, secs, count, skill, max_contact, max_offroa
                     rep.fail(f'{tag}: contact {r["contactSec"]} s in {secs:g} s = {r["contactPer240s"]} s per 240 s (limit {max_contact})')
                 if r['offroadPer240s'] > max_offroad:
                     rep.fail(f'{tag}: off-road {r["offroadSec"]} s in {secs:g} s = {r["offroadPer240s"]} s per 240 s (limit {max_offroad})')
+                if r['playerContactPer240s'] > max_player:
+                    rep.fail(f'{tag}: computer cars touched the parked player for {r["playerContactSec"]} s in {secs:g} s = {r["playerContactPer240s"]} s per 240 s (limit {max_player})')
                 rep.results.append(r)
             finally:
                 rep.page(g)
@@ -264,6 +268,7 @@ def main():
     p.add_argument('--skill', type=float, default=0.45, help='computer strength 0..1 (default 0.45, the menu default)')
     p.add_argument('--max-contact', type=float, default=AI_CONTACT_PER_240S, help=f'contact seconds per 240 s (default {AI_CONTACT_PER_240S})')
     p.add_argument('--max-offroad', type=float, default=AI_OFFROAD_PER_240S, help=f'off-road seconds per 240 s (default {AI_OFFROAD_PER_240S})')
+    p.add_argument('--max-player-contact', type=float, default=AI_PLAYER_CONTACT_PER_240S, help=f'seconds of touching the parked player per 240 s (default {AI_PLAYER_CONTACT_PER_240S})')
     p = sub.add_parser('envelope', help='car performance envelope on flat tarmac')
     p.add_argument('--setup', help='JSON overrides for the game setup, on top of the calibration setup (pro, TC and ABS on, '
                    'ESC off), e.g. \'{"aero": 0.2}\' or \'{"level": "easy", "esc": true}\'')
@@ -306,7 +311,7 @@ def main():
                 elif a.check == 'line':
                     track(br, url, rep, a.presets, False, True, 0, a.shots)
                 elif a.check == 'ai':
-                    ai(br, url, rep, a.presets, a.seeds, a.secs, a.count, a.skill, a.max_contact, a.max_offroad)
+                    ai(br, url, rep, a.presets, a.seeds, a.secs, a.count, a.skill, a.max_contact, a.max_offroad, a.max_player_contact)
                 elif a.check == 'envelope':
                     envelope(br, url, rep, a.setup)
                 elif a.check == 'bench':

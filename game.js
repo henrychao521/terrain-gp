@@ -376,19 +376,36 @@ function cityPreset(M, i) {
     p.alt = c.length ? c.slice(0, 6) : [p.node]; return p; });
 }
 
-function astar(g, s, t) {
-  const n = g.x.length, dist = new Float64Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1), done = new Uint8Array(n);
+// directed edges in one flat list (streets, then viaducts) so a search state can be "the edge just driven"
+function graphEdges(g) {
+  if (g.E) return g.E;
+  const n = g.x.length, off = new Int32Array(n + 1), fr = [], to = [], w = [], el = [];
+  for (let u = 0; u < n; u++) { off[u] = to.length; [g.adj[u], g.adjE ? g.adjE[u] : []].forEach((a, f) => { for (let e = 0; e < a.length; e += 2) { fr.push(u); to.push(a[e]); w.push(a[e + 1]); el.push(f); } }); }
+  off[n] = to.length; return (g.E = { off, fr: Int32Array.from(fr), to: Int32Array.from(to), w: Float64Array.from(w), el: Uint8Array.from(el) });
+}
+// turning back by more than 100° (heading over the last 8 m against the next edge) costs up to 400 m of driving:
+// where one-way carriageways touch at a node (a Y junction, a median crossing) the cheapest way is otherwise to drive past the turn and come back sharply
+const TURN_FREE = 100, TURN_COST = 400;
+function turnCost(g, bx, bz, u, v) {
+  const ax = g.x[u] - bx, az = g.z[u] - bz, cx = g.x[v] - g.x[u], cz = g.z[v] - g.z[u], c = (ax * cx + az * cz) / (Math.hypot(ax, az) * Math.hypot(cx, cz) + 1e-9);
+  const d = Math.acos(clamp(c, -1, 1)) * 180 / Math.PI; return d > TURN_FREE ? TURN_COST * (d - TURN_FREE) / (180 - TURN_FREE) : 0;
+}
+// A* over directed edges with turn costs; came: the node driven from into s (the previous leg), -1 if none
+function astar(g, s, t, came = -1) {
+  const E = graphEdges(g), m = E.to.length, dist = new Float64Array(m + 1).fill(Infinity), prev = new Int32Array(m + 1).fill(-1), done = new Uint8Array(m + 1), elev = setup.elevated && g.adjE;
   const hx = g.x[t], hz = g.z[t], heap = [];
   const push = (f, i) => { heap.push([f, i]); let c = heap.length - 1; while (c > 0) { const p = (c - 1) >> 1; if (heap[p][0] <= heap[c][0]) break; [heap[p], heap[c]] = [heap[c], heap[p]]; c = p; } };
   const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let c = 0; for (;;) { const l = 2 * c + 1, r = l + 1; let m = c; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === c) break; [heap[m], heap[c]] = [heap[c], heap[m]]; c = m; } } return top; };
-  dist[s] = 0; push(0, s);
+  dist[m] = 0; push(0, m); let end = -1; // state m: standing on s
   while (heap.length) {
-    const [, u] = pop(); if (done[u]) continue; done[u] = 1; if (u === t) break;
-    for (const a of setup.elevated && g.adjE ? [g.adj[u], g.adjE[u]] : [g.adj[u]])
-      for (let e = 0; e < a.length; e += 2) { const v = a[e], nd = dist[u] + a[e + 1]; if (nd < dist[v]) { dist[v] = nd; prev[v] = u; push(nd + Math.hypot(g.x[v] - hx, g.z[v] - hz), v); } }
+    const [, q] = pop(); if (done[q]) continue; done[q] = 1;
+    const u = q === m ? s : E.to[q]; if (u === t) { end = q; break; }
+    let b = q === m ? came : E.fr[q]; // heading in: from a node at least 8 m back
+    for (let r = q, run = 0; r !== m && b >= 0; ) { run += Math.hypot(g.x[E.to[r]] - g.x[E.fr[r]], g.z[E.to[r]] - g.z[E.fr[r]]); b = E.fr[r]; if (run >= 8) break; r = prev[r]; if (r === m) { if (came >= 0) b = came; break; } }
+    for (let e = E.off[u]; e < E.off[u + 1]; e++) { if (E.el[e] && !elev) continue; const v = E.to[e], nd = dist[q] + E.w[e] + (b >= 0 ? turnCost(g, g.x[b], g.z[b], u, v) : 0); if (nd < dist[e]) { dist[e] = nd; prev[e] = q; push(nd + Math.hypot(g.x[v] - hx, g.z[v] - hz), e); } }
   }
-  if (!done[t]) return null;
-  const path = []; for (let v = t; v >= 0; v = prev[v]) path.push(v); path.reverse(); path.cost = dist[t]; return path;
+  if (end < 0) return null;
+  const path = []; for (let r = end; r !== m; r = prev[r]) path.push(E.to[r]); path.push(s); path.reverse(); path.cost = dist[end]; return path;
 }
 // number of U-turns along a node path: the heading reverses (> 150°) within about 30 m
 function uTurns(g, path) {
@@ -409,15 +426,25 @@ function choosePresetNodes(M, pts) {
   return pts.map((p, i) => ({ ...p, node: nodes[i] }));
 }
 function routeLoop(M, pts) {
-  const g = M.graph, out = [];
+  const g = M.graph, n = pts.length, legs = [], near = (v, a) => Math.hypot(g.x[v] - g.x[a], g.z[v] - g.z[a]) < 45;
   // preset waypoints carry nearby carriageway nodes: pick the ones that give the cheapest legs without U-turns
   if (pts.every(p => p.alt)) pts = choosePresetNodes(M, pts);
-  for (let i = 0; i < pts.length; i++) {
-    const a = pts[i].node, b = pts[(i + 1) % pts.length].node, p = a === b ? [a] : astar(g, a, b);
-    if (!p) { out.push([g.x[a], g.z[a]]); continue; }
-    for (let k = 0; k < p.length - 1; k++) out.push([g.x[p[k]], g.z[p[k]]]);
+  for (let i = 0; i < n; i++) { const a = pts[i].node, b = pts[(i + 1) % n].node, l = legs[i - 1]; legs.push(a === b ? [a] : astar(g, a, b, l && l.length > 1 ? l[l.length - 2] : -1) || [a, b]); }
+  // the way in and the way out of a waypoint meeting at a sharp angle (it sits where carriageways cross, e.g. the tip of a Y junction):
+  // route from 60 m before it to the next waypoint with turns priced and keep that if it still passes within 45 m (a slip road)
+  let moved0 = false;
+  for (let i = 0; i < n && n > 1; i++) {
+    const L = legs[(i - 1 + n) % n], a = pts[i].node, N = legs[i]; if (L.length < 2 || N.length < 2) continue;
+    let j = L.length - 1, run = 0; while (j > 0 && run < 8) { run += Math.hypot(g.x[L[j]] - g.x[L[j - 1]], g.z[L[j]] - g.z[L[j - 1]]); j--; }
+    if (!turnCost(g, g.x[L[j]], g.z[L[j]], a, N[1])) continue;
+    let k = L.length - 1; run = 0; while (k > 0 && run < 60) { run += Math.hypot(g.x[L[k]] - g.x[L[k - 1]], g.z[L[k]] - g.z[L[k - 1]]); k--; }
+    const q = astar(g, L[k], pts[(i + 1) % n].node, k > 0 ? L[k - 1] : -1);
+    if (!q || !q.some((v, x) => x > 0 && near(v, a))) continue;
+    legs[(i - 1 + n) % n] = L.slice(0, k + 1); legs[i] = q; if (i === 0) moved0 = true;
   }
-  return out;
+  let out = []; for (const l of legs) for (let k = 0; k < l.length - 1; k++) out.push(l[k]);
+  if (moved0) { let s0 = 0; out.forEach((v, k) => { if (Math.hypot(g.x[v] - g.x[pts[0].node], g.z[v] - g.z[pts[0].node]) < Math.hypot(g.x[out[s0]] - g.x[pts[0].node], g.z[out[s0]] - g.z[pts[0].node])) s0 = k; }); out = out.slice(s0).concat(out.slice(0, s0)); } // the start stays at the first waypoint
+  return out.map(v => [g.x[v], g.z[v]]);
 }
 function resampleLoop(P, step) {
   const n = P.length, cum = [0];
@@ -2902,7 +2929,7 @@ function opponentsStep(dt) {
   for (const c of RACE.cars) {
     if (state.t < c.delay) { poseOpponent(c); continue; }
     const sm = ((c.s % L) + L) % L, k = Math.floor(sm / W.ds) % n;
-    const cool = c.finT >= 0 ? 0.75 : 1, lo = -(W.hwR[k] - 1.2), hi = W.hwL[k] - 1.2;
+    const cool = c.finT >= 0 ? 0.75 : 1; let lo = -(W.hwR[k] - 1.2), hi = W.hwL[k] - 1.2;
     const lead = (k + Math.round(Math.max(6, c.v * 0.7) / W.ds)) % n;
     const turn = Math.sign(RACE.ks[(k + Math.round(Math.max(40, c.v * 2.5) / W.ds)) % n]); // inside of the next corner (+ = left)
     const straight = Math.abs(RACE.ks[k]) < 1 / 400;
@@ -2912,6 +2939,15 @@ function opponentsStep(dt) {
     const braking = RACE.lineProf[(k + Math.round(30 / W.ds)) % n] < RACE.lineProf[k] - 4;
     if (c.errT <= 0 && braking && Math.random() < dt * (1 - c.skill) * 0.25) c.errT = 2.2;
     if (c.errT > 0) { c.errT -= dt; if (c.errT > 1.4) vT *= 1.06; else { vT *= 0.86; latT = -turn * (Math.min(W.hwL[k], W.hwR[k]) - 1.4); } }
+    // a stopped car ahead (a spun or parked player, a car stuck at the wall), from braking distance on: keep to its free side, a car's width
+    // (2.4 m) off its line, so every rule below works inside that lane; no such lane: brake to a crawl 9 m behind it and squeeze through the widest gap
+    let stop = null, side = 0;
+    for (const o of others) { if (o === c || o.v >= 4 || state.t < (o.delay || 0)) continue; const d = wrapGap(o.s - c.s); if (d > -5 && d < 25 + c.v * c.v / 40 && (!stop || d < stop.d)) stop = { o, d }; }
+    if (stop) {
+      const o = stop.o, roomL = hi - o.lat, roomR = o.lat - lo, cur = c.lat >= o.lat ? 1 : -1;
+      side = (cur > 0 ? roomL : roomR) >= 2.4 ? cur : (cur > 0 ? roomR : roomL) >= 2.4 ? -cur : 0;
+      if (side > 0) lo = o.lat + 2.4; else if (side < 0) hi = o.lat - 2.4; else if (stop.d > 0) vT = Math.min(vT, Math.max(3, Math.sqrt(24 * Math.max(0, stop.d - 9))));
+    }
     let ahead = null, behind = null;
     for (const o of others) {
       if (o === c) continue;
@@ -2945,6 +2981,10 @@ function opponentsStep(dt) {
     // defend: a quicker car close behind and a corner coming, so cover the inside once
     if (behind && behind.d < -8 && c.defT <= 0 && c.aggr > 0.45 && behind.o.v > c.v + 0.8 && turn && !c.pass) c.defT = 3.5; // not once they are alongside
     if (c.defT > 0) { c.defT -= dt; if (c.defT > 1.8 && !c.pass && c.errT <= 0) latT = clamp(turn * Math.min(Math.abs(lo), hi) * 0.7, lo, hi); }
+    if (side) { // in the lane beside a stopped car: aim 2.8 m off its line, and slow down if the move to 2.15 m (clear of it) would not be done before the noses meet
+      const o = stop.o, e = side * (o.lat + side * 2.15 - c.lat); latT = side > 0 ? clamp(latT, Math.min(lo + 0.4, hi), hi) : clamp(latT, lo, Math.max(hi - 0.4, lo)); latRate = Math.max(latRate, 3.8);
+      const D = Math.abs(latT - c.lat); if (e > 0 && stop.d > -2) vT = Math.min(vT, o.v + Math.max(0, stop.d - 5) * 1.1 / Math.log(Math.max(1.01, D / Math.max(0.05, D - e)))); // the lateral move closes in on latT at 1.1/s
+    }
     c.stuckT = c.v < 2 && c.finT !== c.finT ? (c.stuckT || 0) + dt : 0; // watchdog: stopped for 2 s, crawl out to the widest gap
     if (c.stuckT > 2) { latT = (hi - c.lat > c.lat - lo) ? hi : lo; vT = Math.max(vT, 5); latRate = 4; }
     if (c.v < vT) c.v = Math.min(vT, c.v + accelAt(c.v) * (0.88 + 0.12 * c.skill) * dt); else c.v = Math.max(vT, c.v - 34 * dt);

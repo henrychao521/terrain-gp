@@ -1,5 +1,7 @@
 // Computer drivers raced faster than real time: opponentsStep() with a fixed 1/60 s step and a seeded Math.random,
 // nothing rendered. The player's car stays parked on its grid slot, so every lap the field also passes a stopped car.
+// Nothing moves the player here (no physicsStep), so a computer car that touches it would leave it displaced with a stale
+// speed the drivers then react to: it is put back on its slot after every step and the touch is counted as playerContactSec.
 // Run after the race has been started from the menu (race mode "ai"), so the world and the grid exist.
 // contactSec: summed time of every pair of cars closer than 4.4 m along and 1.8 m across the road.
 // offroadSec: summed time of cars with a wheel off the tarmac (lateral offset beyond half width - 0.85 m).
@@ -12,11 +14,13 @@ async ({ secs, seed, count, skill }) => {
   // setupGrid() reads these; the menu has already copied its sliders into setup at start, so set them here
   Object.assign(T.setup, { mode: 'ai', aiCount: count, aiSkill: skill, laps: 1e6 });
   T.setupGrid(); S.mode = 'sim'; S.t = 0; R.go();
-  const n = W.n, L = W.len, cars = R.cars; let contacts = 0, offroad = 0, overtakes = 0, steps = 0;
+  const n = W.n, L = W.len, cars = R.cars, me = T.car, park = { x: me.x, z: me.z, vx: me.vx, vy: me.vy, r: me.r, psi: me.psi };
+  let contacts = 0, offroad = 0, overtakes = 0, steps = 0, touch = 0;
   const order = () => cars.map((c, i) => [c.s, i]).sort((x, y) => y[0] - x[0]).map(x => x[1]);
   let prev = order(); const where = {}, kind = {};
   for (let t = 0; t < secs; t += dt) {
     T.opponentsStep(dt); S.t += dt; steps++;
+    if (me.x !== park.x || me.z !== park.z || me.vx !== park.vx || me.vy !== park.vy) { touch++; Object.assign(me, park); } // bump() pushed the parked car
     for (let i = 0; i < cars.length; i++) {
       const c = cars[i], k = Math.floor((((c.s % L) + L) % L) / W.ds) % n;
       if (c.lat > W.hwL[k] - 0.85 || c.lat < -(W.hwR[k] - 0.85)) offroad++;
@@ -36,7 +40,7 @@ async ({ secs, seed, count, skill }) => {
   return {
     cars: cars.length, skillSetting: T.setup.aiSkill, skillMean: +(cars.reduce((s, c) => s + c.skill, 0) / cars.length).toFixed(3),
     trackM: Math.round(L), laps: Math.max(...cars.map(c => c.lap)), overtakes,
-    contactSec: +(contacts * dt).toFixed(1), offroadSec: +(offroad * dt).toFixed(1),
+    contactSec: +(contacts * dt).toFixed(1), offroadSec: +(offroad * dt).toFixed(1), playerContactSec: +(touch * dt).toFixed(2),
     best: cars.map(c => isFinite(c.best) ? +c.best.toFixed(1) : null),
     spread: Math.round(lead - Math.min(...cars.map(c => c.s))), lappedCars: cars.filter(c => lead - c.s >= L).length,
     contactWhere: Object.entries(where).sort((x, y) => y[1] - x[1]).slice(0, 5).map(([kk, v]) => ({ k: +kk, sec: +v.toFixed(1), road: W.rname[+kk], hwL: +W.hwL[+kk].toFixed(1), hwR: +W.hwR[+kk].toFixed(1) })),
