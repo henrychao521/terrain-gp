@@ -2729,6 +2729,8 @@ function poseModel(mdl, x, z, psi, k = -1) {
   fp.set(Math.cos(psi), 0, -Math.sin(psi)); fp.addScaledVector(nrm, -fp.dot(nrm)).normalize(); rt.crossVectors(fp, nrm);
   m4.makeBasis(fp, nrm, rt); mdl.root.quaternion.setFromRotationMatrix(m4); mdl.root.position.set(x, y, z);
 }
+// Racecraft on top of the racing line: slipstream, committed overtakes (inside of the next corner, or the side with room),
+// one defensive move to the inside, keeping a car's width when side by side, and now and then a late brake that runs wide.
 function opponentsStep(dt) {
   if (!RACE.on) return;
   const L = W.len, n = W.n, pv = Math.hypot(car.vx, car.vy);
@@ -2737,19 +2739,53 @@ function opponentsStep(dt) {
   for (const c of RACE.cars) {
     if (state.t < c.delay) { poseOpponent(c); continue; }
     const sm = ((c.s % L) + L) % L, k = Math.floor(sm / W.ds) % n;
-    const cool = c.finT >= 0 ? 0.75 : 1;
-    const hwk = Math.min(W.hwL[k], W.hwR[k]), lead = (k + Math.round(Math.max(6, c.v * 0.7) / W.ds)) % n;
-    let vT = RACE.lineProf[k] * RACE.linePace * c.skill * cool, latT = RACE.line[lead];
+    const cool = c.finT >= 0 ? 0.75 : 1, lo = -(W.hwR[k] - 1.2), hi = W.hwL[k] - 1.2;
+    const lead = (k + Math.round(Math.max(6, c.v * 0.7) / W.ds)) % n;
+    const turn = Math.sign(RACE.ks[(k + Math.round(Math.max(40, c.v * 2.5) / W.ds)) % n]); // inside of the next corner (+ = left)
+    const straight = Math.abs(RACE.ks[k]) < 1 / 400;
+    let vT = RACE.lineProf[k] * RACE.linePace * c.skill * cool, latT = RACE.line[lead], latRate = 3.2;
+    if (c.aggr === undefined) { c.aggr = clamp(0.35 + c.skill * 0.5 + (Math.random() - 0.5) * 0.3, 0.2, 1); c.pass = null; c.defT = 0; c.errT = 0; }
+    // a mistake: braking a little late into a corner, then running wide and losing speed
+    const braking = RACE.lineProf[(k + Math.round(30 / W.ds)) % n] < RACE.lineProf[k] - 4;
+    if (c.errT <= 0 && braking && Math.random() < dt * (1 - c.skill) * 0.25) c.errT = 2.2;
+    if (c.errT > 0) { c.errT -= dt; if (c.errT > 1.4) vT *= 1.06; else { vT *= 0.86; latT = -turn * (Math.min(W.hwL[k], W.hwR[k]) - 1.4); } }
+    let ahead = null, behind = null;
     for (const o of others) {
       if (o === c) continue;
-      const d = wrapGap(o.s - c.s);
-      if (d > 0 && d < 28 && Math.abs(o.lat - c.lat) < 2.6) {
-        const side = o.lat > 0 ? -1 : 1, passLat = clamp(o.lat + side * 3.4, -(hwk - 1.2), hwk - 1.2);
-        if (Math.abs(passLat - o.lat) > 2.6 && d > 6) latT = passLat; else vT = Math.min(vT, o.v + Math.max(0, d - 8) * 0.6);
+      const d = wrapGap(o.s - c.s), dl = o.lat - c.lat;
+      if (d > 0 && d < 40 && (!ahead || d < ahead.d)) ahead = { o, d };
+      if (d < 0 && d > -18 && (!behind || d > behind.d)) behind = { o, d };
+      const stopped = o.v < 4; // a stopped car (a spun player, say) is something to drive round, not a pace to match
+      if (Math.abs(d) < 5 && Math.abs(dl) < 2.3) { // side by side: keep a car's width, the one behind gives way
+        const away = Math.sign(-dl) || (c.lat > 0 ? -1 : 1); latT = clamp(o.lat + away * 2.4, lo, hi); latRate = 4;
+        if (d > 0.5) vT = Math.min(vT, stopped ? 6 : o.v);
       }
+      if (d > 0 && d < 8 && Math.abs(dl) < 2.0) vT = Math.min(vT, stopped ? Math.max(3, (d - 3) * 1.5) : o.v - (8 - d) * 0.8); // nose to a gearbox: drop back to 8 m until clear to the side
     }
+    if (ahead) {
+      const { o, d } = ahead, dl = o.lat - c.lat;
+      if (straight && d > 5 && d < 30 && Math.abs(dl) < 1.6) vT *= 1.03; // slipstream
+      const closing = c.v > o.v + 0.3 || vT > o.v + 1;
+      if (c.pass && c.pass.o !== o) c.pass = null;
+      if (!c.pass && (closing || o.v < 4) && d < 32 && Math.abs(dl) < 2.4) { // commit to a side: inside of the next corner if there is room, else the wider side
+        const roomL = hi - o.lat, roomR = o.lat - lo, want = turn || (roomL > roomR ? 1 : -1);
+        const side = (want > 0 ? roomL : roomR) >= 2.4 ? want : (want > 0 ? roomR : roomL) >= 2.4 ? -want : 0;
+        if (side) c.pass = { o, side, t: 0 };
+        else if (o.v < 4) c.pass = { o, side: roomL > roomR ? 1 : -1, t: 0 }; // squeeze past a stopped car on the wider side
+      }
+      if (c.pass) {
+        c.pass.t += dt; latT = clamp(o.lat + c.pass.side * 2.6, lo, hi); latRate = 3.8;
+        if (Math.abs(latT - o.lat) < 2.2 && d < 9) vT = Math.min(vT, o.v < 4 ? 5 : o.v + Math.max(0, d - 6) * 0.6); // squeezed: wait (or creep past a stopped car)
+        if (c.pass.t > 7) c.pass = null;
+      } else if (d < 26 && Math.abs(dl) < 2.3) vT = Math.min(vT, o.v + Math.max(0, d - 8) * 0.6); // no room: follow
+    } else c.pass = null;
+    // defend: a quicker car close behind and a corner coming, so cover the inside once
+    if (behind && behind.d < -8 && c.defT <= 0 && c.aggr > 0.45 && behind.o.v > c.v + 0.8 && turn && !c.pass) c.defT = 3.5; // not once they are alongside
+    if (c.defT > 0) { c.defT -= dt; if (c.defT > 1.8 && !c.pass && c.errT <= 0) latT = clamp(turn * Math.min(Math.abs(lo), hi) * 0.7, lo, hi); }
+    c.stuckT = c.v < 2 && c.finT !== c.finT ? (c.stuckT || 0) + dt : 0; // watchdog: stopped for 2 s, crawl out to the widest gap
+    if (c.stuckT > 2) { latT = (hi - c.lat > c.lat - lo) ? hi : lo; vT = Math.max(vT, 5); latRate = 4; }
     if (c.v < vT) c.v = Math.min(vT, c.v + accelAt(c.v) * (0.88 + 0.12 * c.skill) * dt); else c.v = Math.max(vT, c.v - 34 * dt);
-    c.latV = clamp((latT - c.lat) * 1.1, -3.2, 3.2); c.lat = clamp(c.lat + c.latV * dt, -(W.hwR[k] - 1), W.hwL[k] - 1);
+    c.latV = clamp((latT - c.lat) * 1.1, -latRate, latRate); c.lat = clamp(c.lat + c.latV * dt, -(W.hwR[k] - 1), W.hwL[k] - 1);
     c.s += c.v * dt * W.ds / RACE.lineStep[k]; // c.s is centreline distance; the line is shorter through a corner
     const done = Math.floor(c.s / L);
     if (done > c.lap) {
