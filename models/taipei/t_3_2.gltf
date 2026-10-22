@@ -30,7 +30,9 @@
 				11,
 				12,
 				13,
-				14
+				14,
+				15,
+				16
 			]
 		}
 	],
@@ -48,54 +50,65 @@
 			"name":"buildings_ceiling"
 		},
 		{
+			"extras":{
+				"detail":1
+			},
 			"mesh":3,
-			"name":"buildings_roof_ai_0"
+			"name":"buildings_signs_h"
 		},
 		{
 			"mesh":4,
-			"name":"buildings_facade_concrete"
+			"name":"buildings_roof_ai_0"
 		},
 		{
 			"mesh":5,
-			"name":"buildings_facade_ai_pink"
+			"name":"buildings_facade_concrete"
 		},
 		{
 			"mesh":6,
-			"name":"buildings_roof_ai_1"
+			"name":"buildings_facade_ai_pink"
 		},
 		{
 			"mesh":7,
-			"name":"buildings_facade_ai_cream"
+			"name":"buildings_roof_ai_1"
 		},
 		{
 			"mesh":8,
-			"name":"buildings_facade_ai_blue_green_tile"
+			"name":"buildings_facade_ai_cream"
 		},
 		{
 			"mesh":9,
-			"name":"buildings_facade_ai_grey"
+			"name":"buildings_facade_ai_blue_green_tile"
 		},
 		{
 			"mesh":10,
-			"name":"buildings_facade_ai_concrete"
+			"name":"buildings_facade_ai_grey"
 		},
 		{
 			"mesh":11,
-			"name":"buildings_facade_ai_condo_1990s"
+			"name":"buildings_facade_ai_concrete"
+		},
+		{
+			"mesh":12,
+			"name":"buildings_storefront_ai_hardware"
 		},
 		{
 			"extras":{
 				"detail":1
 			},
-			"mesh":12,
+			"mesh":13,
 			"name":"buildings_signboards"
 		},
 		{
-			"mesh":13,
+			"mesh":14,
+			"name":"buildings_facade_ai_condo_1990s"
+		},
+		{
+			"mesh":15,
 			"name":"bridges_deck"
 		},
 		{
-			"mesh":14,
+			"mesh":16,
 			"name":"bridges_concrete"
 		}
 	],
@@ -150,14 +163,33 @@
 		},
 		{
 			"doubleSided":true,
+			"emissiveFactor":[
+				0.6000000238418579,
+				0.6000000238418579,
+				0.6000000238418579
+			],
+			"emissiveTexture":{
+				"index":4
+			},
+			"name":"signs_h",
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":5
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.4000000059604645
+			}
+		},
+		{
+			"doubleSided":true,
 			"name":"roof_ai_0",
 			"normalTexture":{
-				"index":4,
+				"index":6,
 				"scale":0.800000011920929
 			},
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":5
+					"index":7
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.8999999761581421
@@ -168,7 +200,7 @@
 			"name":"facade_concrete",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":6
+					"index":8
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.800000011920929
@@ -178,12 +210,12 @@
 			"doubleSided":true,
 			"name":"facade_ai_pink",
 			"normalTexture":{
-				"index":7,
+				"index":9,
 				"scale":0.800000011920929
 			},
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":8
+					"index":10
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.800000011920929
@@ -193,21 +225,6 @@
 			"doubleSided":true,
 			"name":"roof_ai_1",
 			"normalTexture":{
-				"index":9,
-				"scale":0.800000011920929
-			},
-			"pbrMetallicRoughness":{
-				"baseColorTexture":{
-					"index":10
-				},
-				"metallicFactor":0,
-				"roughnessFactor":0.8999999761581421
-			}
-		},
-		{
-			"doubleSided":true,
-			"name":"facade_ai_cream",
-			"normalTexture":{
 				"index":11,
 				"scale":0.800000011920929
 			},
@@ -216,12 +233,12 @@
 					"index":12
 				},
 				"metallicFactor":0,
-				"roughnessFactor":0.800000011920929
+				"roughnessFactor":0.8999999761581421
 			}
 		},
 		{
 			"doubleSided":true,
-			"name":"facade_ai_blue_green_tile",
+			"name":"facade_ai_cream",
 			"normalTexture":{
 				"index":13,
 				"scale":0.800000011920929
@@ -236,7 +253,7 @@
 		},
 		{
 			"doubleSided":true,
-			"name":"facade_ai_grey",
+			"name":"facade_ai_blue_green_tile",
 			"normalTexture":{
 				"index":15,
 				"scale":0.800000011920929
@@ -251,7 +268,7 @@
 		},
 		{
 			"doubleSided":true,
-			"name":"facade_ai_concrete",
+			"name":"facade_ai_grey",
 			"normalTexture":{
 				"index":17,
 				"scale":0.800000011920929
@@ -266,7 +283,7 @@
 		},
 		{
 			"doubleSided":true,
-			"name":"facade_ai_condo_1990s",
+			"name":"facade_ai_concrete",
 			"normalTexture":{
 				"index":19,
 				"scale":0.800000011920929
@@ -282,20 +299,58 @@
 		{
 			"doubleSided":true,
 			"emissiveFactor":[
+				0.25,
+				0.25,
+				0.25
+			],
+			"emissiveTexture":{
+				"index":21
+			},
+			"name":"storefront_ai_hardware",
+			"normalTexture":{
+				"index":22,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":23
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
+			}
+		},
+		{
+			"doubleSided":true,
+			"emissiveFactor":[
 				0.800000011920929,
 				0.800000011920929,
 				0.800000011920929
 			],
 			"emissiveTexture":{
-				"index":21
+				"index":24
 			},
 			"name":"signboards",
 			"pbrMetallicRoughness":{
 				"baseColorTexture":{
-					"index":22
+					"index":25
 				},
 				"metallicFactor":0,
 				"roughnessFactor":0.4000000059604645
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"facade_ai_condo_1990s",
+			"normalTexture":{
+				"index":26,
+				"scale":0.800000011920929
+			},
+			"pbrMetallicRoughness":{
+				"baseColorTexture":{
+					"index":27
+				},
+				"metallicFactor":0,
+				"roughnessFactor":0.800000011920929
 			}
 		},
 		{
@@ -403,21 +458,21 @@
 							}
 						}
 					},
-					"indices":9,
+					"indices":14,
 					"material":2,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"buildings_roof_ai_0",
+			"name":"buildings_signs_h",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":14,
-						"NORMAL":15,
-						"TEXCOORD_0":16,
-						"COLOR_0":17
+						"POSITION":15,
+						"NORMAL":16,
+						"TEXCOORD_0":17,
+						"COLOR_0":18
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -430,21 +485,21 @@
 							}
 						}
 					},
-					"indices":18,
+					"indices":19,
 					"material":3,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"buildings_facade_concrete",
+			"name":"buildings_roof_ai_0",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":19,
-						"NORMAL":20,
-						"TEXCOORD_0":21,
-						"COLOR_0":22
+						"POSITION":20,
+						"NORMAL":21,
+						"TEXCOORD_0":22,
+						"COLOR_0":23
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -457,21 +512,21 @@
 							}
 						}
 					},
-					"indices":23,
+					"indices":24,
 					"material":4,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"buildings_facade_ai_pink",
+			"name":"buildings_facade_concrete",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":24,
-						"NORMAL":25,
-						"TEXCOORD_0":26,
-						"COLOR_0":27
+						"POSITION":25,
+						"NORMAL":26,
+						"TEXCOORD_0":27,
+						"COLOR_0":28
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -484,21 +539,21 @@
 							}
 						}
 					},
-					"indices":28,
+					"indices":29,
 					"material":5,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"buildings_roof_ai_1",
+			"name":"buildings_facade_ai_pink",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":29,
-						"NORMAL":30,
-						"TEXCOORD_0":31,
-						"COLOR_0":32
+						"POSITION":30,
+						"NORMAL":31,
+						"TEXCOORD_0":32,
+						"COLOR_0":33
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -511,21 +566,21 @@
 							}
 						}
 					},
-					"indices":33,
+					"indices":34,
 					"material":6,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"buildings_facade_ai_cream",
+			"name":"buildings_roof_ai_1",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":34,
-						"NORMAL":35,
-						"TEXCOORD_0":36,
-						"COLOR_0":37
+						"POSITION":35,
+						"NORMAL":36,
+						"TEXCOORD_0":37,
+						"COLOR_0":38
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -538,21 +593,21 @@
 							}
 						}
 					},
-					"indices":38,
+					"indices":39,
 					"material":7,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"buildings_facade_ai_blue_green_tile",
+			"name":"buildings_facade_ai_cream",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":39,
-						"NORMAL":40,
-						"TEXCOORD_0":41,
-						"COLOR_0":42
+						"POSITION":40,
+						"NORMAL":41,
+						"TEXCOORD_0":42,
+						"COLOR_0":43
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -565,21 +620,21 @@
 							}
 						}
 					},
-					"indices":43,
+					"indices":44,
 					"material":8,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"buildings_facade_ai_grey",
+			"name":"buildings_facade_ai_blue_green_tile",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":44,
-						"NORMAL":45,
-						"TEXCOORD_0":46,
-						"COLOR_0":47
+						"POSITION":45,
+						"NORMAL":46,
+						"TEXCOORD_0":47,
+						"COLOR_0":48
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -592,21 +647,21 @@
 							}
 						}
 					},
-					"indices":48,
+					"indices":49,
 					"material":9,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"buildings_facade_ai_concrete",
+			"name":"buildings_facade_ai_grey",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":49,
-						"NORMAL":50,
-						"TEXCOORD_0":51,
-						"COLOR_0":52
+						"POSITION":50,
+						"NORMAL":51,
+						"TEXCOORD_0":52,
+						"COLOR_0":53
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -619,21 +674,21 @@
 							}
 						}
 					},
-					"indices":53,
+					"indices":54,
 					"material":10,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"buildings_facade_ai_condo_1990s",
+			"name":"buildings_facade_ai_concrete",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":54,
-						"NORMAL":55,
-						"TEXCOORD_0":56,
-						"COLOR_0":57
+						"POSITION":55,
+						"NORMAL":56,
+						"TEXCOORD_0":57,
+						"COLOR_0":58
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -646,21 +701,21 @@
 							}
 						}
 					},
-					"indices":58,
+					"indices":59,
 					"material":11,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"buildings_signboards",
+			"name":"buildings_storefront_ai_hardware",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":59,
-						"NORMAL":60,
-						"TEXCOORD_0":61,
-						"COLOR_0":62
+						"POSITION":60,
+						"NORMAL":61,
+						"TEXCOORD_0":62,
+						"COLOR_0":63
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -673,21 +728,21 @@
 							}
 						}
 					},
-					"indices":63,
+					"indices":64,
 					"material":12,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"bridges_deck",
+			"name":"buildings_signboards",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":64,
-						"NORMAL":65,
-						"TEXCOORD_0":66,
-						"COLOR_0":67
+						"POSITION":65,
+						"NORMAL":66,
+						"TEXCOORD_0":67,
+						"COLOR_0":68
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -700,21 +755,21 @@
 							}
 						}
 					},
-					"indices":68,
+					"indices":69,
 					"material":13,
 					"mode":4
 				}
 			]
 		},
 		{
-			"name":"bridges_concrete",
+			"name":"buildings_facade_ai_condo_1990s",
 			"primitives":[
 				{
 					"attributes":{
-						"POSITION":69,
-						"NORMAL":70,
-						"TEXCOORD_0":71,
-						"COLOR_0":72
+						"POSITION":70,
+						"NORMAL":71,
+						"TEXCOORD_0":72,
+						"COLOR_0":73
 					},
 					"extensions":{
 						"KHR_draco_mesh_compression":{
@@ -727,8 +782,62 @@
 							}
 						}
 					},
-					"indices":73,
+					"indices":74,
 					"material":14,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"bridges_deck",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":75,
+						"NORMAL":76,
+						"TEXCOORD_0":77,
+						"COLOR_0":78
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":15,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":69,
+					"material":15,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"bridges_concrete",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":79,
+						"NORMAL":80,
+						"TEXCOORD_0":81,
+						"COLOR_0":82
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":16,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1,
+								"TEXCOORD_0":2,
+								"COLOR_0":3
+							}
+						}
+					},
+					"indices":83,
+					"material":16,
 					"mode":4
 				}
 			]
@@ -763,6 +872,14 @@
 			"extensions":{
 				"EXT_texture_webp":{
 					"source":2
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":3
 				}
 			},
 			"sampler":0
@@ -914,7 +1031,39 @@
 		{
 			"extensions":{
 				"EXT_texture_webp":{
-					"source":20
+					"source":19
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":21
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":21
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":22
+				}
+			},
+			"sampler":0
+		},
+		{
+			"extensions":{
+				"EXT_texture_webp":{
+					"source":23
 				}
 			},
 			"sampler":0
@@ -935,6 +1084,11 @@
 			"mimeType":"image/webp",
 			"name":"storefront",
 			"uri":"tex/storefront.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"signs_h",
+			"uri":"tex/signs_h.webp"
 		},
 		{
 			"mimeType":"image/webp",
@@ -1013,6 +1167,21 @@
 		},
 		{
 			"mimeType":"image/webp",
+			"name":"storefront_ai_hardware",
+			"uri":"tex/storefront_ai_hardware.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"storefront_ai_hardware_n",
+			"uri":"tex/storefront_ai_hardware_n.webp"
+		},
+		{
+			"mimeType":"image/webp",
+			"name":"signboards",
+			"uri":"tex/signboards.webp"
+		},
+		{
+			"mimeType":"image/webp",
 			"name":"facade_ai_condo_1990s_n",
 			"uri":"tex/facade_ai_condo_1990s_n.webp"
 		},
@@ -1020,11 +1189,6 @@
 			"mimeType":"image/webp",
 			"name":"facade_ai_condo_1990s",
 			"uri":"tex/facade_ai_condo_1990s.webp"
-		},
-		{
-			"mimeType":"image/webp",
-			"name":"signboards",
-			"uri":"tex/signboards.webp"
 		}
 	],
 	"accessors":[
@@ -1066,7 +1230,7 @@
 		},
 		{
 			"componentType":5126,
-			"count":20,
+			"count":16,
 			"max":[
 				-331.083740234375,
 				10.565850257873535,
@@ -1081,23 +1245,23 @@
 		},
 		{
 			"componentType":5126,
-			"count":20,
+			"count":16,
 			"type":"VEC3"
 		},
 		{
 			"componentType":5126,
-			"count":20,
+			"count":16,
 			"type":"VEC2"
 		},
 		{
 			"componentType":5123,
-			"count":20,
+			"count":16,
 			"normalized":true,
 			"type":"VEC4"
 		},
 		{
 			"componentType":5123,
-			"count":30,
+			"count":24,
 			"type":"SCALAR"
 		},
 		{
@@ -1130,6 +1294,47 @@
 			"count":20,
 			"normalized":true,
 			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":30,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":40,
+			"max":[
+				-334.22222900390625,
+				11.715849876403809,
+				75.04438781738281
+			],
+			"min":[
+				-462.5364074707031,
+				10.179849624633789,
+				-18.59071922302246
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":40,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":40,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":40,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":60,
+			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
@@ -1171,14 +1376,14 @@
 			"componentType":5126,
 			"count":96,
 			"max":[
-				-243.0115966796875,
+				-242.84080505371094,
 				44.184940338134766,
-				32.34879684448242
+				67.28861236572266
 			],
 			"min":[
-				-434.42108154296875,
-				18.942228317260742,
-				-1.106806755065918
+				-638.2720947265625,
+				10.75278091430664,
+				-0.12574361264705658
 			],
 			"type":"VEC3"
 		},
@@ -1421,6 +1626,78 @@
 		},
 		{
 			"componentType":5126,
+			"count":4,
+			"max":[
+				-378.97705078125,
+				10.147000312805176,
+				4.3720703125
+			],
+			"min":[
+				-379.974365234375,
+				4.146999835968018,
+				-4.603515625
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":4,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":4,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":4,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":6,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":32,
+			"max":[
+				-335.0823669433594,
+				17.3658504486084,
+				0.6174823641777039
+			],
+			"min":[
+				-376.1026916503906,
+				10.446999549865723,
+				-16.0760440826416
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":32,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":32,
+			"type":"VEC2"
+		},
+		{
+			"componentType":5123,
+			"count":32,
+			"normalized":true,
+			"type":"VEC4"
+		},
+		{
+			"componentType":5123,
+			"count":48,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
 			"count":84,
 			"max":[
 				-295,
@@ -1457,42 +1734,6 @@
 		},
 		{
 			"componentType":5126,
-			"count":8,
-			"max":[
-				-336.724853515625,
-				17.3658504486084,
-				-8.737157821655273
-			],
-			"min":[
-				-337.9523620605469,
-				10.865850448608398,
-				-9.271468162536621
-			],
-			"type":"VEC3"
-		},
-		{
-			"componentType":5126,
-			"count":8,
-			"type":"VEC3"
-		},
-		{
-			"componentType":5126,
-			"count":8,
-			"type":"VEC2"
-		},
-		{
-			"componentType":5123,
-			"count":8,
-			"normalized":true,
-			"type":"VEC4"
-		},
-		{
-			"componentType":5123,
-			"count":12,
-			"type":"SCALAR"
-		},
-		{
-			"componentType":5126,
 			"count":32,
 			"max":[
 				2.956826686859131,
@@ -1521,11 +1762,6 @@
 			"count":32,
 			"normalized":true,
 			"type":"VEC4"
-		},
-		{
-			"componentType":5123,
-			"count":48,
-			"type":"SCALAR"
 		},
 		{
 			"componentType":5126,
@@ -1572,73 +1808,83 @@
 		},
 		{
 			"buffer":0,
-			"byteLength":480,
+			"byteLength":441,
 			"byteOffset":4604
 		},
 		{
 			"buffer":0,
 			"byteLength":426,
-			"byteOffset":5084
+			"byteOffset":5048
 		},
 		{
 			"buffer":0,
-			"byteLength":1063,
-			"byteOffset":5512
+			"byteLength":719,
+			"byteOffset":5476
 		},
 		{
 			"buffer":0,
-			"byteLength":1249,
-			"byteOffset":6576
+			"byteLength":1036,
+			"byteOffset":6196
+		},
+		{
+			"buffer":0,
+			"byteLength":1251,
+			"byteOffset":7232
 		},
 		{
 			"buffer":0,
 			"byteLength":2074,
-			"byteOffset":7828
+			"byteOffset":8484
 		},
 		{
 			"buffer":0,
-			"byteLength":661,
-			"byteOffset":9904
+			"byteLength":668,
+			"byteOffset":10560
 		},
 		{
 			"buffer":0,
 			"byteLength":1913,
-			"byteOffset":10568
+			"byteOffset":11228
 		},
 		{
 			"buffer":0,
-			"byteLength":1944,
-			"byteOffset":12484
+			"byteLength":1964,
+			"byteOffset":13144
 		},
 		{
 			"buffer":0,
 			"byteLength":1293,
-			"byteOffset":14428
+			"byteOffset":15108
 		},
 		{
 			"buffer":0,
-			"byteLength":1062,
-			"byteOffset":15724
+			"byteLength":1063,
+			"byteOffset":16404
 		},
 		{
 			"buffer":0,
-			"byteLength":1355,
-			"byteOffset":16788
+			"byteLength":256,
+			"byteOffset":17468
 		},
 		{
 			"buffer":0,
-			"byteLength":302,
-			"byteOffset":18144
+			"byteLength":648,
+			"byteOffset":17724
+		},
+		{
+			"buffer":0,
+			"byteLength":1354,
+			"byteOffset":18372
 		},
 		{
 			"buffer":0,
 			"byteLength":586,
-			"byteOffset":18448
+			"byteOffset":19728
 		},
 		{
 			"buffer":0,
 			"byteLength":8877,
-			"byteOffset":19036
+			"byteOffset":20316
 		}
 	],
 	"samplers":[
@@ -1649,7 +1895,7 @@
 	],
 	"buffers":[
 		{
-			"byteLength":27916,
+			"byteLength":29196,
 			"uri":"t_3_2.bin"
 		}
 	]

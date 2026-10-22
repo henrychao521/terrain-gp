@@ -13,6 +13,9 @@ Stable Diffusion XL base 1.0（CreativeML Open RAIL++-M）在 Google Colab（L4�
 | facade_ai_condo_1990s / hotel_tiles / shophouse_arcade / school_corridor | 中樓層（24–42 m）：大樓、商旅、街屋、學校 | 12 m × 12.8 m |
 | facade_ai_glass_office_v2 / stone_office | 高樓（>42 m）辦公大樓 | 12 m × 12.8 m |
 | facade_ai_red_brick_old | 老紅磚建築（偶爾用在低矮舊屋） | 12 m × 12.8 m |
+| shop_ai_convenience / hardware / oldwood / bakery / shutters_a / shutters_b / shutters_c | 騎樓下的一樓店面（只左右無縫，**沒有文字**；店名招牌帶由 `make_textures.py` 用程式畫上真的中文） | 寬 12 m × 高 3.7 m |
+
+店面貼圖由 `tools/colab/shops_job.py` 生成：SDXL 的捲積只在左右方向環繞補邊，上下維持原本的補零；24 張裡挑 7 張正面、沒有假字的，再裁掉最上面 14%（那裡最容易出現招牌和假字）。
 
 `normals/`：每張貼圖對應的法線圖（凹凸細節），用 Marigold Normals v1.1（OpenRAIL++）在 Colab 上計算；
 為了無縫，先把貼圖拼成 3×3 再推算、取中間一塊。

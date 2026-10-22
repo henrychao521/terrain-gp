@@ -1221,17 +1221,22 @@ function tileParts() {
     column: { g: geo(new THREE.BoxGeometry(0.55, 6.0, 0.55), 3.0), m: new THREE.MeshStandardMaterial({ color: lin(0xb4ae9f), roughness: 0.85 }) },
     tank: { g: geo(new THREE.CylinderGeometry(0.75, 0.75, 1.4, 10), 0.7), m: new THREE.MeshStandardMaterial({ color: lin(0xd2d6da), roughness: 0.3, metalness: 0.8 }) },
   };
+  if (PROPS && PROPS.scooter) TILE_PARTS.scooter = PROPS.scooter; // Blender model, several parts; the first (body) is tinted per scooter
   return TILE_PARTS;
 }
+const SCOOTER_COLORS = [0xf2f2ee, 0xf2f2ee, 0x1c1c1e, 0xa9adb2, 0xb3262b, 0x2a5aa8, 0xe8c547, 0x6f8f62].map(c => new THREE.Color(c).convertSRGBToLinear());
 function tileInstances(js, M) {
   const grp = new THREE.Group(), parts = tileParts(), ox = js.x0 - M.sx / 2, oz = M.sz / 2 - js.y0, m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), p = new THREE.Vector3(), sc = new THREE.Vector3(1, 1, 1);
   for (const k of Object.keys(parts)) {
     if (!js[k]) continue;
     const bin = atob(js[k]), a = new Int16Array(bin.length / 2); for (let i = 0; i < a.length; i++) a[i] = bin.charCodeAt(2 * i) | (bin.charCodeAt(2 * i + 1) << 8);
     const n = a.length / 4; if (!n) continue;
-    const im = new THREE.InstancedMesh(parts[k].g, parts[k].m, n);
-    for (let i = 0; i < n; i++) { p.set(ox + a[i * 4] / 10, a[i * 4 + 2] / 10, oz - a[i * 4 + 1] / 10); e.set(0, a[i * 4 + 3] / 10000, 0); q.setFromEuler(e); m.compose(p, q, sc); im.setMatrixAt(i, m); }
-    im.castShadow = k !== 'cage'; im.receiveShadow = true; im.userData.tile = true; im.userData.detail = true; grp.add(im);
+    (Array.isArray(parts[k]) ? parts[k] : [parts[k]]).forEach((part, pi) => {
+      const im = new THREE.InstancedMesh(part.g, part.m, n);
+      for (let i = 0; i < n; i++) { p.set(ox + a[i * 4] / 10, a[i * 4 + 2] / 10, oz - a[i * 4 + 1] / 10); e.set(0, a[i * 4 + 3] / 10000, 0); q.setFromEuler(e); m.compose(p, q, sc); im.setMatrixAt(i, m); }
+      if (k === 'scooter' && pi === 0) for (let i = 0; i < n; i++) im.setColorAt(i, SCOOTER_COLORS[(a[i * 4] * 7 + a[i * 4 + 1] * 13) & 7]);
+      im.castShadow = k !== 'cage' && k !== 'scooter'; im.receiveShadow = true; im.userData.tile = true; im.userData.detail = true; grp.add(im);
+    });
   }
   return grp;
 }
@@ -1242,14 +1247,31 @@ function pickTiles(M, maxD = 1200) {
   const step = Math.max(1, Math.round(50 / W.ds));
   return M.tiles.filter(t => { for (let k = 0; k < W.n; k += step) { const dx = Math.max(t.x0 - W.x[k], 0, W.x[k] - t.x1), dz = Math.max(t.z0 - W.z[k], 0, W.z[k] - t.z1); if (dx * dx + dz * dz < maxD * maxD) return true; } return false; });
 }
-function loadTile(file, M) {
+// Every tile's glTF names the same shared textures in models/taipei/tex. Left to itself each tile's parser decodes its
+// own copy: fifteen tiles x ~50 images at once, a GPU copy each, and now and then Chrome fails a decode ("The source image
+// could not be decoded") and drops the tile. This plugin hands every parser one texture per image URL and sampler.
+const SHARED_TEX = new Map();
+function sharedTextures(parser) {
+  const own = parser.loadTextureImage.bind(parser);
+  parser.loadTextureImage = (ti, source, loader) => {
+    if (!source.uri) return own(ti, source, loader);
+    const td = parser.json.textures[ti], key = (/^(https?:|data:|blob:|\/)/.test(source.uri) ? source.uri : (parser.options.path || '') + source.uri) + '|' + JSON.stringify(td.sampler != null ? parser.json.samplers[td.sampler] : null);
+    if (!SHARED_TEX.has(key)) SHARED_TEX.set(key, own(ti, source, loader).catch(e => { SHARED_TEX.delete(key); throw e; }));
+    return SHARED_TEX.get(key);
+  };
+  return { name: 'tgp_shared_textures' };
+}
+function gltfLoader() {
+  const L = new THREE.GLTFLoader(); L.register(sharedTextures);
+  if (THREE.DRACOLoader) { // one decoder (and worker pool) for every glTF, matching Blender 5's Draco 1.5 encoder
+    if (!loadTile.draco) { loadTile.draco = new THREE.DRACOLoader(); loadTile.draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/'); loadTile.draco.setWorkerLimit(2); }
+    L.setDRACOLoader(loadTile.draco);
+  }
+  return L;
+}
+function loadTile(file, M, retry = 1) {
   if (!TILE_CACHE.has(file)) TILE_CACHE.set(file, Promise.all([new Promise((ok, fail) => {
-    const L = new THREE.GLTFLoader();
-    if (THREE.DRACOLoader) { // one decoder (and worker pool) for every tile, matching Blender 5's Draco 1.5 encoder
-      if (!loadTile.draco) { loadTile.draco = new THREE.DRACOLoader(); loadTile.draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/'); loadTile.draco.setWorkerLimit(2); }
-      L.setDRACOLoader(loadTile.draco);
-    }
-    L.load(file, g => {
+    gltfLoader().load(file, g => {
       const detail = [];
       g.scene.traverse(o => { o.userData.tile = true; if (o.userData.detail) detail.push(o); if (o.isMesh) { o.castShadow = o.receiveShadow = true; const m = o.material; if (m.map) m.map.anisotropy = 4; } });
       g.scene.userData.detail = detail; ok(g.scene);
@@ -1257,19 +1279,14 @@ function loadTile(file, M) {
   }), fetch(file.replace(/\.gltf$/, '.inst.json')).then(r => r.ok ? r.json() : null).catch(() => null)]).then(([sc, js]) => {
     if (js) { const ig = tileInstances(js, M); ig.userData.tile = true; sc.add(ig); sc.userData.detail.push(...ig.children); }
     return sc;
+  }).catch(e => { // one more try a moment later rather than a missing block of the city
+    TILE_CACHE.delete(file); if (!retry) throw e;
+    return new Promise(ok => setTimeout(ok, 800)).then(() => loadTile(file, M, retry - 1));
   }));
   return TILE_CACHE.get(file);
 }
 // Blender street props (models/props): trees, water barrier, street lamp, signal head; parts = [{ g, m }] per prop
 let PROPS = null;
-function gltfLoader() {
-  const L = new THREE.GLTFLoader();
-  if (THREE.DRACOLoader) {
-    if (!loadTile.draco) { loadTile.draco = new THREE.DRACOLoader(); loadTile.draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/'); loadTile.draco.setWorkerLimit(2); }
-    L.setDRACOLoader(loadTile.draco);
-  }
-  return L;
-}
 function loadProps() {
   if (!window.THREE.GLTFLoader) return Promise.resolve(null);
   return new Promise(ok => gltfLoader().load('models/props/props.gltf', g => {

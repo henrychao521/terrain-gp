@@ -1,5 +1,5 @@
 """Street props for Terrain GP, modelled in Blender: five Taipei street-tree groups, a water-filled barrier (水馬),
-a street lamp and a traffic-signal head. Exported as one glTF; each prop is a top-level node, origin at its base.
+a street lamp, a traffic-signal head and a parked scooter (機車). Exported as one glTF; each prop is a top-level node, origin at its base.
 The trees come from tools/blender/trees/ (built by build_trees.py from TRELLIS.2 models) when those files exist;
 otherwise the procedural ones below are used.
 
@@ -187,7 +187,38 @@ def signal_head():
     return finish(bm, 'signal_head', [HOUSE, LENS])
 signal = signal_head()
 
-objs = [camphor, banyan, luan, tall, palmt, barrier, lamp, signal]
+# ---------------- 機車: a step-through scooter as parked in rows under Taipei arcades; ~1.8 m long along local +x,
+# body panels white so the game can tint each instance, seat, tyres and bars dark
+BODY = mat('scooter_body', (1, 1, 1), 0.35)
+TRIM = mat('scooter_trim', (0.08, 0.08, 0.09), 0.7)
+LAMP = mat('scooter_lamp', (0.95, 0.95, 0.9), 0.2, emit=(0.9, 0.9, 0.85))
+def scooter():
+    bm = bmesh.new()
+    def block(c, s, mi, taper=None):  # box centred at c with size s; taper scales the top face in y
+        r = bmesh.ops.create_cube(bm, size=1.0)
+        for v in r['verts']:
+            k = (taper if (taper and v.co.z > 0) else 1.0)
+            v.co = Vector((c[0] + v.co.x * s[0], c[1] + v.co.y * s[1] * k, c[2] + v.co.z * s[2]))
+        for f in {f for v in r['verts'] for f in v.link_faces}: f.material_index = mi
+    def wheel(x):
+        r = bmesh.ops.create_cone(bm, cap_ends=True, segments=10, radius1=0.24, radius2=0.24, depth=0.12)
+        for v in r['verts']: v.co = Vector((x + v.co.x, v.co.z, 0.24 + v.co.y))
+        for f in {f for v in r['verts'] for f in v.link_faces}: f.material_index = 1
+    wheel(0.62); wheel(-0.6)
+    block((0.0, 0, 0.32), (0.75, 0.32, 0.12), 0)          # floorboard
+    block((0.58, 0, 0.62), (0.16, 0.42, 0.75), 0, 0.75)    # leg shield / front apron
+    block((-0.42, 0, 0.55), (0.75, 0.38, 0.42), 0, 0.85)   # rear body over the engine
+    block((-0.4, 0, 0.82), (0.7, 0.3, 0.1), 1)             # seat
+    block((0.66, 0, 1.02), (0.08, 0.08, 0.36), 1)          # steering column
+    block((0.66, 0, 1.18), (0.1, 0.68, 0.05), 1)           # handlebar
+    block((0.72, 0, 1.06), (0.1, 0.22, 0.14), 0)           # headlight housing
+    block((0.775, 0, 1.06), (0.01, 0.16, 0.08), 2)         # headlight
+    block((-0.81, 0, 0.66), (0.02, 0.24, 0.07), 2)         # tail light
+    block((0.62, 0, 0.5), (0.3, 0.1, 0.06), 0)             # front mudguard
+    return finish(bm, 'scooter', [BODY, TRIM, LAMP])
+scoot = scooter()
+
+objs = [camphor, banyan, luan, tall, palmt, barrier, lamp, signal, scoot]
 for i, o in enumerate(objs): o.location = (i * 12, 0, 0)  # spread out for previews; the game ignores node offsets
 for o in objs: print(o.name, len(o.data.polygons), 'faces')
 bpy.ops.object.select_all(action='SELECT')

@@ -24,7 +24,8 @@
 				4,
 				5,
 				6,
-				7
+				7,
+				8
 			]
 		}
 	],
@@ -92,6 +93,15 @@
 			"name":"signal_head",
 			"translation":[
 				84,
+				0,
+				0
+			]
+		},
+		{
+			"mesh":8,
+			"name":"scooter",
+			"translation":[
+				96,
 				0,
 				0
 			]
@@ -231,6 +241,52 @@
 			"doubleSided":true,
 			"name":"signal_lens",
 			"pbrMetallicRoughness":{
+				"metallicFactor":0,
+				"roughnessFactor":0.20000000298023224
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"scooter_body",
+			"pbrMetallicRoughness":{
+				"metallicFactor":0,
+				"roughnessFactor":0.3499999940395355
+			}
+		},
+		{
+			"doubleSided":true,
+			"name":"scooter_trim",
+			"pbrMetallicRoughness":{
+				"baseColorFactor":[
+					0.0038618729449808598,
+					0.0038618729449808598,
+					0.005004187114536762,
+					1
+				],
+				"metallicFactor":0,
+				"roughnessFactor":0.699999988079071
+			}
+		},
+		{
+			"doubleSided":true,
+			"emissiveFactor":[
+				1,
+				1,
+				0.9444444959546326
+			],
+			"extensions":{
+				"KHR_materials_emissive_strength":{
+					"emissiveStrength":1.7999999523162842
+				}
+			},
+			"name":"scooter_lamp",
+			"pbrMetallicRoughness":{
+				"baseColorFactor":[
+					0.8932889103889465,
+					0.8932889103889465,
+					0.793110191822052,
+					1
+				],
 				"metallicFactor":0,
 				"roughnessFactor":0.20000000298023224
 			}
@@ -481,6 +537,65 @@
 					},
 					"indices":37,
 					"material":10,
+					"mode":4
+				}
+			]
+		},
+		{
+			"name":"scooter",
+			"primitives":[
+				{
+					"attributes":{
+						"POSITION":38,
+						"NORMAL":39
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":11,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1
+							}
+						}
+					},
+					"indices":40,
+					"material":11,
+					"mode":4
+				},
+				{
+					"attributes":{
+						"POSITION":41,
+						"NORMAL":42
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":12,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1
+							}
+						}
+					},
+					"indices":43,
+					"material":12,
+					"mode":4
+				},
+				{
+					"attributes":{
+						"POSITION":44,
+						"NORMAL":45
+					},
+					"extensions":{
+						"KHR_draco_mesh_compression":{
+							"bufferView":13,
+							"attributes":{
+								"POSITION":0,
+								"NORMAL":1
+							}
+						}
+					},
+					"indices":46,
+					"material":13,
 					"mode":4
 				}
 			]
@@ -855,6 +970,81 @@
 			"componentType":5123,
 			"count":396,
 			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":120,
+			"max":[
+				0.7699999809265137,
+				1.1299999952316284,
+				0.20999999344348907
+			],
+			"min":[
+				-0.7950000166893005,
+				0.24500000476837158,
+				-0.20999999344348907
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":120,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5123,
+			"count":180,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":192,
+			"max":[
+				0.8482535481452942,
+				1.2050000429153442,
+				0.3400000035762787
+			],
+			"min":[
+				-0.8282535672187805,
+				5.364418242947977e-09,
+				-0.3400000035762787
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":192,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5123,
+			"count":324,
+			"type":"SCALAR"
+		},
+		{
+			"componentType":5126,
+			"count":48,
+			"max":[
+				0.7799999713897705,
+				1.100000023841858,
+				0.11999999731779099
+			],
+			"min":[
+				-0.8199999928474426,
+				0.625,
+				-0.11999999731779099
+			],
+			"type":"VEC3"
+		},
+		{
+			"componentType":5126,
+			"count":48,
+			"type":"VEC3"
+		},
+		{
+			"componentType":5123,
+			"count":72,
+			"type":"SCALAR"
 		}
 	],
 	"bufferViews":[
@@ -912,6 +1102,21 @@
 			"buffer":0,
 			"byteLength":723,
 			"byteOffset":281208
+		},
+		{
+			"buffer":0,
+			"byteLength":643,
+			"byteOffset":281932
+		},
+		{
+			"buffer":0,
+			"byteLength":855,
+			"byteOffset":282576
+		},
+		{
+			"buffer":0,
+			"byteLength":303,
+			"byteOffset":283432
 		}
 	],
 	"samplers":[
@@ -922,7 +1127,7 @@
 	],
 	"buffers":[
 		{
-			"byteLength":281932,
+			"byteLength":283736,
 			"uri":"props.bin"
 		}
 	]
