@@ -269,7 +269,7 @@ function finishCity(M) {
 function loadTaipei() {
   if (CITY.taipei) return Promise.resolve(CITY.taipei);
   const get = u => fetch(u).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
-  return Promise.all([get('data/taipei.json'), get('data/taipei_osm.json').catch(() => null), get('models/taipei/tiles.json').catch(() => null), loadProps()]).then(([d, o, tl]) => {
+  return Promise.all([get('data/taipei.json'), get('data/taipei_osm.json').catch(() => null), get('models/taipei/tiles.json').catch(() => null), loadProps(), loadTreeAtlas()]).then(([d, o, tl]) => {
     const sx = d.nx * d.d, sz = d.ny * d.d, cell = 10, nx = sx / cell + 1, nz = sz / cell + 1;
     const zr = atob(d.z), mr = atob(d.mask), dz = new Float32Array(d.nx * d.ny), dm = new Uint8Array(d.nx * d.ny);
     for (let k = 0; k < dz.length; k++) { let v = zr.charCodeAt(2 * k) | (zr.charCodeAt(2 * k + 1) << 8); if (v > 32767) v -= 65536; dz[k] = v / 100; dm[k] = mr.charCodeAt(k); }
@@ -845,7 +845,7 @@ function buildWorld() {
   buildMeshes();
   drawMinimapBase();
   $('#trkLen').textContent = (len / 1000).toFixed(3) + ' km';
-  $('#hudCredit').textContent = W.city ? '© OpenStreetMap contributors' + (M.id === 'taipei' ? ' · 內政部 DEM · 臺北市 3D 建物' + (W.activeTiles && W.activeTiles.length ? ' · 建物貼圖 AI 生成（Colab SDXL）' : '') + (/公園路燈/.test(M.credits || '') ? ' · 行道樹：臺北市公園處' : '') : '') : '';
+  $('#hudCredit').textContent = W.city ? '© OpenStreetMap contributors' + (M.id === 'taipei' ? ' · 內政部 DEM · 臺北市 3D 建物' + (W.activeTiles && W.activeTiles.length ? ' · 建物貼圖 AI 生成（Colab SDXL）' : '') + (/公園路燈/.test(M.credits || '') ? ' · 行道樹：臺北市公園處' : '') + (TREE_ATLAS ? ' · 樹木模型 AI 生成（SDXL＋TRELLIS.2）' : '') : '') : '';
 }
 
 // ground shader: blends grass / dirt / rock / special by per-vertex weights, sampled in world metres with a low-frequency macro layer to hide tiling
@@ -914,6 +914,12 @@ function frontLit(m) { // thin foliage cards: light the back face exactly like t
 function foliageMat(map) {
   const m = frontLit(new THREE.MeshLambertMaterial({ map, alphaTest: 0.45, side: THREE.DoubleSide }));
   m.userData.depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map, alphaTest: 0.45, side: THREE.DoubleSide });
+  return m;
+}
+function atlasFoliage(map, cols) {
+  const m = foliageMat(map), base = m.onBeforeCompile;
+  const cell = sh => { sh.vertexShader = 'attribute float aCell;\n' + sh.vertexShader.replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_UV\n vUv.x = (vUv.x + aCell) / ' + cols.toFixed(1) + ';\n#endif'); };
+  m.onBeforeCompile = sh => { base(sh); cell(sh); }; m.userData.depth.onBeforeCompile = cell;
   return m;
 }
 function ribbonGeo(build) { // build(push) where push(x,y,z,u,v,color) returns index
@@ -1272,6 +1278,13 @@ function loadProps() {
     ok(PROPS = P);
   }, undefined, () => ok(null)));
 }
+// side views of the five street-tree models, for the crossed cards that stand in for them beyond the near range
+let TREE_ATLAS = null;
+function loadTreeAtlas() {
+  return fetch('models/props/trees_atlas.json').then(r => r.ok ? r.json() : null).then(j => j && new Promise(ok => new THREE.TextureLoader().load('models/props/trees_atlas.webp', t => {
+    t.encoding = THREE.sRGBEncoding; t.anisotropy = 4; ok(TREE_ATLAS = { tex: t, cols: j.cols, size: Object.fromEntries(j.cells.map(c => [c.name, c.size])) });
+  }, undefined, () => ok(null)))).catch(() => null);
+}
 // near the camera an instanced item shows its Blender model; the cheap stand-in (far mesh) keeps the rest
 const LODS = [];
 function nearLod(grp, far, items, kinds, cap, radius) {
@@ -1575,13 +1588,26 @@ function buildMeshes() {
       if (gridSample(D, x, z) < gridSample(HWg, x, z) + 1.4) continue; // keep the carriageway and barrier line clear
       (pk ? park : street).push([x, z, h / 9, kind]); // surveyed height; the stand-in card is 8.5 m at scale 1
     }
-    const fs = placeTrees(street, true), fp = placeTrees(park, true);
-    if (PROPS && PROPS.tree_camphor) { // the species group of each surveyed tree picks its model; models are about 9.5 m tall
-      const MODEL = ['tree_camphor', 'tree_banyan', 'tree_luan', 'tree_palm', 'tree_tall'], NATIVE_H = [9.5, 8.5, 9.0, 9.8, 10.5];
+    const MODEL = ['tree_camphor', 'tree_banyan', 'tree_luan', 'tree_palm', 'tree_tall'], NATIVE_H = [9.5, 8.5, 9.0, 9.8, 10.5];
+    const placeCards = spots => { // side views of the same models on crossed cards; the near range swaps in the models
+      const cnt = spots.length; if (!cnt) return;
+      const g = crossGeo(0.4), cellA = new THREE.InstancedBufferAttribute(new Float32Array(cnt), 1); g.setAttribute('aCell', cellA);
+      const mat = atlasFoliage(TREE_ATLAS.tex, TREE_ATLAS.cols), cards = new THREE.InstancedMesh(g, mat, cnt); cards.customDepthMaterial = mat.userData.depth;
+      spots.forEach(([x, z, s, kind], i) => {
+        const side = TREE_ATLAS.size[MODEL[kind]] * s * 9 / NATIVE_H[kind];
+        sc.set(side, side, side); ps.set(x, Hq(x, z) - 0.2, z); eu.set(0, tr() * Math.PI, 0); q4.setFromEuler(eu); m4.compose(ps, q4, sc);
+        cards.setMatrixAt(i, m4); cellA.setX(i, kind); tc.setHSL(0.25, 0.1, 0.45 + tr() * 0.1).multiplyScalar(2.1); cards.setColorAt(i, tc);
+      });
+      q4.identity(); cards.castShadow = true; cards.receiveShadow = true; grp.add(cards); return cards;
+    };
+    const atlas = TREE_ATLAS && PROPS && PROPS.tree_camphor;
+    const fs = atlas ? placeCards(street) : placeTrees(street, true), fp = atlas ? placeCards(park) : placeTrees(park, true);
+    if (PROPS && PROPS.tree_camphor) { // the species group of each surveyed tree picks its model
       const lr = mulberry32(8), kinds = {}; for (const k of MODEL) if (PROPS[k]) kinds[k] = PROPS[k];
       const mk = (x, z, s, kind) => { const h = s * 9, f = h / NATIVE_H[kind]; eu.set(0, lr() * Math.PI * 2, 0); q4.setFromEuler(eu); return new THREE.Matrix4().compose(new THREE.Vector3(x, Hq(x, z) - 0.2, z), q4.clone(), new THREE.Vector3(f, f, f)); };
       const tint = () => new THREE.Color().setHSL(0.25, 0.1, 0.45 + lr() * 0.1).multiplyScalar(2.1);
-      const cap = COARSE ? 350 : 1200, R = COARSE ? 110 : 220, item = ([x, z, s, kind]) => { const k = kinds[MODEL[kind]] ? kind : 0; return { m: mk(x, z, s, k), kind: MODEL[k], c: tint() }; };
+      // ~3500 triangles a model: the cards past this range carry the same silhouettes, so the near set can stay small
+      const cap = COARSE ? 150 : 600, R = COARSE ? 70 : 160, item = ([x, z, s, kind]) => { const k = kinds[MODEL[kind]] ? kind : 0; return { m: mk(x, z, s, k), kind: MODEL[k], c: tint() }; };
       if (fs) nearLod(grp, fs, street.map(item), kinds, cap, R);
       if (fp) nearLod(grp, fp, park.map(item), kinds, cap >> 1, R);
       q4.identity();

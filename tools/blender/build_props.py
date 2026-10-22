@@ -1,5 +1,7 @@
-"""Street props for Terrain GP, modelled in Blender: three Taipei street-tree species, a water-filled barrier (水馬),
+"""Street props for Terrain GP, modelled in Blender: five Taipei street-tree groups, a water-filled barrier (水馬),
 a street lamp and a traffic-signal head. Exported as one glTF; each prop is a top-level node, origin at its base.
+The trees come from tools/blender/trees/ (built by build_trees.py from TRELLIS.2 models) when those files exist;
+otherwise the procedural ones below are used.
 
   blender -b --factory-startup --python tools/blender/build_props.py -- <out.gltf>
 
@@ -103,6 +105,14 @@ def palm(name):
             for l in f.loops: l[col] = (0.20, 0.38 + 0.05 * (k % 3), 0.12, 1)
     return finish(bm, name, [mat('palm_trunk', (0.62, 0.6, 0.55), 0.8), LEAF])
 tall = tall_tree('tree_tall'); palmt = palm('tree_palm')
+TREE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'trees')
+def textured_tree(name):  # the TRELLIS.2-derived model replaces the procedural stand-in of the same name
+    f = os.path.join(TREE_DIR, name + '.glb')
+    if not os.path.exists(f): return None
+    old = bpy.data.objects[name]; bpy.data.objects.remove(old)
+    before = set(bpy.data.objects); bpy.ops.import_scene.gltf(filepath=f)
+    o = next(x for x in bpy.data.objects if x not in before and x.type == 'MESH'); o.parent = None; o.name = name; return o
+camphor, banyan, luan, tall, palmt = [textured_tree(n) or o for n, o in (('tree_camphor', camphor), ('tree_banyan', banyan), ('tree_luan', luan), ('tree_tall', tall), ('tree_palm', palmt))]
 
 # ---------------- 水馬: hollow plastic water barrier, 1.2 m long, waisted profile, fill cap and forklift slots
 SHELL = mat('barrier_shell', (1, 1, 1), 0.5)
@@ -183,5 +193,5 @@ for o in objs: print(o.name, len(o.data.polygons), 'faces')
 bpy.ops.object.select_all(action='SELECT')
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
 bpy.ops.export_scene.gltf(filepath=OUT, export_format='GLTF_SEPARATE', use_selection=True, export_yup=True, export_apply=True,
-                          export_vertex_color='ACTIVE', export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=8)
+                          export_vertex_color='ACTIVE', export_image_format='WEBP', export_draco_mesh_compression_enable=True, export_draco_mesh_compression_level=8)
 print('wrote', OUT)
