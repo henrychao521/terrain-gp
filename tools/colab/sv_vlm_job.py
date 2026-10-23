@@ -1,11 +1,11 @@
 """Colab job: judge street-level images with open vision-language models (街景體檢).
 
-  python sv_vlm_job.py --models Qwen/Qwen3-VL-32B-Instruct[,mistralai/Mistral-Small-3.2-24B-Instruct-2506] [--batch 8] [--only ids.txt]
+  python sv_vlm_job.py --models Qwen/Qwen3-VL-32B-Instruct[,mistralai/Mistral-Small-3.1-24B-Instruct-2503] [--batch 8] [--only ids.txt]
 
 Input  /content/in/items.json: [{"id", "kind": "self" | "pair", "images": [relative paths under /content/in/]}]
 Output /content/out/<model short name>.jsonl (one line per item: id, raw text, parsed JSON) and /content/out.zip.
 kind "self": one game render, glitch checklist. kind "pair": [real photo, game render], scenery checklist.
-Greedy decoding. Licences: Qwen3-VL (Apache-2.0), Mistral-Small-3.2 (Apache-2.0). No tokens or keys are used here.
+Greedy decoding. Licences: Qwen3-VL (Apache-2.0), Mistral-Small-3.1 (Apache-2.0). No tokens or keys are used here.
 """
 import argparse, gc, json, os, re, time, traceback, zipfile
 import torch
