@@ -4,7 +4,7 @@
 
 Reads <work>/vlm/svpair<tag>/out/Qwen3-VL-32B-Instruct.jsonl (primary), <work>/mapillary/poses.json, and optionally the
 second family's answers (Mistral-Small on the disputed pairs). Writes in <work>/pairs_<tag>/:
-  second_ids.txt   pairs for the second family: any mismatch on a driving-scale item, low confidence, or not the same place
+  second_ids.txt   pairs for the second family: every pair the primary model judged to show the same place
   summary.json     per track: pairs, same-place rate, mismatches per item (primary, and confirmed by both families)
   observations.json  arcade / ground-floor use per side seen in the photo (primary, confident, same place; for derive_params --street);
                      where the second family answered, both must agree
@@ -14,7 +14,7 @@ from collections import Counter, defaultdict
 ap = argparse.ArgumentParser(); ap.add_argument('tag'); ap.add_argument('--second', default=''); ap.add_argument('--poses', default=''); a = ap.parse_args()
 W = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), 'streetview', 'work')
 import glob
-P = {p['id']: p for f in (sorted(glob.glob(a.poses)) if a.poses else [f'{W}/mapillary/poses.json']) for p in json.load(open(f))}
+P = {p['id']: p for f in (sorted(glob.glob(a.poses if a.poses.endswith('.json') else a.poses + '*.json')) if a.poses else [f'{W}/mapillary/poses.json']) for p in json.load(open(f))}
 prim = {}
 for l in open(f'{W}/vlm/svpair{a.tag}/out/Qwen3-VL-32B-Instruct.jsonl'):
     r = json.loads(l); prim[r['id']] = r['parsed'] or {}
@@ -34,8 +34,8 @@ for pid, d in prim.items():
     tr = pid.rsplit('_', 2)[0]; s = summ[tr]; s['pairs'] += 1
     same = d.get('same_place') == 'yes'; s['same_place'] += same
     mis = [k for k in MAJOR if m(d, k) in ('no', 'game_wider', 'game_narrower')]
-    if mis or conf(d) < 0.6 or not same: second.append(pid)
-    if not same: continue
+    if not same: continue  # the two views do not show the same place: no use comparing them
+    second.append(pid)  # every same-place pair: its mismatches and its arcade / use readings need both families
     e = sec.get(pid)
     if e is not None: s['second_checked'] += 1
     for k in mis:

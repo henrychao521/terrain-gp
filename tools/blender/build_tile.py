@@ -498,7 +498,10 @@ def build_bridges():
     bld = Builder(); cnt = 0
     for br in O.get('bridges', []):
         c, lay, w, g0, g1 = br[0], br[1], br[2] / 10, br[3], br[4]
-        pts = [(br[6 + 2 * i] / 10, br[7 + 2 * i] / 10) for i in range((len(br) - 6) // 2)]
+        pts0 = [(br[6 + 2 * i] / 10, br[7 + 2 * i] / 10) for i in range((len(br) - 6) // 2)]
+        pts = pts0[:1]  # pieces of at most 8 m, so a ramp's low end is judged where it is (華翠大橋 runs 178 m in one segment)
+        for a, b2 in zip(pts0, pts0[1:]):
+            m = max(1, math.ceil(math.dist(a, b2) / 8.0)); pts += [(a[0] + (b2[0] - a[0]) * q / m, a[1] + (b2[1] - a[1]) * q / m) for q in range(1, m + 1)]
         S = [0.0]
         for a, b2 in zip(pts, pts[1:]): S.append(S[-1] + math.dist(a, b2))
         L, full = S[-1], 6.5 * lay
