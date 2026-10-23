@@ -87,6 +87,14 @@ def build_dem(cache_dir: str):
 
     # Clean no-data and sea values (< -100) -> 0.0
     valid_data = np.where((combined < -100.0) | np.isnan(combined), 0.0, combined).astype(np.float32)
+    # Copernicus GLO-30 is a surface model (roofs and tree tops included): a 5 x 5 minimum filter (about 150 m)
+    # removes buildings from the basin so the far terrain is ground, at the cost of a few metres off sharp peaks
+    k = int(os.environ.get('SKYLINE_MINFILTER', '5'))
+    if k > 1:
+        r = k // 2; pad = np.pad(valid_data, r, mode='edge'); mn = valid_data.copy()
+        for dy in range(k):
+            for dx in range(k): np.minimum(mn, pad[dy:dy + valid_data.shape[0], dx:dx + valid_data.shape[1]], out=mn)
+        valid_data = mn
 
     lat_scale = total_rows / lat_height
     lon_scale = total_cols / lon_width
