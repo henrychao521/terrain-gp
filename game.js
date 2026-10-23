@@ -269,7 +269,7 @@ function finishCity(M) {
 function loadTaipei() {
   if (CITY.taipei) return Promise.resolve(CITY.taipei);
   const get = u => fetch(u).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
-  return Promise.all([get('data/taipei.json'), get('data/taipei_osm.json').catch(() => null), get('models/taipei/tiles.json').catch(() => null), loadProps(), loadTreeAtlas()]).then(([d, o, tl]) => {
+  return Promise.all([get('data/taipei.json'), get('data/taipei_osm.json').catch(() => null), get('models/taipei/tiles.json').catch(() => null), loadProps(), loadTreeAtlas(), get('data/skyline.json').catch(() => null)]).then(([d, o, tl, , , sky]) => {
     const sx = d.nx * d.d, sz = d.ny * d.d, cell = 10, nx = sx / cell + 1, nz = sz / cell + 1;
     const zr = atob(d.z), mr = atob(d.mask), dz = new Float32Array(d.nx * d.ny), dm = new Uint8Array(d.nx * d.ny);
     for (let k = 0; k < dz.length; k++) { let v = zr.charCodeAt(2 * k) | (zr.charCodeAt(2 * k + 1) << 8); if (v > 32767) v -= 65536; dz[k] = v / 100; dm[k] = mr.charCodeAt(k); }
@@ -301,7 +301,7 @@ function loadTaipei() {
     }
     // Blender-built scenery tiles replace the generated buildings and landmarks inside their bounds
     const tiles = tl && window.THREE.GLTFLoader ? tl.tiles.map(t => ({ file: 'models/taipei/' + t.file, x0: t.x0 - sx / 2, x1: t.x1 - sx / 2, z0: sz / 2 - t.y1, z1: sz / 2 - t.y0 })) : [];
-    return (CITY.taipei = finishCity({ kind: 'city', id: 'taipei', name: d.name, sx, sz, nx, nz, raw, mask, base: 0, water: 0.35, roads, blds, env, tiles, credits: d.credits + (o ? '；' + o.credits : '') }));
+    return (CITY.taipei = finishCity({ kind: 'city', id: 'taipei', name: d.name, sx, sz, nx, nz, raw, mask, base: 0, water: 0.35, roads, blds, env, tiles, skyline: sky, credits: d.credits + (o ? '；' + o.credits : '') + (sky ? '；' + sky.note : '') }));
   });
 }
 function parseOSM(text, fileName) {
@@ -579,6 +579,7 @@ const ATMO_P = {
   night: { dir: [0.3, 0.72, -0.25], sun: 0x9fb4e6, si: 0.3, hs: 0x2c3c5c, hg: 0x14120f, hi: 0.32, hor: [0.05, 0.07, 0.12], zen: [0.008, 0.012, 0.035], fog: 0.0002, exp: 1.15, cl: 0.1, glow: 0.12, bloom: 0.75, lum: 0.12, night: 1 },
 };
 const headlight = new THREE.SpotLight(0xfff4e0, 0, 90, 0.45, 0.6, 1.2); headlight.position.set(1.6, 0.7, 0); headlight.target.position.set(40, -2, 0);
+const SKY_R = 8500, SKYLINE_U = { lum: { value: 1 } }; // far skyline impostors (skylineImpostors)
 function applyAtmo() {
   const P = ATMO_P[ATMO.tod] || ATMO_P.day, r = ATMO.rain, grey = new THREE.Color(0.5, 0.53, 0.56).multiplyScalar(P.lum);
   SUN_DIR.set(...P.dir).normalize(); sun.color.copy(lin(P.sun)); sun.intensity = P.si * (r ? 0.3 : 1);
@@ -587,7 +588,7 @@ function applyAtmo() {
   if (r) { SKY.horizon.lerp(grey, 0.75); SKY_U.zenith.value.lerp(grey.multiplyScalar(0.75), 0.8); }
   SKY_U.cover.value = r ? 1 : 0; SKY_U.cloudLit.value = P.cl * (r ? 0.75 : 1); SKY_U.sunGlow.value = r ? 0 : P.glow;
   scene.fog.color.copy(SKY.horizon).multiplyScalar(0.95); scene.fog.density = P.fog * (r ? 5 : 1);
-  renderer.toneMappingExposure = P.exp; if (POST.bloom) POST.bloom.strength = P.bloom;
+  renderer.toneMappingExposure = P.exp; if (POST.bloom) POST.bloom.strength = P.bloom; SKYLINE_U.lum.value = P.lum;
   headlight.intensity = P.night > 0.3 || r ? 2.2 + 2 * P.night : 0;
   if (W.lampPools) W.lampPools.visible = P.night > 0.3; if (W.lampPools) W.lampPools.material.opacity = 0.55 * P.night;
   if (W.asphalt) { W.asphalt.roughness = r ? 0.42 : 0.8; W.asphalt.envMapIntensity = r ? 0.75 : 0.5; W.asphalt.color.setScalar(r ? 0.5 : 1); W.asphalt.normalScale.setScalar(r ? 0.22 : 0.55); } // wet: darker, smoother, softer grain
@@ -1112,6 +1113,44 @@ function buildTaipeiStreet(grp, ribbon, S) {
 // parks and lawns, traffic lights with street-name signs, and landmark buildings from OpenStreetMap
 const CSS_COL = { blue: 0x2f5fa8, white: 0xf1efe8, red: 0xa3302a, grey: 0x9a9a98, gray: 0x9a9a98, brown: 0x7a5236, yellow: 0xd9b23a, orange: 0xcf7a2c, green: 0x4b7a4a, black: 0x222222 };
 const colOf = (c, d) => c ? (CSS_COL[c.toLowerCase()] ?? (/^#[0-9a-f]{6}$/i.test(c) ? parseInt(c.slice(1), 16) : d)) : d;
+// far mountains and towers outside the map (data/skyline.json: Copernicus DEM on a polar grid, Overture towers).
+// They lie up to 40 km away, past the camera's far plane and the scene fog, so the vertex shader pulls every vertex
+// farther than SKY_R back along its line of sight to SKY_R: bearing and angular size stay true, depth stays behind
+// everything nearby. Their own haze uses the scene fog colour and a thinner density, so ridgelines read on a clear day.
+function skylineImpostors(grp, S) {
+  const sx = W.sx, sz = W.sz, cx = S.centre[0], cy = S.centre[1], A = 360 / S.az_step, R = S.radii, pos = [], col = [], idx = [], c = new THREE.Color();
+  const inside = (x, z) => Math.abs(x) < sx / 2 - 50 && Math.abs(z) < sz / 2 - 50;
+  const lo = lin(0x8f8b83), mid = lin(0x4f6447), hi = lin(0x3a4d36);
+  for (let i = 0; i < R.length; i++) for (let a = 0; a < A; a++) {
+    const az = a * S.az_step * Math.PI / 180, X = cx + R[i] * Math.sin(az), Y = cy + R[i] * Math.cos(az), h = S.h[i][a];
+    pos.push(X - sx / 2, h, sz / 2 - Y); c.copy(h < 25 ? lo : h < 250 ? mid : hi); col.push(c.r, c.g, c.b);
+  }
+  for (let i = 0; i + 1 < R.length; i++) for (let a = 0; a < A; a++) {
+    const p = i * A + a, q = i * A + (a + 1) % A, r = p + A, t = q + A;
+    if ([p, q, r, t].every(v => inside(pos[v * 3], pos[v * 3 + 2]))) continue;
+    idx.push(p, r, q, q, r, t);
+  }
+  const towerC = lin(0x8d97a2);
+  for (const tw of S.towers || []) { // extruded footprint, flat roof
+    const ring = tw.ring, m = ring.length, top = tw.base + tw.h, b = pos.length / 3;
+    for (const [X, Y] of ring) { pos.push(X - sx / 2, tw.base, sz / 2 - Y, X - sx / 2, top, sz / 2 - Y); col.push(towerC.r, towerC.g, towerC.b, towerC.r * 1.1, towerC.g * 1.1, towerC.b * 1.1); }
+    for (let k = 0; k < m; k++) { const k2 = (k + 1) % m; idx.push(b + k * 2, b + k2 * 2, b + k * 2 + 1, b + k2 * 2, b + k2 * 2 + 1, b + k * 2 + 1); }
+    for (let k = 1; k + 1 < m; k++) idx.push(b + 1, b + k * 2 + 1, b + (k + 1) * 2 + 1);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
+  const mat = new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { sunDir: { value: SUN_DIR }, R: { value: SKY_R } }]), fog: true, side: THREE.DoubleSide, vertexColors: true,
+    vertexShader: `uniform float R; uniform vec3 sunDir; varying vec3 vCol; varying float vL; varying float vSun;
+      void main(){ vec4 wp = modelMatrix * vec4(position, 1.0); vec3 d = wp.xyz - cameraPosition; float L = length(d); vL = L;
+        if (L > R) wp.xyz = cameraPosition + d * (R / L);
+        vCol = color; vSun = max(dot(normalize(mat3(modelMatrix) * normal), normalize(sunDir)), 0.0); gl_Position = projectionMatrix * viewMatrix * wp; }`,
+    fragmentShader: `uniform vec3 fogColor; uniform float fogDensity; uniform float lum; varying vec3 vCol; varying float vL; varying float vSun;
+      void main(){ float haze = 1.0 - exp(-vL * fogDensity * 0.36); vec3 c = vCol * (0.45 + 0.55 * vSun) * lum;
+        gl_FragColor = vec4(mix(c, fogColor, clamp(haze, 0.0, 0.92)), 1.0); }`,
+  });
+  mat.uniforms.lum = SKYLINE_U.lum;
+  const mesh = new THREE.Mesh(g, mat); mesh.name = 'skyline'; mesh.frustumCulled = false; grp.add(mesh);
+}
 function taipeiScenery(grp) {
   const env = W.M.env, D = W.dist, HWg = W.hwGrid, n = W.n;
   // --- green areas, draped just above the ground
@@ -1699,6 +1738,7 @@ function buildMeshes() {
       q4.identity();
     }
     taipeiScenery(grp);
+    if (W.M.skyline) skylineImpostors(grp, W.M.skyline);
   }
   if (W.city && !W.real) {
     const spots = [], occ = M.occ, free = (x, z) => { const i = Math.floor((x + W.sx / 2) / occ.cs), j = Math.floor((z + W.sz / 2) / occ.cs); return i >= 0 && j >= 0 && i < occ.rw && j < occ.rh && !occ.a[j * occ.rw + i]; };

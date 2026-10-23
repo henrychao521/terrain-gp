@@ -137,7 +137,7 @@ function dumpScene(W, file, R) {
   const groups = {}, v = new T3.Vector3(), m = new T3.Matrix4(), mi = new T3.Matrix4();
   W.group.updateMatrixWorld(true);
   W.group.traverse(o => {
-    if (!o.isMesh || !o.visible) return;
+    if (!o.isMesh || !o.visible || o.name === 'skyline') return; // drawn by blender_render.py from data/skyline.json
     const g = o.geometry, pos = g && g.attributes && g.attributes.position; if (!pos) return;
     const mat = Array.isArray(o.material) ? o.material[0] : o.material; if (!mat || (mat.blending === T3.AdditiveBlending)) return;
     const col = mat.color ? mat.color.getHexString() : 'ffffff', vc = !!mat.vertexColors && g.attributes.color;

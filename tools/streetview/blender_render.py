@@ -155,6 +155,36 @@ if TREES:
         col.hide_render = False
     # the source collections are not linked to the scene, so only the instances render
 
+# ---------------------------------------------------------------- far skyline impostors (data/skyline.json), at their true positions
+SKYF = os.path.join(REPO, 'data', 'skyline.json')
+if OPT.get('skyline', True) and os.path.exists(SKYF):
+    K = json.load(open(SKYF)); cx, cy = K['centre']; A = round(360 / K['az_step']); RR = K['radii']; HZ = (0.6 * 0.95, 0.71 * 0.95, 0.83 * 0.95)
+    bm = bmesh.new(); cl = bm.loops.layers.color.new('Col'); V = []
+    def hazed(rgb, d): f = min(0.92, 1 - math.exp(-d * 0.00017 * 0.36)); return tuple(c * (1 - f) + hz * f for c, hz in zip(rgb, HZ)) + (1,)
+    for i, r in enumerate(RR):
+        for a_ in range(A):
+            az = math.radians(a_ * K['az_step']); V.append(bm.verts.new((cx + r * math.sin(az) - SX / 2, cy + r * math.cos(az) - SY / 2, K['h'][i][a_])))
+    ins = lambda v: abs(v.co.x) < SX / 2 - 50 and abs(v.co.y) < SY / 2 - 50
+    for i in range(len(RR) - 1):
+        for a_ in range(A):
+            q = [V[i * A + a_], V[i * A + (a_ + 1) % A], V[(i + 1) * A + (a_ + 1) % A], V[(i + 1) * A + a_]]
+            if all(ins(v) for v in q): continue
+            f = bm.faces.new(q); h = max(v.co.z for v in q); base = (0.28, 0.27, 0.25) if h < 25 else (0.08, 0.13, 0.065) if h < 250 else (0.045, 0.075, 0.035)
+            for l in f.loops: l[cl] = hazed(base, RR[i])
+    for tw in K.get('towers', []):
+        ring = tw['ring']; d = math.hypot(sum(p[0] for p in ring) / len(ring) - cx, sum(p[1] for p in ring) / len(ring) - cy)
+        lo_ = [bm.verts.new((X - SX / 2, Y - SY / 2, tw['base'])) for X, Y in ring]; up = [bm.verts.new((X - SX / 2, Y - SY / 2, tw['base'] + tw['h'])) for X, Y in ring]
+        fs = [bm.faces.new((lo_[k], lo_[(k + 1) % len(ring)], up[(k + 1) % len(ring)], up[k])) for k in range(len(ring))]
+        try: fs.append(bm.faces.new(up))
+        except ValueError: pass
+        for f in fs:
+            for l in f.loops: l[cl] = hazed((0.27, 0.31, 0.36), d)
+    me = bpy.data.meshes.new('skyline'); bm.to_mesh(me); o = bpy.data.objects.new('skyline', me); scn.collection.objects.link(o)
+    m = bpy.data.materials.new('skyline'); m.use_nodes = True; nt = m.node_tree; em = nt.nodes.new('ShaderNodeEmission'); vc = nt.nodes.new('ShaderNodeVertexColor'); vc.layer_name = 'Col'
+    nt.links.new(vc.outputs['Color'], em.inputs['Color']); nt.links.new(em.outputs[0], nt.nodes['Material Output'].inputs['Surface']); me.materials.append(m)
+    SKY_CLIP = 45000
+else: SKY_CLIP = 1500
+
 # ---------------------------------------------------------------- light and render settings
 w = bpy.data.worlds.new('w'); scn.world = w; w.use_nodes = True; bg = w.node_tree.nodes['Background']; bg.inputs['Color'].default_value = (0.62, 0.72, 0.85, 1); bg.inputs['Strength'].default_value = 0.9
 sun = bpy.data.objects.new('sun', bpy.data.lights.new('sun', 'SUN')); scn.collection.objects.link(sun); sun.data.energy = 3.2; sun.rotation_euler = (math.radians(40), math.radians(15), math.radians(-35))
@@ -163,7 +193,7 @@ try: scn.eevee.taa_render_samples = OPT.get('samples', 16)
 except Exception: pass
 scn.view_settings.view_transform = 'Standard'
 cam = bpy.data.objects.new('cam', bpy.data.cameras.new('cam')); scn.collection.objects.link(cam); scn.camera = cam
-cam.data.lens_unit = 'FOV'; cam.data.clip_start = 0.2; cam.data.clip_end = 1500; cam.data.sensor_fit = 'HORIZONTAL'
+cam.data.lens_unit = 'FOV'; cam.data.clip_start = 0.3; cam.data.clip_end = SKY_CLIP; cam.data.sensor_fit = 'HORIZONTAL'
 scn.render.image_settings.file_format = 'JPEG'; scn.render.image_settings.quality = 85
 
 def surf_at(X, Y):
