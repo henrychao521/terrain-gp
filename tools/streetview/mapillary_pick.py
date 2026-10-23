@@ -210,6 +210,27 @@ def _safe_network_get_json(url: str, token: str = None) -> dict:
         raise RuntimeError(msg) from None
 
 
+def _fetch_split(base_url, params, bb, token, depth):
+    """one bbox request; on a server error or a full page (2000) split the box in four (Mapillary has no paging here)"""
+    import time
+    p = dict(params); p["bbox"] = f"{bb[0]:.6f},{bb[1]:.6f},{bb[2]:.6f},{bb[3]:.6f}"
+    url = f"{base_url}?{urllib.parse.urlencode(p)}"; res = None
+    for attempt in range(3):
+        try:
+            res = _safe_network_get_json(url, token=token).get("data", []); break
+        except RuntimeError as e:
+            if depth < 4 and "500" in str(e): break
+            time.sleep(3 * (attempt + 1))
+    if res is not None and (len(res) < 2000 or depth >= 4):
+        return res
+    if depth >= 4:
+        raise RuntimeError("bbox still failing after splitting")
+    mx, my = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2; out = []
+    for q in ((bb[0], bb[1], mx, my), (mx, bb[1], bb[2], my), (bb[0], my, mx, bb[3]), (mx, my, bb[2], bb[3])):
+        out += _fetch_split(base_url, params, q, token, depth + 1)
+    return out
+
+
 def _safe_download_image(url: str, dest_path: str):
     try:
         req = urllib.request.Request(
@@ -665,14 +686,7 @@ def main():
                             "fields": "id,captured_at,compass_angle,computed_compass_angle,geometry,computed_geometry,camera_type,camera_parameters,is_pano,width,height,creator,sequence,thumb_1024_url,thumb_2048_url",
                             "access_token": token,
                         }
-                        curr_url = f"{base_url}?{urllib.parse.urlencode(params)}"
-                        while curr_url:
-                            res_json = _safe_network_get_json(curr_url, token=token)
-                            items = res_json.get("data", [])
-                            tile_images.extend(items)
-                            paging = res_json.get("paging", {})
-                            curr_url = paging.get("next")
-
+                        tile_images = _fetch_split(base_url, params, (tile_min_lon, tile_min_lat, tile_max_lon, tile_max_lat), token, 0)
                         if len(tile_images) >= 2000:
                             print("WARNING tile hit the 2000-image limit:", tile_id, file=sys.stderr)
                         with open(cache_path, "w", encoding="utf-8") as cf:
