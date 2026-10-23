@@ -49,14 +49,14 @@ def dem(X, Y):
     return z(i, j) * (1 - a_) * (1 - b_) + z(i + 1, j) * a_ * (1 - b_) + z(i, j + 1) * (1 - a_) * b_ + z(i + 1, j + 1) * a_ * b_
 X0d, X1d = min(xs) + SX / 2 - 400, max(xs) + SX / 2 + 400; Y0d, Y1d = SY / 2 - max(zs) - 400, SY / 2 - min(zs) + 400
 bm = bmesh.new(); step = 10; cols_ = int((X1d - X0d) / step) + 1; rows = int((Y1d - Y0d) / step) + 1
-V = [[bm.verts.new((X0d + i * step - SX / 2, Y0d + j * step - SY / 2, dem(X0d + i * step, Y0d + j * step) - 0.15)) for i in range(cols_)] for j in range(rows)]
+V = [[bm.verts.new((X0d + i * step - SX / 2, Y0d + j * step - SY / 2, dem(X0d + i * step, Y0d + j * step) - 0.3)) for i in range(cols_)] for j in range(rows)]
 for j in range(rows - 1):
     for i in range(cols_ - 1): bm.faces.new((V[j][i], V[j][i + 1], V[j + 1][i + 1], V[j + 1][i]))
 me = bpy.data.meshes.new('ground'); bm.to_mesh(me); g = bpy.data.objects.new('ground', me); scn.collection.objects.link(g)
 m = bpy.data.materials.new('ground'); m.use_nodes = True; m.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (0.32, 0.33, 0.3, 1); me.materials.append(m)
 n = t['n']; bm = bmesh.new(); L, R = [], []
 for k in range(n):
-    x, y = t['x'][k], -t['z'][k]; lx, ly = t['lx'][k], -t['lz'][k]; zz = t['surf'][k] + 0.03
+    x, y = t['x'][k], -t['z'][k]; lx, ly = t['lx'][k], -t['lz'][k]; zz = max(t['surf'][k], dem(x + SX / 2, y + SY / 2)) + 0.06
     L.append(bm.verts.new((x + lx * t['hwL'][k], y + ly * t['hwL'][k], zz))); R.append(bm.verts.new((x - lx * t['hwR'][k], y - ly * t['hwR'][k], zz)))
 for k in range(n): bm.faces.new((R[k], R[(k + 1) % n], L[(k + 1) % n], L[k]))
 me = bpy.data.meshes.new('road'); bm.to_mesh(me); r = bpy.data.objects.new('road', me); scn.collection.objects.link(r)
@@ -65,7 +65,7 @@ m = bpy.data.materials.new('road'); m.use_nodes = True; m.node_tree.nodes['Princ
 for side, arr in ((1, 'hwL'), (-1, 'hwR')):
     bm = bmesh.new(); A = []; B2 = []
     for k in range(n):
-        x, y = t['x'][k], -t['z'][k]; lx, ly = t['lx'][k] * side, -t['lz'][k] * side; w = t[arr][k]; zz = t['surf'][k] + 0.05
+        x, y = t['x'][k], -t['z'][k]; lx, ly = t['lx'][k] * side, -t['lz'][k] * side; w = t[arr][k]; zz = max(t['surf'][k], dem(x + SX / 2, y + SY / 2)) + 0.09
         A.append(bm.verts.new((x + lx * (w - 0.25), y + ly * (w - 0.25), zz))); B2.append(bm.verts.new((x + lx * w, y + ly * w, zz)))
     for k in range(n): bm.faces.new((A[k], A[(k + 1) % n], B2[(k + 1) % n], B2[k]))
     me = bpy.data.meshes.new('kerb'); bm.to_mesh(me); o = bpy.data.objects.new('kerb', me); scn.collection.objects.link(o)
@@ -92,7 +92,7 @@ if MODE == 'top':
     json.dump({'x0': X0, 'y0': Y0, 'x1': X1, 'y1': Y1, 'ppm': ppm, 'tiles': files}, open(os.path.join(OUT, OPT.get('name', 'top') + '.json'), 'w'))
 else:
     every = OPT.get('every', 25); scn.render.resolution_x = OPT.get('w', 960); scn.render.resolution_y = OPT.get('h', 540)
-    cam.data.lens_unit = 'FOV'; cam.data.angle = math.radians(OPT.get('fov', 80)); cam.data.clip_end = 1500
+    cam.data.lens_unit = 'FOV'; cam.data.angle = math.radians(OPT.get('fov', 68)); cam.data.clip_end = 1500
     scn.render.image_settings.file_format = 'JPEG'; scn.render.image_settings.quality = 82
     step = max(1, round(every / t['ds'])); shots = []
     ks = OPT.get('ks') or list(range(0, n, step))
@@ -100,7 +100,7 @@ else:
         for dirn in OPT.get('dirs', ['fwd', 'rev']):
             x, y = t['x'][k], -t['z'][k]; tx, ty = -t['lz'][k], -t['lx'][k]  # travel direction in blender xy (left (lx,-lz) rotated -90°)
             if dirn == 'rev': tx, ty = -tx, -ty
-            cam.location = (x, y, t['surf'][k] + 1.3)
+            cam.location = (x, y, max(t['surf'][k], dem(x + SX / 2, y + SY / 2)) + 1.3)
             cam.rotation_euler = (math.radians(88), 0, math.atan2(ty, tx) - math.pi / 2)
             f = os.path.join(OUT, f's_{k:04d}_{dirn}.jpg'); scn.render.filepath = f; bpy.ops.render.render(write_still=True)
             shots.append({'k': k, 'dir': dirn, 'file': os.path.basename(f), 'road': t['rname'][k], 'data': [round(t['x'][k] + SX / 2, 1), round(SY / 2 - t['z'][k], 1)], 's_m': round(k * t['ds'])})

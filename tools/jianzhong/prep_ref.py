@@ -92,7 +92,7 @@ write('sidewalk', feats, '臺北市人行道範圍圖 TP_SIDEWORK (臺北市政�
 feats = []
 for g, p in from_shp(os.path.join(RAW, 'zoning', 'zoning_detail_poly'), enc='cp950', even_odd=True):
     if not g.is_valid: g = g.buffer(0)
-    if g.is_empty or not g.intersects(area) or p['分區代碼'] in ('細部計畫範圍',): continue
+    if g.is_empty or not g.intersects(area) or p['分區代碼'] in ('細部計畫範圍',) or (p['使用分區'] or p['分區簡稱']) in ('規劃範圍', '行政區'): continue
     feats.append({'type': 'Feature', 'properties': {'code': p['分區代碼'], 'short': p['分區簡稱'], 'zone': p['使用分區'], 'note': p['分區說明']}, 'geometry': mapping(g)})
 write('zoning', feats, '臺北市都市計畫使用分區圖 全市細計 (臺北市政府都市發展局, OGDL v1, 更新至 114 年 1 月). zone = 使用分區')
 

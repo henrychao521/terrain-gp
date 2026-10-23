@@ -32,12 +32,14 @@ def near_tiles(t, pad=20.0):
 
 
 files = sorted({f for t in tracks for f in near_tiles(t)})
+TILE_DIR = os.environ.get('TGP_TILE_DIR')  # test another set of tiles (same file names) instead of models/taipei
+tile_path = lambda f: os.path.join(TILE_DIR, os.path.basename(f)) if TILE_DIR else os.path.join(REPO, f)
 trees, names, cols = [], [], []
 
 
 def columns(f):
     """arcade columns of a tile (0.55 m square, 6 m tall, base at z), as one BVH"""
-    p = os.path.join(REPO, f[:-5] + '.inst.json')
+    p = tile_path(f)[:-5] + '.inst.json'
     if not os.path.exists(p): return None
     js = json.load(open(p)); raw = base64.b64decode(js.get('column', '') or b'')
     a = struct.unpack(f'<{len(raw) // 2}h', raw)
@@ -53,7 +55,7 @@ def columns(f):
     return BVHTree.FromPolygons(V, F) if F else None
 for f in files:
     before = set(bpy.data.objects)
-    bpy.ops.import_scene.gltf(filepath=os.path.join(REPO, f))
+    bpy.ops.import_scene.gltf(filepath=tile_path(f))
     dg = bpy.context.evaluated_depsgraph_get()
     for o in set(bpy.data.objects) - before:
         if o.type != 'MESH' or not o.name.startswith(('buildings', 'landmarks')): continue

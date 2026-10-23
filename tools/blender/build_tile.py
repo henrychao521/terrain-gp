@@ -316,6 +316,7 @@ def build_landmarks():
     return bld.to_object('landmarks')
 
 # ---------- ordinary buildings
+DUMP = []  # final footprint and choices per building, written to $TGP_DUMP (debugging and the corridor audit)
 def build_buildings():
     bld = Builder(); stats = dict(n=0, cages=0, signs=0, arcades=0)
     pal = ['facade_mosaic_cream', 'facade_mosaic_pink', 'facade_mosaic_grey']
@@ -324,8 +325,8 @@ def build_buildings():
         if len(ring) < 3: continue
         gx = sum(p[0] for p in ring) / len(ring); gy = sum(p[1] for p in ring) / len(ring)
         if not inside(gx, gy) or any(pip(gx, gy, r) for r in lm_rings): continue
-        ring = clear_roads(ccw(ring))
-        if ring is None or len(ring) < 3: stats['dropped'] = stats.get('dropped', 0) + 1; continue
+        ring0 = ccw(ring); ring = clear_roads(ring0)
+        if ring is None or len(ring) < 3: stats['dropped'] = stats.get('dropped', 0) + 1; DUMP.append({'bid': bi, 'dropped': True, 'ring0': ring0, 'h': h}); continue
         ring = ccw(ring); hsh = (bi * 2654435761) & 0xffffffff
         fam = ('facade_concrete' if hsh % 3 == 0 else 'facade_glass') if h > 42 else [pal[hsh % 3], 'facade_concrete', 'facade_glass'][hsh % 3] if h > 24 else ('facade_concrete' if hsh % 5 == 0 else pal[hsh % 3])
         if AI:  # AI facades by building height; the drawn ones remain the fallback
@@ -344,6 +345,7 @@ def build_buildings():
         arcade = lowrise and h >= 7
         g0 = base + 1.5 + 4.5  # top of the ground floor
         inner = offset_ring(ring, [3.0 if (arcade and street[i]) else 0 for i in range(n)]) if arcade and any(street) else ring
+        DUMP.append({'bid': bi, 'ring0': ring0, 'ring': ring, 'inner': inner if inner is not ring else None, 'h': h, 'base': base, 'top': top, 'facade': fam, 'arcade': arcade and any(street), 'street': street, 'shops': bool(arcade and SHOP_AI and hsh % 5)})
         per = 0.0
         for i in range(n):
             (ax, ay), (bx, by) = ring[i], ring[(i + 1) % n]; L = math.hypot(bx - ax, by - ay)
@@ -456,6 +458,9 @@ def build_bridges():
     return bld.to_object('bridges')
 
 lm_objs = build_landmarks(); cut_gate_passages(lm_objs); b_objs = build_buildings() + build_bridges()
+if os.environ.get('TGP_DUMP'):
+    json.dump({'x0': X0, 'x1': X1, 'y0': Y0, 'y1': Y1, 'buildings': DUMP}, open(os.environ['TGP_DUMP'], 'w'))
+    if os.environ.get('TGP_DUMP_ONLY') == '1': print('dumped', len(DUMP)); sys.exit(0)
 
 # ---------- ambient occlusion baked into vertex colours (needs a ground to occlude against; the ground is not exported)
 bpy.ops.mesh.primitive_plane_add(size=1); ground = bpy.context.active_object; ground.name = 'ao_ground'
