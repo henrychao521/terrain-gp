@@ -1146,9 +1146,12 @@ function skylineImpostors(grp, S) {
         vCol = color; vSun = max(dot(normalize(mat3(modelMatrix) * normal), normalize(sunDir)), 0.0); gl_Position = projectionMatrix * viewMatrix * wp; }`,
     fragmentShader: `uniform vec3 fogColor; uniform float fogDensity; uniform float lum; varying vec3 vCol; varying float vL; varying float vSun;
       void main(){ float haze = 1.0 - exp(-vL * fogDensity * 0.36); vec3 c = vCol * (0.45 + 0.55 * vSun) * lum;
-        gl_FragColor = vec4(mix(c, fogColor, clamp(haze, 0.0, 0.92)), 1.0); }`,
+        gl_FragColor = vec4(mix(c, fogColor, clamp(haze, 0.0, 0.92)), 1.0);
+        #include <tonemapping_fragment>
+        #include <encodings_fragment>
+      }`,
   });
-  mat.uniforms.lum = SKYLINE_U.lum;
+  mat.uniforms.lum = SKYLINE_U.lum; mat.uniforms.sunDir = { value: SUN_DIR }; // merge() clones: keep the live objects
   const mesh = new THREE.Mesh(g, mat); mesh.name = 'skyline'; mesh.frustumCulled = false; grp.add(mesh);
 }
 function taipeiScenery(grp) {
