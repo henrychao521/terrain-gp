@@ -11,9 +11,10 @@ second family's answers (Mistral-Small on the disputed pairs). Writes in <work>/
 """
 import argparse, json, os
 from collections import Counter, defaultdict
-ap = argparse.ArgumentParser(); ap.add_argument('tag'); ap.add_argument('--second', default=''); a = ap.parse_args()
+ap = argparse.ArgumentParser(); ap.add_argument('tag'); ap.add_argument('--second', default=''); ap.add_argument('--poses', default=''); a = ap.parse_args()
 W = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), 'streetview', 'work')
-P = {p['id']: p for p in json.load(open(f'{W}/mapillary/poses.json'))}
+import glob
+P = {p['id']: p for f in (sorted(glob.glob(a.poses)) if a.poses else [f'{W}/mapillary/poses.json']) for p in json.load(open(f))}
 prim = {}
 for l in open(f'{W}/vlm/svpair{a.tag}/out/Qwen3-VL-32B-Instruct.jsonl'):
     r = json.loads(l); prim[r['id']] = r['parsed'] or {}
