@@ -27,6 +27,7 @@ Rules (fixed before looking at the scores; documented in docs/jianzhong/進度�
     by hand: the only pitched historic roof by the 南海路 gate of the 高中用地 block; see the report).
 """
 import argparse, colorsys, csv, json, math, os, sys
+from collections import Counter
 import numpy as np
 from PIL import Image
 from shapely.geometry import shape, Polygon, LineString, Point, mapping
@@ -37,7 +38,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import REF, REPO, WORK
 
 ap = argparse.ArgumentParser(); ap.add_argument('--vlm', nargs='*', default=[os.path.join(WORK, 'vlm', 'vlm_32b.json'), os.path.join(WORK, 'vlm', 'vlm_8b.json')]); ap.add_argument('--track', default=os.path.join(REPO, 'eval', 'track_loop.json'))
-ap.add_argument('--out', default=os.path.join(REPO, 'data', 'corridors', 'jianzhong.json')); ap.add_argument('--csv', default=os.path.join(REPO, 'eval', 'A_params.csv'))
+ap.add_argument('--street', default=''); ap.add_argument('--out', default=os.path.join(REPO, 'data', 'corridors', 'jianzhong.json')); ap.add_argument('--csv', default=os.path.join(REPO, 'eval', 'A_params.csv'))
 a = ap.parse_args()
 L = lambda n: json.load(open(os.path.join(REF, 'clip', n + '.geojson')))['features']
 area = shape(L('corridor')[0]['geometry'])
@@ -160,6 +161,26 @@ for c in cands:
     if g is None or g.area < 15: log['merged_nested'].append(c['src']); continue
     c['g'] = orient(g); acc.append(c)
 
+# ---------- street-level observations (tools/streetview: Mapillary photo vs game, both VLM families agreeing):
+# each observation covers a strip on one side of the camera, 4–40 m ahead and 3–30 m to that side
+OBS = []
+if a.street and os.path.exists(a.street):
+    for o_ in json.load(open(a.street)):
+        hd = math.radians(o_['heading']); fx, fy = math.sin(hd), math.cos(hd); sx_, sy_ = (fy, -fx) if o_['side'] == 'R' else (-fy, fx)
+        P0 = lambda f, l: (o_['X'] + fx * f + sx_ * l, o_['Y'] + fy * f + sy_ * l)
+        OBS.append((Polygon([P0(4, 3), P0(40, 3), P0(40, 30), P0(4, 30)]), o_))
+def street_votes(g):
+    v = {'arcade': Counter(), 'use': Counter()}
+    for strip, o_ in OBS:
+        if not strip.intersects(g): continue
+        if o_.get('arcade') in ('yes', 'no'): v['arcade'][o_['arcade']] += 1
+        if o_.get('use') in ('storefront', 'residential', 'institutional'): v['use'][o_['use']] += 1
+    return v
+def majority(c):
+    if not c: return None
+    k, n = c.most_common(1)[0]
+    return k if n >= 2 / 3 * sum(c.values()) else None
+
 # ---------- parameters
 rows, out = [], []
 for i, c in enumerate(acc):
@@ -176,7 +197,10 @@ for i, c in enumerate(acc):
     p = max(0.0, min(1.0, p)); arcade = p >= 0.5
     roof = ans.get('roof') if conf >= 0.5 and ans.get('roof') not in (None, 'none') else (roof_colour(g) or 'flat_concrete')
     special = ans.get('special') if conf >= 0.5 else None
+    sv = street_votes(g) if OBS else None; sv_arc, sv_use = (majority(sv['arcade']), majority(sv['use'])) if sv else (None, None)
+    if sv_arc is not None and not inst: arcade = sv_arc == 'yes'  # seen from the street: overrides the arcade rule
     use = 'institutional' if inst else 'religious' if special == 'temple' else 'storefront' if (arcade or best_w >= 12) else 'residential'
+    if sv_use and not inst and use != 'religious': use = sv_use if sv_use != 'institutional' else use
     landmark = None
     if special in ('palace', 'dome', 'temple') and use in ('institutional', 'religious'): landmark = special
     elif roof == 'pitched_tile' and use == 'institutional': landmark = 'palace'  # 南海學園: tiled roofs on public land are the palace-style halls (rule added after the first VLM pass, before scoring)
@@ -188,10 +212,10 @@ for i, c in enumerate(acc):
     if c['src'] == 'tpe3d:5801': landmark = 'redhouse'; roof = 'pitched_tile'; log['manual'].append({'src': c['src'], 'landmark': 'redhouse'})
     if landmark in ('palace', 'temple', 'redhouse'): roof = 'pitched_tile'
     if landmark == 'dome': roof = 'dome'
-    bid = f'jz:{i:04d}'
+    bid = f"{os.environ.get('JZ_PREFIX', 'jz')}:{i:04d}"
     out.append({'id': bid, 'src': c['src'], 'ring': [[round(x, 2), round(y, 2)] for x, y in list(g.exterior.coords)[:-1]], 'h': round(c['h'], 2), 'floors': c['floors'],
                 'roof': roof, 'arcade': int(arcade), 'arcade_p': round(p, 2), 'use': use, 'landmark': landmark, 'zone': zone, 'road_w': best_w,
-                'vlm': {k: ans.get(k) for k in ('present', 'roof', 'special', 'confidence')} if ans else None})
+                'vlm': {k: ans.get(k) for k in ('present', 'roof', 'special', 'confidence')} if ans else None, 'street': {k: dict(v) for k, v in sv.items()} if sv and (sv['arcade'] or sv['use']) else None})
     rows.append({'building_id': bid, 'source_id': c['src'], 'footprint_wkt': g.wkt, 'height_m': round(c['h'], 2), 'floors': c['floors'] or '', 'roof_type': roof,
                  'arcade': 'yes' if arcade else 'no', 'use_class': use, 'landmark': 'yes' if landmark else 'no'})
 # OSM landmarks in the corridor (built by build_tile.py's landmark code, not as ordinary buildings): height from the
@@ -213,7 +237,7 @@ for f in L('osm_landmarks'):
                   'facade': 'facade_ai_cream'})
     if f['properties'].get('h', 0) < hmax: lm_over[nm] = o
 os.makedirs(os.path.dirname(a.out), exist_ok=True)
-json.dump({'note': '建中周邊走廊的建物參數（tools/jianzhong/derive_params.py）。tools/blender/build_tile.py 對重心落在 area 裡的 data/taipei.json 建物改用這裡的建物。座標：資料座標（TWD97 TM2 減 E 299000、N 2766400）。',
+json.dump({'note': os.environ.get('JZ_NAME', '建中周邊') + '走廊的建物參數（tools/jianzhong/derive_params.py）。tools/blender/build_tile.py 對重心落在 area 裡的 data/taipei.json 建物改用這裡的建物。座標：資料座標（TWD97 TM2 減 E 299000、N 2766400）。',
            'sources': '臺北市建築執照套繪圖、臺北市寬度超過8公尺道路GIS圖資、臺北市人行道範圍圖、臺北市都市計畫使用分區圖（皆為政府資料開放授權條款第1版）；臺北市自動化3D近似建物模型（tpe3d）；© OpenStreetMap contributors；屋頂類型與有無建物由視覺語言模型（' + '、'.join(MODELS or ['未使用']) + '）判讀國土測繪中心正射影像',
            'area': [[round(x, 1), round(y, 1)] for x, y in area.exterior.coords], 'landmarks': lm_over, 'replaces': sorted(replaces), 'buildings': out}, open(a.out, 'w'), ensure_ascii=False, separators=(',', ':'))
 w = csv.DictWriter(open(a.csv, 'w', newline='', encoding='utf-8'), fieldnames=list(rows[0])); w.writeheader(); w.writerows(rows)

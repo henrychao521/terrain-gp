@@ -21,7 +21,7 @@ def world_to_data(x, z): return x + SX / 2, SY / 2 - z
 
 def load_track(path=None):
     """centreline of the loop as built by the game (tools/test/node/world.js output)"""
-    t = json.load(open(path or os.path.join(WORK, 'track_loop_before.json')))
+    t = json.load(open(path or os.environ.get('JZ_TRACK') or os.path.join(WORK, 'track_loop_before.json')))  # JZ_TRACK: another circuit (tools/streetview)
     t['X'] = [x + SX / 2 for x in t['x']]; t['Y'] = [SY / 2 - z for z in t['z']]
     return t
 

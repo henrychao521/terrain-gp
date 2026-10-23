@@ -26,6 +26,10 @@ os.makedirs(OUT, exist_ok=True)
 shift = lambda g: transform(lambda x, y, z=None: (x - E0, y - N0), g)
 track = load_track(); band = corridor_band(track, CLIP_M); ring = LinearRing(list(zip(track['X'], track['Y'])))
 area = band.union(Polygon(ring))  # the band plus the block inside the loop (建中 and its neighbours)
+if os.environ.get('JZ_BAND_ONLY') == '1': area = band  # long circuits (tools/streetview): only the ±150 m band
+for ex in filter(None, os.environ.get('JZ_EXCLUDE', '').split(':')):  # areas of corridors already built (data/corridors/*.json)
+    area = area.difference(Polygon(json.load(open(ex))['area']).buffer(0))
+if area.geom_type == 'MultiPolygon': area = max(area.geoms, key=lambda g: g.area)
 
 
 def write(name, feats, note):

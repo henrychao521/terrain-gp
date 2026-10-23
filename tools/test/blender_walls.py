@@ -34,7 +34,7 @@ def near_tiles(t, pad=20.0):
 files = sorted({f for t in tracks for f in near_tiles(t)})
 TILE_DIR = os.environ.get('TGP_TILE_DIR')  # test another set of tiles (same file names) instead of models/taipei
 tile_path = lambda f: os.path.join(TILE_DIR, os.path.basename(f)) if TILE_DIR else os.path.join(REPO, f)
-trees, names, cols = [], [], []
+trees, names, cols, btrees = [], [], [], []  # btrees: viaduct decks and piers (a pier in the carriageway snags a car)
 
 
 def columns(f):
@@ -58,10 +58,11 @@ for f in files:
     bpy.ops.import_scene.gltf(filepath=tile_path(f))
     dg = bpy.context.evaluated_depsgraph_get()
     for o in set(bpy.data.objects) - before:
-        if o.type != 'MESH' or not o.name.startswith(('buildings', 'landmarks')): continue
+        if o.type != 'MESH' or not o.name.startswith(('buildings', 'landmarks', 'bridges')): continue
         eo = o.evaluated_get(dg); me = eo.to_mesh(); mw = o.matrix_world
         verts = [mw @ v.co for v in me.vertices]; polys = [tuple(p.vertices) for p in me.polygons]
-        if polys: trees.append(BVHTree.FromPolygons(verts, polys)); names.append((os.path.basename(f), o.name.split('.')[0]))
+        if polys and o.name.startswith('bridges'): btrees.append((os.path.basename(f), BVHTree.FromPolygons(verts, polys)))
+        elif polys: trees.append(BVHTree.FromPolygons(verts, polys)); names.append((os.path.basename(f), o.name.split('.')[0]))
         eo.to_mesh_clear()
     c = columns(f)
     if c: cols.append((os.path.basename(f), c))
@@ -82,7 +83,7 @@ for t, path in zip(tracks, TRACKS):
                            'mesh': best[1][1], 'tile': best[1][0], 'world': [round(best[2].x, 1), round(-best[2].y, 1)],
                            'data': [round(best[2].x + t['sx'] / 2, 1), round(t['sz'] / 2 + best[2].y, 1)]})
     # upper floors over the carriageway, and arcade columns standing in it
-    over, colhits = [], []
+    over, colhits, pierhits = [], [], []
     for k in range(0, n, 2):
         for sd in (1, -1):
             hs = t['hwL'][k] if sd > 0 else t['hwR'][k]; d = Vector((t['lx'][k] * sd, -t['lz'][k] * sd, 0.0)).normalized()
@@ -91,6 +92,11 @@ for t, path in zip(tracks, TRACKS):
                 hit = min(((tr.ray_cast(o, d, hs)[3] or 1e9, nm) for tr, nm in zip(trees, names)), default=(1e9, None))
                 if hit[0] < 1e8: over.append({'k': k, 'side': 'L' if sd > 0 else 'R', 'h': hgt, 'road': t['rname'][k], 'm': round(hit[0], 1), 'halfWidth': round(hs, 1), 'mesh': hit[1][1], 'tile': hit[1][0]}); break
             o = Vector((t['x'][k], -t['z'][k], t['surf'][k] + 1.0))
+            for tf, tr in btrees:  # piers / parapets of other viaducts at car height (the track's own deck is above or below the ray)
+                loc, nrm, idx, dist = tr.ray_cast(o, d, hs)
+                if loc is not None and abs(loc.z - o.z) < 0.5:
+                    pierhits.append({'k': k, 'side': 'L' if sd > 0 else 'R', 'road': t['rname'][k], 'm': round(dist, 1), 'halfWidth': round(hs, 1), 'tile': tf,
+                                     'data': [round(loc.x + t['sx'] / 2, 1), round(t['sz'] / 2 + loc.y, 1)]}); break
             for tf, tr in cols:
                 loc, nrm, idx, dist = tr.ray_cast(o, d, hs)
                 if loc is not None:
@@ -98,8 +104,8 @@ for t, path in zip(tracks, TRACKS):
                                     'data': [round(loc.x + t['sx'] / 2, 1), round(t['sz'] / 2 + loc.y, 1)]}); break
     tiles_here = near_tiles(t)
     results.append({'track': os.path.basename(path), 'spec': t['spec'], 'walls': len(at), 'wallsAt': at, 'rays': rays,
-                    'overhang': len(over), 'overhangAt': over, 'columns': len(colhits), 'columnsAt': colhits,
+                    'overhang': len(over), 'overhangAt': over, 'columns': len(colhits), 'columnsAt': colhits, 'piers': len(pierhits), 'piersAt': pierhits,
                     'tilesTested': tiles_here, 'buildingMeshes': sum(1 for nm in names if nm[0] in {os.path.basename(f) for f in tiles_here}),
                     'len': t['len'], 'viaductM': t['viaductM'], 'hairpins': t['hairpins'], 'route': t['route']})
 json.dump({'tiles': files, 'results': results}, open(OUT, 'w'), ensure_ascii=False, indent=1)
-print('blender_walls', [(r['track'], r['walls'], r['overhang'], r['columns'], r['rays']) for r in results])
+print('blender_walls', [(r['track'], r['walls'], r['overhang'], r['columns'], r['piers'], r['rays']) for r in results])
