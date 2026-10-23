@@ -11,7 +11,7 @@ import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
-src, out = sys.argv[1], sys.argv[2]; MODEL = sys.argv[3] if len(sys.argv) > 3 else 'Qwen/Qwen3-VL-8B-Instruct'
+src, out = sys.argv[1], sys.argv[2]; MODEL = sys.argv[3] if len(sys.argv) > 3 else 'Qwen/Qwen3-VL-8B-Instruct'; KIND = sys.argv[4] if len(sys.argv) > 4 else 'roof'
 z = zipfile.ZipFile(src); z.extractall('/content/crops_in'); idx = json.load(open('/content/crops_in/index.json'))
 proc = AutoProcessor.from_pretrained(MODEL)
 # a model too large for the card in bf16 is loaded in 4-bit NF4 (bitsandbytes): e.g. Qwen3-VL-32B on a 40 GB A100
@@ -32,6 +32,11 @@ PROMPT = (
     ' "storeys_guess": integer or null,  // from shadows and context, only if you can\n'
     ' "special": "none" | "palace" | "temple" | "dome" | "school" | "tower",\n'
     ' "confidence": 0.0-1.0}}')
+if KIND == 'roofshape':  # second pass on landmarks and public buildings: the shape of the roof only
+    PROMPT = ('This is a north-up aerial orthophoto of central Taipei (about {side} m across). A red outline marks one building. Look at the roof of the '
+              'building under the red outline (the roof may extend beyond the outline). Answer with one JSON object, no other text:\n'
+              '{{"roof_shape": "flat" | "hipped_glazed" | "hipped_slate" | "gable" | "dome" | "mixed",  // hipped_glazed = traditional Chinese palace-style roof with glazed (green, yellow, blue) tiles and curved eaves; hipped_slate = sloped roof with grey/black tiles or slate without palace curves; gable = simple pitched roof\n'
+              ' "colour": "green" | "yellow" | "blue" | "grey" | "red" | "other",\n "confidence": 0.0-1.0}}')
 res = {}
 t0 = time.time()
 for i, it in enumerate(idx):

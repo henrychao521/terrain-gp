@@ -22,7 +22,8 @@ Rules (fixed before looking at the scores; documented in docs/jianzhong/進度�
     else storefront when the arcade rule fires or the building fronts a road >= 12 m wide, else residential.
  9. Arcade probability (騎樓): 0.10 + 0.45 (fronts a road reserve >= 15 m wide, edge within 2 m of it) or + 0.25 (12–15 m)
     + 0.20 (h >= 10 m) + 0.10 (no sidewalk polygon wider than 2 m in front) − 0.70 (institutional); arcade when >= 0.5.
-10. Landmarks: VLM "palace" / "dome" / "temple" in institutional or religious use; 建中紅樓 = tpe3d:5801 (assigned
+10. Landmarks: VLM "palace" / "dome" / "temple" in institutional or religious use, and any pitched tiled roof on
+    institutional land (the palace-style halls of 南海學園); 建中紅樓 = tpe3d:5801 (assigned
     by hand: the only pitched historic roof by the 南海路 gate of the 高中用地 block; see the report).
 """
 import argparse, colorsys, csv, json, math, os, sys
@@ -43,6 +44,14 @@ area = shape(L('corridor')[0]['geometry'])
 # one or more VLM runs, most trusted first (Qwen3-VL-32B, then 8B). Combined per field: the answers that agree win;
 # when they disagree the first model's answer is used, with its confidence halved.
 RUNS = [json.load(open(f)) for f in a.vlm if os.path.exists(f)]
+# second pass (tools/colab/roof_vlm_job.py ... roofshape): roof shape of the OSM landmarks and of every public building
+SHAPE_F = os.path.join(WORK, 'vlm2', 'vlm_roofshape.json')
+SHAPE = json.load(open(SHAPE_F))['results'] if os.path.exists(SHAPE_F) else {}
+def shape_of(fid):
+    ans = (SHAPE.get(fid) or {}).get('ans') or {}
+    try: ok = float(ans.get('confidence', 0) or 0) >= 0.5
+    except (TypeError, ValueError): ok = False
+    return (ans.get('roof_shape'), ans.get('colour')) if ok else (None, None)
 MODELS = [r['model'] for r in RUNS]
 INST = {'高中用地', '國小用地', '機關用地', '郵政用地', '保存區', '社福及機關用地', '變電所用地', '公園用地', '交通用地'}
 FLOOR_H = lambda f: 4.2 + (f - 1) * 3.2
@@ -113,16 +122,17 @@ def roof_colour(g):
     return 'metal_sheet'
 
 # ---------- candidates
-cands = []
+cands, replaces = [], []
 for f in L('game_buildings'):
     g = valid(shape(f['geometry']))
-    if g.is_empty or not area.contains(g.centroid): continue
+    if g.is_empty or not area.intersects(g): continue  # every tpe3d footprint touching the corridor is replaced (build_tile.py skips the bids in "replaces")
+    replaces.append(f['properties']['bid'])
     ans, conf = vlm(f['id'])
     if ans.get('present') in ('none', 'construction') and conf >= 0.7: log['dropped_vlm'].append({'id': f['id'], 'present': ans['present'], 'conf': conf}); continue
     cands.append({'src': f['id'], 'g': g, 'h': f['properties']['height_m'], 'floors': None, 'permit': None})
 for f in L('permit'):
     g = valid(shape(f['geometry'])); p = f['properties']
-    if g.is_empty or not area.contains(g.centroid) or g.area < 30: continue
+    if g.is_empty or not area.intersects(g) or g.area < 30: continue
     ans, conf = vlm(p['src_id']); built = ans.get('present') in ('building', 'partial') or (not ans and p['floors'])
     inside = [c for c in cands if c['permit'] is None and c['g'].intersection(g).area >= 0.5 * c['g'].area]
     for c in inside: cands.remove(c)
@@ -169,6 +179,12 @@ for i, c in enumerate(acc):
     use = 'institutional' if inst else 'religious' if special == 'temple' else 'storefront' if (arcade or best_w >= 12) else 'residential'
     landmark = None
     if special in ('palace', 'dome', 'temple') and use in ('institutional', 'religious'): landmark = special
+    elif roof == 'pitched_tile' and use == 'institutional': landmark = 'palace'  # 南海學園: tiled roofs on public land are the palace-style halls (rule added after the first VLM pass, before scoring)
+    rs_, col_ = shape_of(c['src']) if use in ('institutional', 'religious') else (None, None)
+    if rs_ == 'hipped_glazed': roof, landmark = 'pitched_tile', 'temple' if use == 'religious' else 'palace'
+    elif rs_ in ('hipped_slate', 'gable'): roof = 'pitched_tile'
+    elif rs_ == 'dome': roof, landmark = 'dome', 'dome'
+    elif rs_ == 'flat' and roof == 'pitched_tile' and landmark == 'palace': roof, landmark = 'flat_concrete', None
     if c['src'] == 'tpe3d:5801': landmark = 'redhouse'; roof = 'pitched_tile'; log['manual'].append({'src': c['src'], 'landmark': 'redhouse'})
     if landmark in ('palace', 'temple', 'redhouse'): roof = 'pitched_tile'
     if landmark == 'dome': roof = 'dome'
@@ -178,12 +194,31 @@ for i, c in enumerate(acc):
                 'vlm': {k: ans.get(k) for k in ('present', 'roof', 'special', 'confidence')} if ans else None})
     rows.append({'building_id': bid, 'source_id': c['src'], 'footprint_wkt': g.wkt, 'height_m': round(c['h'], 2), 'floors': c['floors'] or '', 'roof_type': roof,
                  'arcade': 'yes' if arcade else 'no', 'use_class': use, 'landmark': 'yes' if landmark else 'no'})
+# OSM landmarks in the corridor (built by build_tile.py's landmark code, not as ordinary buildings): height from the
+# tpe3d parts inside them, a palace-style hip roof when any VLM run sees a tiled roof on one of those parts
+lm_over = {}
+tp = [(f['id'], shape(f['geometry']), f['properties']['height_m']) for f in L('game_buildings')]
+for f in L('osm_landmarks'):
+    nm = f['properties'].get('n'); lg = shape(f['geometry']).buffer(0)
+    if not nm or not area.intersects(lg): continue
+    parts = [(fid, h) for fid, g, h in tp if lg.contains(g.centroid)]
+    if not parts: continue
+    roofs = [((run['results'].get(fid) or {}).get('ans') or {}).get('roof') for fid, _ in parts for run in RUNS]
+    hmax = max(h for _, h in parts); o = {'h': round(hmax, 1), 'parts': [fid for fid, _ in parts]}
+    rs_, col_ = shape_of('lm:' + nm)
+    if rs_ is None and 'pitched_tile' in roofs: rs_, col_ = 'hipped_glazed', 'green'
+    if rs_ == 'dome': o.update({'rs': 'dome', 'facade': 'facade_ai_white_tile_apts'})
+    if rs_ in ('hipped_glazed', 'hipped_slate', 'gable'):
+        o.update({'rs': 'hipped', 'rh': round(min(6.0, max(3.0, hmax * 0.25)), 1), 'rc': {'green': 'green', 'yellow': 'gold', 'blue': 'blue'}.get(col_, 'grey') if rs_ == 'hipped_glazed' else 'grey',
+                  'facade': 'facade_ai_cream'})
+    if f['properties'].get('h', 0) < hmax: lm_over[nm] = o
 os.makedirs(os.path.dirname(a.out), exist_ok=True)
 json.dump({'note': '建中周邊走廊的建物參數（tools/jianzhong/derive_params.py）。tools/blender/build_tile.py 對重心落在 area 裡的 data/taipei.json 建物改用這裡的建物。座標：資料座標（TWD97 TM2 減 E 299000、N 2766400）。',
            'sources': '臺北市建築執照套繪圖、臺北市寬度超過8公尺道路GIS圖資、臺北市人行道範圍圖、臺北市都市計畫使用分區圖（皆為政府資料開放授權條款第1版）；臺北市自動化3D近似建物模型（tpe3d）；© OpenStreetMap contributors；屋頂類型與有無建物由視覺語言模型（' + '、'.join(MODELS or ['未使用']) + '）判讀國土測繪中心正射影像',
-           'area': [[round(x, 1), round(y, 1)] for x, y in area.exterior.coords], 'buildings': out}, open(a.out, 'w'), ensure_ascii=False, separators=(',', ':'))
+           'area': [[round(x, 1), round(y, 1)] for x, y in area.exterior.coords], 'landmarks': lm_over, 'replaces': sorted(replaces), 'buildings': out}, open(a.out, 'w'), ensure_ascii=False, separators=(',', ':'))
 w = csv.DictWriter(open(a.csv, 'w', newline='', encoding='utf-8'), fieldnames=list(rows[0])); w.writeheader(); w.writerows(rows)
 json.dump(log, open(os.path.join(WORK, 'derive_log.json'), 'w'), ensure_ascii=False, indent=1)
 from collections import Counter
+print('landmark overrides', lm_over)
 print('buildings', len(out), 'roof', Counter(b['roof'] for b in out), 'use', Counter(b['use'] for b in out), 'arcade', sum(b['arcade'] for b in out),
       'landmark', Counter(b['landmark'] for b in out if b['landmark']), {k: len(v) for k, v in log.items()})

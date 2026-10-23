@@ -1,6 +1,6 @@
 """Orthophoto crops of every corridor footprint (tpe3d and permit) for the VLM roof / presence pass.
 
-  python3 tools/jianzhong/vlm_crops.py <out dir>      -> <out>/crops/<id>.jpg, <out>/index.json, <out>/crops.zip
+  python3 tools/jianzhong/vlm_crops.py <out dir> [all|roofshape]   -> <out>/crops/<id>.jpg, <out>/index.json, <out>/crops.zip
 
 Each crop is north-up, the footprint's bounding box plus 12 m, resized to 448 px, with the footprint outlined in red.
 The crops are derived from the NLSC orthophoto (not openly licensed): they are uploaded only to the Colab VM that
@@ -12,12 +12,17 @@ from shapely.geometry import shape
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import REF
 
-out = sys.argv[1]; os.makedirs(os.path.join(out, 'crops'), exist_ok=True)
+out = sys.argv[1]; SET = sys.argv[2] if len(sys.argv) > 2 else 'all'; os.makedirs(os.path.join(out, 'crops'), exist_ok=True)
 L = lambda n: json.load(open(os.path.join(REF, 'clip', n + '.geojson')))['features']
 area = shape(L('corridor')[0]['geometry'])
 meta = json.load(open(os.path.join(REF, 'ortho_PHOTO2_z19_twd97.json'))); img = Image.open(os.path.join(REF, 'ortho_PHOTO2_z19_twd97.png')).convert('RGB')
 res, ox, oy1, W, H = meta['res'], meta['x0'], meta['y1'], meta['width'], meta['height']
-items = [(f['id'], shape(f['geometry'])) for f in L('game_buildings')] + [(f['properties']['src_id'], shape(f['geometry'])) for f in L('permit')]
+if SET == 'roofshape':  # second pass: OSM landmarks and every building on institutional land (data/corridors/jianzhong.json)
+    from shapely.geometry import Polygon
+    C = json.load(open(os.path.join(os.path.dirname(REF), 'data', 'corridors', 'jianzhong.json')))['buildings']
+    items = [('lm:' + f['properties']['n'], shape(f['geometry'])) for f in L('osm_landmarks') if f['properties'].get('n')] + [(b['src'], Polygon(b['ring'])) for b in C if b['use'] in ('institutional', 'religious')]
+else:
+    items = [(f['id'], shape(f['geometry'])) for f in L('game_buildings')] + [(f['properties']['src_id'], shape(f['geometry'])) for f in L('permit')]
 index = []
 for fid, g in items:
     if not g.is_valid: g = g.buffer(0)

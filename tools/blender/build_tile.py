@@ -308,18 +308,25 @@ def build_landmarks():
             chinese_roof(bld, 'tile_gold', cb[0], cb[1], ang, hl - 4.0, hw - 4.0, z0 + 25.0, 12.0, hip=True, lift=1.6)
             done.add(name); continue
         # 自由廣場 gate, 大忠門, 大孝門 and other historic buildings: OSM parts as walls, curved blue roofs on the top parts
+        ov = {k: v for c in CORR for k, v in (c.get('landmarks') or {}).get(name, {}).items() if k in ('h', 'rs', 'rh', 'rc', 'facade')}  # corridor parameters
         for l, ring in items:
-            top = z0 + l['h']; rh = l['rh'] if l['rs'] != 'flat' else 0
+            if ov: l = {**l, **{k: v for k, v in ov.items() if k != 'facade'}, 'h': max(l['h'], ov.get('h', 0)) if l['h'] >= max(it[0]['h'] for it in items) else l['h']}
+            top = z0 + l['h']; rh = l['rh'] if l['rs'] not in ('flat', 'dome') else 0
             walls_top = top - rh
-            mat = 'marble' if name in ('自由廣場門', '大忠門', '大孝門') else 'facade_concrete'
+            mat = 'marble' if name in ('自由廣場門', '大忠門', '大孝門') else ov['facade'] if ov.get('facade') in MAT else 'facade_concrete'
             n = len(ring)
             for i in range(n):
                 (ax, ay), (bx, by) = ring[i], ring[(i + 1) % n]; L = math.hypot(bx - ax, by - ay)
                 bld.quad(mat, (*B(ax, ay), z0 + l['mh']), (*B(bx, by), z0 + l['mh']), (*B(bx, by), walls_top), (*B(ax, ay), walls_top), [(0, 0), (L / 6, 0), (L / 6, (walls_top - z0) / 6.4), (0, (walls_top - z0) / 6.4)])
             if rh:
                 (cx, cy), hl, hw, ang = obb(ring); cb = B(cx, cy)
-                chinese_roof(bld, 'tile_blue' if (l.get('rc') or '') in ('blue', '') else 'tile_gold', cb[0], cb[1], ang, hl + 1.2, hw + 1.2, walls_top, rh, hip=True, lift=0.7)
-            else: bld.face('marble' if mat == 'marble' else 'roof', [(*B(x, y), walls_top) for x, y in ring])
+                rmat = {'green': 'tile_green', 'grey': 'tile_slate'}.get(l.get('rc') or '') if {'green': 'tile_green', 'grey': 'tile_slate'}.get(l.get('rc') or '') in MAT else 'tile_blue' if (l.get('rc') or '') in ('blue', '') else 'tile_gold'
+                chinese_roof(bld, rmat, cb[0], cb[1], ang, hl + 1.2, hw + 1.2, walls_top, rh, hip=True, lift=0.7, ridge_mat='gold' if rmat != 'tile_green' else rmat)
+            else:
+                bld.face('marble' if mat == 'marble' else 'roof', [(*B(x, y), walls_top) for x, y in ring])
+                if l['rs'] == 'dome' and l['h'] >= max(it[0]['h'] for it in items):  # corridor parameter: a dome on the tallest part
+                    (cx, cy), hl, hw, ang = obb(ring); cb = B(cx, cy); rr = min(hl, hw) * 0.85; dm = 'tile_green' if 'tile_green' in MAT else 'tile_blue'
+                    bld.cyl(dm, cb[0], cb[1], walls_top, rr, rr * 0.45, 16, r2=rr * 0.75); bld.cyl(dm, cb[0], cb[1], walls_top + rr * 0.45, rr * 0.75, rr * 0.4, 16, r2=0.4)
     return bld.to_object('landmarks')
 
 # ---------- corridors with per-building parameters (data/corridors/*.json, tools/jianzhong/derive_params.py)
@@ -329,6 +336,7 @@ CORR = []
 for f in sorted(os.listdir(os.path.join(DATA, 'corridors'))) if os.path.isdir(os.path.join(DATA, 'corridors')) else []:
     if f.endswith('.json'): CORR.append(json.load(open(os.path.join(DATA, 'corridors', f))))
 CORR_AREAS = [[tuple(p) for p in c['area']] for c in CORR]
+CORR_REPLACES = {bi for c in CORR for bi in c.get('replaces', [])}  # data/taipei.json buildings the corridors rebuild
 def simple_ring(r):
     """no two non-adjacent edges cross (offset_ring can fold concave footprints)"""
     n = len(r)
@@ -358,7 +366,7 @@ def build_buildings():
         h = b[0] / 10; pts = b[1:]; ring = [(pts[2 * i], pts[2 * i + 1]) for i in range(len(pts) // 2)]
         if len(ring) < 3: continue
         gx = sum(p[0] for p in ring) / len(ring); gy = sum(p[1] for p in ring) / len(ring)
-        if not inside(gx, gy) or any(pip(gx, gy, r) for r in lm_rings) or any(pip(gx, gy, r) for r in CORR_AREAS): continue
+        if not inside(gx, gy) or any(pip(gx, gy, r) for r in lm_rings) or bi in CORR_REPLACES or any(pip(gx, gy, r) for r in CORR_AREAS): continue
         one_building(bld, stats, pal, bi, h, ring, gx, gy)
     for c in CORR:
         for ci, P in enumerate(c['buildings']):
