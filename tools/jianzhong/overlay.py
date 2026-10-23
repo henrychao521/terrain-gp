@@ -15,7 +15,7 @@ from common import REF, load_track
 ap = argparse.ArgumentParser(); ap.add_argument('out'); ap.add_argument('--bbox'); ap.add_argument('--scale', type=float, default=0.5)
 ap.add_argument('--layers', default='ortho,game,permit,road8m,osm,track,walls'); ap.add_argument('--render'); ap.add_argument('--track'); ap.add_argument('--walls')
 ap.add_argument('--labels', action='store_true'); ap.add_argument('--fade', type=float, default=0.0); ap.add_argument('--ortho', default='ortho_PHOTO2_z19_twd97')
-ap.add_argument('--title', default='')
+ap.add_argument('--title', default=''); ap.add_argument('--issues')
 a = ap.parse_args(); L = set(a.layers.split(','))
 meta = json.load(open(os.path.join(REF, a.ortho + '.json'))); img = Image.open(os.path.join(REF, a.ortho + '.png')).convert('RGB')
 res = meta['res']; ox, oy1 = meta['x0'], meta['y1']
@@ -96,6 +96,19 @@ if 'walls' in L and a.walls:
     for r in json.load(open(a.walls))['results']:
         for h in r['wallsAt']:
             x, y = P(*h['data']); rr = max(3, lw * 2); d.ellipse([x - rr, y - rr, x + rr, y + rr], fill=(255, 0, 0, 255), outline=(255, 255, 255, 255))
+COL = {'intrusion_wall': (255, 0, 0), 'intrusion_overhang': (255, 120, 0), 'intrusion_column': (255, 0, 160), 'footprint_in_road_reserve': (255, 230, 0), 'stretched_footprint': (255, 0, 0),
+       'arcade_ring_broken': (200, 0, 255), 'invalid_footprint': (200, 0, 255), 'overlapping_buildings': (0, 200, 255), 'nested_building': (0, 120, 255), 'coplanar_roof': (0, 60, 255),
+       'missing_building': (0, 255, 120), 'dropped_building': (0, 255, 120), 'extra_building': (120, 255, 0), 'wrong_height': (255, 255, 255), 'wrong_use_storefront': (255, 150, 200),
+       'road_edge_offset': (255, 255, 0), 'sunken_object': (150, 150, 150)}
+if a.issues:
+    for it in json.load(open(a.issues))['issues']:
+        x, y = P(*it['at']); c = COL.get(it['type'], (255, 255, 255)); rr = max(4, lw * 3)
+        d.rectangle([x - rr, y - rr, x + rr, y + rr], outline=(*c, 255), width=max(2, lw)) if it['type'].startswith(('missing', 'dropped', 'extra')) else d.ellipse([x - rr, y - rr, x + rr, y + rr], fill=(*c, 230), outline=(0, 0, 0, 255))
+    try: lf = ImageFont.truetype('/System/Library/Fonts/STHeiti Medium.ttc', 15)
+    except OSError: lf = None
+    used = sorted({it['type'] for it in json.load(open(a.issues))['issues']}); ly = 40
+    d.rectangle([W - 250, 30, W - 5, 36 + 19 * len(used)], fill=(0, 0, 0, 170))
+    for t in used: d.ellipse([W - 244, ly, W - 232, ly + 12], fill=(*COL.get(t, (255, 255, 255)), 255)); d.text((W - 226, ly - 3), t, fill=(255, 255, 255, 255), font=lf); ly += 19
 out = Image.alpha_composite(base.convert('RGBA'), ov).convert('RGB')
 dd = ImageDraw.Draw(out)
 try: f2 = ImageFont.truetype('/System/Library/Fonts/STHeiti Medium.ttc', 18)

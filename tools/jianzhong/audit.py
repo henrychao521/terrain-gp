@@ -132,6 +132,21 @@ for k in range(0, n, step):
         if kerb is not None and kerb < hw + 6 and abs(hw - kerb) > 2.0:
             add('road_edge_offset', (X + lx * sd * kerb, Y + ly * sd * kerb), k=k, s_m=rec['s_m'], road=rec['road'], side=sdn, game_m=round(hw, 1), official_kerb_m=round(kerb, 1), err_m=round(hw - kerb, 1),
                 note='遊戲路緣和官方人行道邊線差超過 2 m')
+# scooters parked at DEM height inside the game's sidewalk band (hw .. hw + 3.5 m, 0.17 m high): wheels sunk into it
+import base64, struct
+from shapely.geometry import MultiPoint
+tile_dir = os.environ.get('JZ_TILES', os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'models', 'taipei'))
+pts = []
+for tf in sorted({b['tile'] for b in blds}):
+    js = json.load(open(os.path.join(tile_dir, tf + '.inst.json'))); raw = base64.b64decode(js.get('scooter', '') or b'')
+    q = struct.unpack(f'<{len(raw) // 2}h', raw)
+    pts += [(js['x0'] + q[i] / 10, js['y0'] + q[i + 1] / 10) for i in range(0, len(q), 4)]
+sunk = 0; first = None
+for x, y in pts:
+    k = min(range(0, n, 2), key=lambda k: (track['X'][k] - x) ** 2 + (track['Y'][k] - y) ** 2); dx, dy = x - track['X'][k], y - track['Y'][k]
+    lat = dx * track['lx'][k] + dy * -track['lz'][k]; hw = track['hwL'][k] if lat > 0 else track['hwR'][k]
+    if hw <= abs(lat) <= hw + 3.5 and math.hypot(dx, dy) < hw + 4: sunk += 1; first = first or (x, y)
+if sunk: add('sunken_object', first, count=sunk, note=f'{sunk} 台機車放在地形高度，落在遊戲人行道（高 0.17 m）範圍內，輪子陷進人行道')
 summary = Counter(i['type'] for i in issues)
 json.dump({'summary': dict(summary), 'issues': issues, 'widths': widths, 'buildings_checked': len(polys)}, open(a.out, 'w'), ensure_ascii=False, indent=1)
 print(dict(summary), 'buildings', len(polys))
