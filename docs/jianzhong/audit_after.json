@@ -1,0 +1,1733 @@
+{
+ "summary": {
+  "invalid_footprint": 1,
+  "nested_building": 3,
+  "missing_building": 12,
+  "road_edge_offset": 30
+ },
+ "issues": [
+  {
+   "type": "invalid_footprint",
+   "at": [
+    2672.7,
+    3106.5
+   ],
+   "bid": 9842,
+   "tile": "t_3_4",
+   "note": "Ring Self-intersection[2668 3100]"
+  },
+  {
+   "type": "nested_building",
+   "at": [
+    2970.5,
+    2792.4
+   ],
+   "bid": 1000049,
+   "bid2": 1000065,
+   "area_m2": 150.7,
+   "dz": 3.31,
+   "note": "一棟建物整個包在另一棟裡（零件重複）"
+  },
+  {
+   "type": "nested_building",
+   "at": [
+    2978.0,
+    2942.5
+   ],
+   "bid": 1000044,
+   "bid2": 1000045,
+   "area_m2": 140.0,
+   "dz": 5.98,
+   "note": "一棟建物整個包在另一棟裡（零件重複）"
+  },
+  {
+   "type": "nested_building",
+   "at": [
+    2855.0,
+    3032.1
+   ],
+   "bid": 1000047,
+   "bid2": 1000057,
+   "area_m2": 273.5,
+   "dz": 3.34,
+   "note": "一棟建物整個包在另一棟裡（零件重複）"
+  },
+  {
+   "type": "missing_building",
+   "at": [
+    2362.5,
+    2695.0
+   ],
+   "permit": "113.0040.20F",
+   "src_id": "permit:1777",
+   "floors": null,
+   "covered": 0.0,
+   "note": "官方建照套繪有建物，場景沒有（或位置差很多）"
+  },
+  {
+   "type": "missing_building",
+   "at": [
+    3067.3,
+    2729.5
+   ],
+   "permit": "113.0075.10F",
+   "src_id": "permit:1851",
+   "floors": null,
+   "covered": 0.09,
+   "note": "官方建照套繪有建物，場景沒有（或位置差很多）"
+  },
+  {
+   "type": "missing_building",
+   "at": [
+    3175.4,
+    2683.3
+   ],
+   "permit": "111.0166.7F",
+   "src_id": "permit:1852",
+   "floors": 7,
+   "covered": 0.0,
+   "note": "官方建照套繪有建物，場景沒有（或位置差很多）"
+  },
+  {
+   "type": "missing_building",
+   "at": [
+    2353.3,
+    2979.8
+   ],
+   "permit": "101.0312.1F",
+   "src_id": "permit:1864",
+   "floors": 1,
+   "covered": 0.0,
+   "note": "官方建照套繪有建物，場景沒有（或位置差很多）"
+  },
+  {
+   "type": "missing_building",
+   "at": [
+    2762.8,
+    2670.6
+   ],
+   "permit": "110.0322.14F",
+   "src_id": "permit:1886",
+   "floors": null,
+   "covered": 0.0,
+   "note": "官方建照套繪有建物，場景沒有（或位置差很多）"
+  },
+  {
+   "type": "missing_building",
+   "at": [
+    2906.3,
+    2891.7
+   ],
+   "permit": "112.0097.27F",
+   "src_id": "permit:1889",
+   "floors": null,
+   "covered": 0.16,
+   "note": "官方建照套繪有建物，場景沒有（或位置差很多）"
+  },
+  {
+   "type": "missing_building",
+   "at": [
+    2533.3,
+    2939.6
+   ],
+   "permit": "114.0141.2F",
+   "src_id": "permit:1893",
+   "floors": null,
+   "covered": 0.0,
+   "note": "官方建照套繪有建物，場景沒有（或位置差很多）"
+  },
+  {
+   "type": "missing_building",
+   "at": [
+    2427.6,
+    2910.4
+   ],
+   "permit": "114.0141.2F",
+   "src_id": "permit:1894",
+   "floors": null,
+   "covered": 0.0,
+   "note": "官方建照套繪有建物，場景沒有（或位置差很多）"
+  },
+  {
+   "type": "missing_building",
+   "at": [
+    3247.1,
+    2474.0
+   ],
+   "permit": "97.0136.18F",
+   "src_id": "permit:6739",
+   "floors": 18,
+   "covered": 0.0,
+   "note": "官方建照套繪有建物，場景沒有（或位置差很多）"
+  },
+  {
+   "type": "missing_building",
+   "at": [
+    2787.8,
+    2892.0
+   ],
+   "permit": "98.0242.4F",
+   "src_id": "permit:6779",
+   "floors": 4,
+   "covered": 0.0,
+   "note": "官方建照套繪有建物，場景沒有（或位置差很多）"
+  },
+  {
+   "type": "missing_building",
+   "at": [
+    2329.4,
+    2964.6
+   ],
+   "permit": "93.0415.2F",
+   "src_id": "permit:6780",
+   "floors": null,
+   "covered": 0.0,
+   "note": "官方建照套繪有建物，場景沒有（或位置差很多）"
+  },
+  {
+   "type": "missing_building",
+   "at": [
+    2414.5,
+    2931.7
+   ],
+   "permit": "91.0286.1F",
+   "src_id": "permit:6783",
+   "floors": 1,
+   "covered": 0.0,
+   "note": "官方建照套繪有建物，場景沒有（或位置差很多）"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2888.5,
+    3013.2
+   ],
+   "k": 13,
+   "s_m": 26,
+   "road": "南海路",
+   "side": "R",
+   "game_m": 7.2,
+   "official_kerb_m": 9.7,
+   "err_m": -2.5,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2863.2,
+    3005.9
+   ],
+   "k": 26,
+   "s_m": 52,
+   "road": "南海路",
+   "side": "R",
+   "game_m": 7.2,
+   "official_kerb_m": 9.5,
+   "err_m": -2.4,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2838.2,
+    2998.7
+   ],
+   "k": 39,
+   "s_m": 78,
+   "road": "南海路",
+   "side": "R",
+   "game_m": 7.2,
+   "official_kerb_m": 9.4,
+   "err_m": -2.3,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2813.2,
+    2991.5
+   ],
+   "k": 52,
+   "s_m": 104,
+   "road": "南海路",
+   "side": "R",
+   "game_m": 7.2,
+   "official_kerb_m": 9.2,
+   "err_m": -2.1,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2788.1,
+    2984.4
+   ],
+   "k": 65,
+   "s_m": 130,
+   "road": "南海路",
+   "side": "R",
+   "game_m": 7.2,
+   "official_kerb_m": 9.4,
+   "err_m": -2.2,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2763.0,
+    2977.2
+   ],
+   "k": 78,
+   "s_m": 156,
+   "road": "南海路",
+   "side": "R",
+   "game_m": 7.2,
+   "official_kerb_m": 9.6,
+   "err_m": -2.5,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2738.1,
+    2970.1
+   ],
+   "k": 91,
+   "s_m": 182,
+   "road": "南海路",
+   "side": "R",
+   "game_m": 7.2,
+   "official_kerb_m": 10.0,
+   "err_m": -2.8,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2713.1,
+    2963.1
+   ],
+   "k": 104,
+   "s_m": 208,
+   "road": "南海路",
+   "side": "R",
+   "game_m": 7.2,
+   "official_kerb_m": 10.3,
+   "err_m": -3.2,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2687.9,
+    2955.9
+   ],
+   "k": 117,
+   "s_m": 234,
+   "road": "南海路",
+   "side": "R",
+   "game_m": 7.2,
+   "official_kerb_m": 10.6,
+   "err_m": -3.5,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2667.8,
+    2933.4
+   ],
+   "k": 130,
+   "s_m": 260,
+   "road": "南海路",
+   "side": "L",
+   "game_m": 7.2,
+   "official_kerb_m": 4.5,
+   "err_m": 2.6,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2662.5,
+    2948.7
+   ],
+   "k": 130,
+   "s_m": 260,
+   "road": "南海路",
+   "side": "R",
+   "game_m": 7.2,
+   "official_kerb_m": 11.7,
+   "err_m": -4.5,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2642.8,
+    2926.3
+   ],
+   "k": 143,
+   "s_m": 286,
+   "road": "南海路",
+   "side": "L",
+   "game_m": 7.2,
+   "official_kerb_m": 2.8,
+   "err_m": 4.4,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2617.6,
+    2919.2
+   ],
+   "k": 156,
+   "s_m": 312,
+   "road": "南海路",
+   "side": "L",
+   "game_m": 7.2,
+   "official_kerb_m": 1.5,
+   "err_m": 5.6,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2592.6,
+    2912.1
+   ],
+   "k": 169,
+   "s_m": 338,
+   "road": "南海路",
+   "side": "L",
+   "game_m": 7.2,
+   "official_kerb_m": 1.3,
+   "err_m": 5.9,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2567.6,
+    2905.0
+   ],
+   "k": 182,
+   "s_m": 364,
+   "road": "南海路",
+   "side": "L",
+   "game_m": 7.2,
+   "official_kerb_m": 1.4,
+   "err_m": 5.7,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2542.5,
+    2897.9
+   ],
+   "k": 195,
+   "s_m": 390,
+   "road": "南海路",
+   "side": "L",
+   "game_m": 7.2,
+   "official_kerb_m": 1.6,
+   "err_m": 5.6,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2517.5,
+    2890.7
+   ],
+   "k": 208,
+   "s_m": 416,
+   "road": "南海路",
+   "side": "L",
+   "game_m": 7.2,
+   "official_kerb_m": 1.7,
+   "err_m": 5.4,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2492.5,
+    2883.6
+   ],
+   "k": 221,
+   "s_m": 442,
+   "road": "南海路",
+   "side": "L",
+   "game_m": 7.2,
+   "official_kerb_m": 1.9,
+   "err_m": 5.3,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2467.5,
+    2876.5
+   ],
+   "k": 234,
+   "s_m": 468,
+   "road": "南海路",
+   "side": "L",
+   "game_m": 7.2,
+   "official_kerb_m": 2.0,
+   "err_m": 5.1,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2442.5,
+    2869.3
+   ],
+   "k": 247,
+   "s_m": 494,
+   "road": "南海路",
+   "side": "L",
+   "game_m": 7.2,
+   "official_kerb_m": 2.3,
+   "err_m": 4.9,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    2417.8,
+    2862.1
+   ],
+   "k": 260,
+   "s_m": 520,
+   "road": "南海路",
+   "side": "L",
+   "game_m": 7.2,
+   "official_kerb_m": 1.6,
+   "err_m": 5.6,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    3072.1,
+    2538.9
+   ],
+   "k": 676,
+   "s_m": 1351,
+   "road": "重慶南路三段",
+   "side": "R",
+   "game_m": 4.0,
+   "official_kerb_m": 6.5,
+   "err_m": -2.5,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    3065.4,
+    2564.0
+   ],
+   "k": 689,
+   "s_m": 1377,
+   "road": "重慶南路三段",
+   "side": "R",
+   "game_m": 4.0,
+   "official_kerb_m": 6.2,
+   "err_m": -2.2,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    3059.1,
+    2589.2
+   ],
+   "k": 702,
+   "s_m": 1403,
+   "road": "重慶南路三段",
+   "side": "R",
+   "game_m": 4.0,
+   "official_kerb_m": 6.1,
+   "err_m": -2.1,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    3052.7,
+    2614.5
+   ],
+   "k": 715,
+   "s_m": 1429,
+   "road": "重慶南路三段",
+   "side": "R",
+   "game_m": 4.0,
+   "official_kerb_m": 6.1,
+   "err_m": -2.1,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    3040.0,
+    2665.0
+   ],
+   "k": 741,
+   "s_m": 1481,
+   "road": "重慶南路三段",
+   "side": "R",
+   "game_m": 4.0,
+   "official_kerb_m": 6.3,
+   "err_m": -2.4,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    3027.2,
+    2715.4
+   ],
+   "k": 767,
+   "s_m": 1533,
+   "road": "重慶南路三段",
+   "side": "R",
+   "game_m": 4.0,
+   "official_kerb_m": 6.6,
+   "err_m": -2.7,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    3020.9,
+    2740.6
+   ],
+   "k": 780,
+   "s_m": 1559,
+   "road": "重慶南路三段",
+   "side": "R",
+   "game_m": 4.0,
+   "official_kerb_m": 6.9,
+   "err_m": -2.9,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    3014.5,
+    2766.0
+   ],
+   "k": 793,
+   "s_m": 1585,
+   "road": "重慶南路三段",
+   "side": "R",
+   "game_m": 4.0,
+   "official_kerb_m": 7.4,
+   "err_m": -3.4,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  },
+  {
+   "type": "road_edge_offset",
+   "at": [
+    3006.8,
+    2791.2
+   ],
+   "k": 806,
+   "s_m": 1611,
+   "road": "重慶南路二段",
+   "side": "R",
+   "game_m": 5.5,
+   "official_kerb_m": 7.6,
+   "err_m": -2.1,
+   "note": "遊戲路緣和官方人行道邊線差超過 2 m"
+  }
+ ],
+ "widths": [
+  {
+   "k": 0,
+   "s_m": 0,
+   "road": "重慶南路二段",
+   "at": [
+    2916.2,
+    3009.4
+   ],
+   "game_hwL": 6.261,
+   "game_hwR": 6.261,
+   "kerbL": 19.8,
+   "kerbR": 15.1,
+   "reserveL": 25.5,
+   "reserveR": 15.0
+  },
+  {
+   "k": 13,
+   "s_m": 26,
+   "road": "南海路",
+   "at": [
+    2890.8,
+    3003.8
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 6.2,
+   "kerbR": 9.7,
+   "reserveL": 6.1,
+   "reserveR": 9.7
+  },
+  {
+   "k": 26,
+   "s_m": 52,
+   "road": "南海路",
+   "at": [
+    2865.8,
+    2996.7
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 6.3,
+   "kerbR": 9.5,
+   "reserveL": 6.3,
+   "reserveR": 9.6
+  },
+  {
+   "k": 39,
+   "s_m": 78,
+   "road": "南海路",
+   "at": [
+    2840.7,
+    2989.7
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 7.8,
+   "kerbR": 9.4,
+   "reserveL": 6.4,
+   "reserveR": 9.5
+  },
+  {
+   "k": 52,
+   "s_m": 104,
+   "road": "南海路",
+   "at": [
+    2815.7,
+    2982.6
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 6.6,
+   "kerbR": 9.2,
+   "reserveL": 6.6,
+   "reserveR": 9.4
+  },
+  {
+   "k": 65,
+   "s_m": 130,
+   "road": "南海路",
+   "at": [
+    2790.7,
+    2975.4
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 6.5,
+   "kerbR": 9.4,
+   "reserveL": 6.5,
+   "reserveR": 9.5
+  },
+  {
+   "k": 78,
+   "s_m": 156,
+   "road": "南海路",
+   "at": [
+    2765.8,
+    2968.0
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 6.2,
+   "kerbR": 9.6,
+   "reserveL": 6.2,
+   "reserveR": 9.8
+  },
+  {
+   "k": 91,
+   "s_m": 182,
+   "road": "南海路",
+   "at": [
+    2740.9,
+    2960.5
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 5.8,
+   "kerbR": 10.0,
+   "reserveL": 5.9,
+   "reserveR": 10.1
+  },
+  {
+   "k": 104,
+   "s_m": 208,
+   "road": "南海路",
+   "at": [
+    2716.0,
+    2953.2
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 5.6,
+   "kerbR": 10.3,
+   "reserveL": 5.7,
+   "reserveR": 10.4
+  },
+  {
+   "k": 117,
+   "s_m": 234,
+   "road": "南海路",
+   "at": [
+    2691.0,
+    2945.8
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 5.4,
+   "kerbR": 10.6,
+   "reserveL": 5.5,
+   "reserveR": 10.6
+  },
+  {
+   "k": 130,
+   "s_m": 260,
+   "road": "南海路",
+   "at": [
+    2666.3,
+    2937.6
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 4.5,
+   "kerbR": 11.7,
+   "reserveL": 4.4,
+   "reserveR": 11.7
+  },
+  {
+   "k": 143,
+   "s_m": 286,
+   "road": "南海路",
+   "at": [
+    2641.8,
+    2928.9
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 2.8,
+   "kerbR": 13.4,
+   "reserveL": 2.8,
+   "reserveR": 13.4
+  },
+  {
+   "k": 156,
+   "s_m": 312,
+   "road": "南海路",
+   "at": [
+    2617.2,
+    2920.7
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 1.5,
+   "kerbR": 14.6,
+   "reserveL": 1.6,
+   "reserveR": 14.6
+  },
+  {
+   "k": 169,
+   "s_m": 338,
+   "road": "南海路",
+   "at": [
+    2592.2,
+    2913.3
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 1.3,
+   "kerbR": 14.7,
+   "reserveL": 1.3,
+   "reserveR": 14.8
+  },
+  {
+   "k": 182,
+   "s_m": 364,
+   "road": "南海路",
+   "at": [
+    2567.2,
+    2906.3
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 1.4,
+   "kerbR": 14.6,
+   "reserveL": 1.5,
+   "reserveR": 14.6
+  },
+  {
+   "k": 195,
+   "s_m": 390,
+   "road": "南海路",
+   "at": [
+    2542.1,
+    2899.4
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 1.6,
+   "kerbR": 14.5,
+   "reserveL": 1.6,
+   "reserveR": 14.5
+  },
+  {
+   "k": 208,
+   "s_m": 416,
+   "road": "南海路",
+   "at": [
+    2517.1,
+    2892.4
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 1.7,
+   "kerbR": null,
+   "reserveL": 1.8,
+   "reserveR": 14.3
+  },
+  {
+   "k": 221,
+   "s_m": 442,
+   "road": "南海路",
+   "at": [
+    2492.0,
+    2885.4
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 1.9,
+   "kerbR": 14.2,
+   "reserveL": 2.0,
+   "reserveR": 14.1
+  },
+  {
+   "k": 234,
+   "s_m": 468,
+   "road": "南海路",
+   "at": [
+    2467.0,
+    2878.4
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 2.0,
+   "kerbR": 14.0,
+   "reserveL": 2.2,
+   "reserveR": 13.9
+  },
+  {
+   "k": 247,
+   "s_m": 494,
+   "road": "南海路",
+   "at": [
+    2441.9,
+    2871.5
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 2.3,
+   "kerbR": 13.8,
+   "reserveL": 2.4,
+   "reserveR": 13.7
+  },
+  {
+   "k": 260,
+   "s_m": 520,
+   "road": "南海路",
+   "at": [
+    2417.2,
+    2863.5
+   ],
+   "game_hwL": 7.15,
+   "game_hwR": 7.15,
+   "kerbL": 1.6,
+   "kerbR": 14.7,
+   "reserveL": 40.0,
+   "reserveR": 14.7
+  },
+  {
+   "k": 273,
+   "s_m": 546,
+   "road": "和平西路二段",
+   "at": [
+    2401.2,
+    2851.8
+   ],
+   "game_hwL": 4.78,
+   "game_hwR": 4.78,
+   "kerbL": null,
+   "kerbR": null,
+   "reserveL": 40.0,
+   "reserveR": 40.0
+  },
+  {
+   "k": 286,
+   "s_m": 572,
+   "road": "和平西路二段",
+   "at": [
+    2419.1,
+    2833.0
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 19.1,
+   "kerbR": 5.2,
+   "reserveL": 24.5,
+   "reserveR": 13.2
+  },
+  {
+   "k": 299,
+   "s_m": 598,
+   "road": "和平西路二段",
+   "at": [
+    2440.6,
+    2818.4
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 18.7,
+   "kerbR": 3.2,
+   "reserveL": 26.5,
+   "reserveR": 11.0
+  },
+  {
+   "k": 312,
+   "s_m": 624,
+   "road": "和平西路二段",
+   "at": [
+    2462.9,
+    2805.1
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 19.0,
+   "kerbR": 2.9,
+   "reserveL": 26.8,
+   "reserveR": 10.6
+  },
+  {
+   "k": 325,
+   "s_m": 650,
+   "road": "和平西路二段",
+   "at": [
+    2485.4,
+    2792.0
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 19.2,
+   "kerbR": 2.7,
+   "reserveL": 27.0,
+   "reserveR": 7.1
+  },
+  {
+   "k": 338,
+   "s_m": 676,
+   "road": "和平西路二段",
+   "at": [
+    2507.9,
+    2779.0
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 19.3,
+   "kerbR": 2.6,
+   "reserveL": 27.1,
+   "reserveR": 6.8
+  },
+  {
+   "k": 351,
+   "s_m": 702,
+   "road": "和平西路二段",
+   "at": [
+    2530.5,
+    2766.0
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 19.3,
+   "kerbR": 2.5,
+   "reserveL": 27.1,
+   "reserveR": 6.5
+  },
+  {
+   "k": 364,
+   "s_m": 728,
+   "road": "和平西路二段",
+   "at": [
+    2552.9,
+    2752.9
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 19.4,
+   "kerbR": 2.5,
+   "reserveL": 27.3,
+   "reserveR": 6.3
+  },
+  {
+   "k": 377,
+   "s_m": 754,
+   "road": "和平西路二段",
+   "at": [
+    2575.4,
+    2739.8
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 19.6,
+   "kerbR": null,
+   "reserveL": 27.5,
+   "reserveR": 6.3
+  },
+  {
+   "k": 390,
+   "s_m": 780,
+   "road": "和平西路二段",
+   "at": [
+    2597.9,
+    2726.9
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 19.5,
+   "kerbR": 2.3,
+   "reserveL": 27.4,
+   "reserveR": 6.6
+  },
+  {
+   "k": 403,
+   "s_m": 806,
+   "road": "和平西路二段",
+   "at": [
+    2620.6,
+    2714.1
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 19.3,
+   "kerbR": null,
+   "reserveL": 27.0,
+   "reserveR": 6.8
+  },
+  {
+   "k": 416,
+   "s_m": 832,
+   "road": "和平西路二段",
+   "at": [
+    2643.3,
+    2701.3
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 19.1,
+   "kerbR": 2.8,
+   "reserveL": 26.6,
+   "reserveR": 7.1
+  },
+  {
+   "k": 429,
+   "s_m": 858,
+   "road": "和平西路二段",
+   "at": [
+    2665.9,
+    2688.6
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 18.9,
+   "kerbR": null,
+   "reserveL": 26.2,
+   "reserveR": 40.0
+  },
+  {
+   "k": 442,
+   "s_m": 884,
+   "road": "和平西路二段",
+   "at": [
+    2688.6,
+    2675.9
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": null,
+   "kerbR": 3.1,
+   "reserveL": 39.5,
+   "reserveR": 7.5
+  },
+  {
+   "k": 455,
+   "s_m": 910,
+   "road": "和平西路二段",
+   "at": [
+    2711.2,
+    2662.9
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 18.5,
+   "kerbR": 3.2,
+   "reserveL": 22.8,
+   "reserveR": 7.6
+  },
+  {
+   "k": 468,
+   "s_m": 936,
+   "road": "和平西路二段",
+   "at": [
+    2733.7,
+    2650.0
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 18.7,
+   "kerbR": 3.2,
+   "reserveL": 22.9,
+   "reserveR": 7.5
+  },
+  {
+   "k": 481,
+   "s_m": 962,
+   "road": "和平西路二段",
+   "at": [
+    2756.3,
+    2637.1
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 18.7,
+   "kerbR": 3.2,
+   "reserveL": 22.8,
+   "reserveR": 7.6
+  },
+  {
+   "k": 494,
+   "s_m": 988,
+   "road": "和平西路二段",
+   "at": [
+    2778.9,
+    2624.3
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 18.5,
+   "kerbR": 3.2,
+   "reserveL": 22.7,
+   "reserveR": 7.7
+  },
+  {
+   "k": 507,
+   "s_m": 1013,
+   "road": "和平西路二段",
+   "at": [
+    2801.6,
+    2611.4
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 18.2,
+   "kerbR": 3.5,
+   "reserveL": 22.5,
+   "reserveR": 7.8
+  },
+  {
+   "k": 520,
+   "s_m": 1039,
+   "road": "和平西路二段",
+   "at": [
+    2824.2,
+    2598.6
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 18.1,
+   "kerbR": 3.6,
+   "reserveL": 22.3,
+   "reserveR": 7.9
+  },
+  {
+   "k": 533,
+   "s_m": 1065,
+   "road": "和平西路二段",
+   "at": [
+    2846.8,
+    2585.8
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 17.9,
+   "kerbR": 3.8,
+   "reserveL": 22.0,
+   "reserveR": 8.2
+  },
+  {
+   "k": 546,
+   "s_m": 1091,
+   "road": "和平西路二段",
+   "at": [
+    2869.5,
+    2573.2
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 17.6,
+   "kerbR": 4.2,
+   "reserveL": 21.8,
+   "reserveR": 8.5
+  },
+  {
+   "k": 559,
+   "s_m": 1117,
+   "road": "和平西路二段",
+   "at": [
+    2892.3,
+    2560.6
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 17.2,
+   "kerbR": 4.7,
+   "reserveL": 21.4,
+   "reserveR": 9.0
+  },
+  {
+   "k": 572,
+   "s_m": 1143,
+   "road": "和平西路二段",
+   "at": [
+    2915.2,
+    2548.3
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 16.4,
+   "kerbR": 5.9,
+   "reserveL": 20.5,
+   "reserveR": 40.0
+  },
+  {
+   "k": 585,
+   "s_m": 1169,
+   "road": "和平西路一段",
+   "at": [
+    2938.5,
+    2536.8
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": null,
+   "kerbR": null,
+   "reserveL": 21.4,
+   "reserveR": 40.0
+  },
+  {
+   "k": 598,
+   "s_m": 1195,
+   "road": "和平西路一段",
+   "at": [
+    2962.6,
+    2526.9
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 15.9,
+   "kerbR": 5.7,
+   "reserveL": 20.0,
+   "reserveR": 10.2
+  },
+  {
+   "k": 611,
+   "s_m": 1221,
+   "road": "和平西路一段",
+   "at": [
+    2987.1,
+    2518.3
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 17.3,
+   "kerbR": 4.5,
+   "reserveL": 21.3,
+   "reserveR": 8.7
+  },
+  {
+   "k": 624,
+   "s_m": 1247,
+   "road": "和平西路一段",
+   "at": [
+    3011.7,
+    2509.9
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 18.4,
+   "kerbR": 3.4,
+   "reserveL": 22.4,
+   "reserveR": 7.8
+  },
+  {
+   "k": 637,
+   "s_m": 1273,
+   "road": "和平西路一段",
+   "at": [
+    3036.3,
+    2501.5
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 21.3,
+   "kerbR": 13.9,
+   "reserveL": 23.4,
+   "reserveR": 40.0
+  },
+  {
+   "k": 650,
+   "s_m": 1299,
+   "road": "和平西路一段",
+   "at": [
+    3061.7,
+    2495.7
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": null,
+   "kerbR": 26.5,
+   "reserveL": 40.0,
+   "reserveR": 13.0
+  },
+  {
+   "k": 663,
+   "s_m": 1325,
+   "road": "重慶南路三段",
+   "at": [
+    3070.9,
+    2511.8
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": null,
+   "kerbR": null,
+   "reserveL": 40.0,
+   "reserveR": 40.0
+  },
+  {
+   "k": 676,
+   "s_m": 1351,
+   "road": "重慶南路三段",
+   "at": [
+    3065.8,
+    2537.3
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 16.1,
+   "kerbR": 6.5,
+   "reserveL": 19.9,
+   "reserveR": 9.9
+  },
+  {
+   "k": 689,
+   "s_m": 1377,
+   "road": "重慶南路三段",
+   "at": [
+    3059.4,
+    2562.5
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 15.9,
+   "kerbR": 6.2,
+   "reserveL": 20.0,
+   "reserveR": 10.0
+  },
+  {
+   "k": 702,
+   "s_m": 1403,
+   "road": "重慶南路三段",
+   "at": [
+    3053.1,
+    2587.8
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 15.9,
+   "kerbR": 6.1,
+   "reserveL": 20.0,
+   "reserveR": 10.1
+  },
+  {
+   "k": 715,
+   "s_m": 1429,
+   "road": "重慶南路三段",
+   "at": [
+    3046.8,
+    2613.0
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 15.9,
+   "kerbR": 6.1,
+   "reserveL": 20.0,
+   "reserveR": 10.2
+  },
+  {
+   "k": 728,
+   "s_m": 1455,
+   "road": "重慶南路三段",
+   "at": [
+    3040.4,
+    2638.2
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 15.7,
+   "kerbR": null,
+   "reserveL": 19.9,
+   "reserveR": 10.4
+  },
+  {
+   "k": 741,
+   "s_m": 1481,
+   "road": "重慶南路三段",
+   "at": [
+    3033.9,
+    2663.4
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 15.6,
+   "kerbR": 6.3,
+   "reserveL": 19.6,
+   "reserveR": 10.6
+  },
+  {
+   "k": 754,
+   "s_m": 1507,
+   "road": "重慶南路三段",
+   "at": [
+    3027.3,
+    2688.5
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 15.4,
+   "kerbR": null,
+   "reserveL": 19.4,
+   "reserveR": 10.7
+  },
+  {
+   "k": 767,
+   "s_m": 1533,
+   "road": "重慶南路三段",
+   "at": [
+    3020.8,
+    2713.7
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 15.2,
+   "kerbR": 6.6,
+   "reserveL": 19.2,
+   "reserveR": 11.0
+  },
+  {
+   "k": 780,
+   "s_m": 1559,
+   "road": "重慶南路三段",
+   "at": [
+    3014.3,
+    2738.9
+   ],
+   "game_hwL": 3.95,
+   "game_hwR": 3.95,
+   "kerbL": 15.0,
+   "kerbR": 6.9,
+   "reserveL": 19.1,
+   "reserveR": 11.0
+  },
+  {
+   "k": 793,
+   "s_m": 1585,
+   "road": "重慶南路三段",
+   "at": [
+    3007.3,
+    2763.9
+   ],
+   "game_hwL": 4.009,
+   "game_hwR": 4.009,
+   "kerbL": 14.4,
+   "kerbR": 7.4,
+   "reserveL": 18.6,
+   "reserveR": 11.3
+  },
+  {
+   "k": 806,
+   "s_m": 1611,
+   "road": "重慶南路二段",
+   "at": [
+    2999.6,
+    2788.8
+   ],
+   "game_hwL": 5.491,
+   "game_hwR": 5.491,
+   "kerbL": 14.5,
+   "kerbR": 7.6,
+   "reserveL": 18.4,
+   "reserveR": 11.6
+  },
+  {
+   "k": 819,
+   "s_m": 1637,
+   "road": "重慶南路二段",
+   "at": [
+    2991.0,
+    2813.3
+   ],
+   "game_hwL": 5.55,
+   "game_hwR": 5.55,
+   "kerbL": 15.0,
+   "kerbR": null,
+   "reserveL": 18.9,
+   "reserveR": 11.0
+  },
+  {
+   "k": 832,
+   "s_m": 1663,
+   "road": "重慶南路二段",
+   "at": [
+    2982.1,
+    2837.7
+   ],
+   "game_hwL": 5.55,
+   "game_hwR": 5.55,
+   "kerbL": 15.4,
+   "kerbR": null,
+   "reserveL": 19.3,
+   "reserveR": 10.7
+  },
+  {
+   "k": 845,
+   "s_m": 1689,
+   "road": "重慶南路二段",
+   "at": [
+    2973.3,
+    2862.2
+   ],
+   "game_hwL": 5.55,
+   "game_hwR": 5.55,
+   "kerbL": 15.8,
+   "kerbR": 6.0,
+   "reserveL": 19.8,
+   "reserveR": 10.3
+  },
+  {
+   "k": 858,
+   "s_m": 1715,
+   "road": "重慶南路二段",
+   "at": [
+    2964.7,
+    2886.7
+   ],
+   "game_hwL": 5.55,
+   "game_hwR": 5.55,
+   "kerbL": 16.3,
+   "kerbR": 5.6,
+   "reserveL": 20.4,
+   "reserveR": 9.8
+  },
+  {
+   "k": 871,
+   "s_m": 1741,
+   "road": "重慶南路二段",
+   "at": [
+    2955.8,
+    2911.2
+   ],
+   "game_hwL": 5.55,
+   "game_hwR": 5.55,
+   "kerbL": 16.8,
+   "kerbR": 5.2,
+   "reserveL": 20.8,
+   "reserveR": 9.5
+  },
+  {
+   "k": 884,
+   "s_m": 1767,
+   "road": "重慶南路二段",
+   "at": [
+    2946.8,
+    2935.6
+   ],
+   "game_hwL": 5.55,
+   "game_hwR": 5.55,
+   "kerbL": 17.0,
+   "kerbR": 4.9,
+   "reserveL": 21.0,
+   "reserveR": 9.5
+  },
+  {
+   "k": 897,
+   "s_m": 1793,
+   "road": "重慶南路二段",
+   "at": [
+    2937.6,
+    2959.9
+   ],
+   "game_hwL": 5.55,
+   "game_hwR": 5.55,
+   "kerbL": 17.0,
+   "kerbR": 4.6,
+   "reserveL": 21.1,
+   "reserveR": 9.5
+  },
+  {
+   "k": 910,
+   "s_m": 1819,
+   "road": "重慶南路二段",
+   "at": [
+    2928.1,
+    2984.1
+   ],
+   "game_hwL": 5.55,
+   "game_hwR": 5.55,
+   "kerbL": 16.7,
+   "kerbR": 5.2,
+   "reserveL": 20.9,
+   "reserveR": 9.8
+  },
+  {
+   "k": 923,
+   "s_m": 1845,
+   "road": "重慶南路二段",
+   "at": [
+    2916.9,
+    3007.6
+   ],
+   "game_hwL": 6.103,
+   "game_hwR": 6.103,
+   "kerbL": 26.9,
+   "kerbR": null,
+   "reserveL": 26.5,
+   "reserveR": 40.0
+  }
+ ],
+ "buildings_checked": 404
+}

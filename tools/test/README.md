@@ -181,3 +181,17 @@ Ctrl-C 或 SIGTERM 會停止檢查，並關掉瀏覽器和伺服器、刪掉複�
 - 輸出根目錄和複本都不能是、也不能包含：checkout、家目錄、`/`、`/tmp`、`/private/tmp`、系統暫存目錄。
 - 輸出根目錄如果在 checkout 裡，只能是 `tools/test/.out`。
 - 只會刪除 `instrument.py` 自己建立的目錄：建立複本時會寫入標記檔 `.tgp-instrumented-copy`，沒有這個檔案的目錄一律拒絕刪除，請自己確認後手動處理。
+
+## 不開瀏覽器的版本（建中周邊走廊時加的）
+
+不能開 Chrome 的環境可以用這兩支，結果和瀏覽器版一致（建中環線 19／924、三條預設環線的 walls 與 `line.js` 數字都對得上）：
+
+```
+python3 tools/test/instrument.py . tools/test/.out/node-a
+node tools/test/node/world.js tools/test/.out/node-a '{"preset": 0}' > track0.json           # 或 {"loop": [[X, Y], ...]}；加 "check": "line.js" 一起跑行車線
+blender -b --factory-startup --python tools/test/blender_walls.py -- . walls.json track0.json   # 可放多個 track.json
+```
+
+- `node/world.js` 在 Node 裡跑複本的 `game.js`（假 DOM、假 WebGL，three.js r128 快取在 `.cache/`），輸出中線、車道半寬、路面高度、用到的區塊。
+- `blender_walls.py` 規則同 `js/walls.js`，另外輸出 4／8 m 高的懸空（`overhang`）與騎樓柱（`columns`）。`TGP_TILE_DIR` 可以指定另一組區塊。
+- `ai`、`envelope` 沒有替代版本（假 DOM 的設定值和瀏覽器不同，envelope 數字對不上）。
