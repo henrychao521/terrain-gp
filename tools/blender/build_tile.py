@@ -513,6 +513,9 @@ def build_bridges():
             ln = math.dist(pts[i], pts[i + 1])
             if ln < 0.5: continue
             ux, uy = (bx - ax) / ln, (by - ay) / ln; nx_, ny_ = -uy, ux; hw = w / 2
+            # the low tail of a ramp that runs alongside a surface street (華翠大橋 onto 艋舺大道) would stand as a 1 m
+            # wall in that street's carriageway: leave it out, the ramp meets the street there anyway
+            if min(hgt(S[i]), hgt(S[i + 1])) < 2.5 and street_dist((ax + bx) / 2, (ay + by) / 2) < hw: continue
             za, zb = dem(ax, ay) + hgt(S[i]), dem(bx, by) + hgt(S[i + 1])
             A = lambda off, X, Y: B(X + nx_ * off, Y + ny_ * off)
             # deck top, underside, edges and parapets
