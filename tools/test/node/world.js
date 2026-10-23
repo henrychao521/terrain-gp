@@ -113,16 +113,58 @@ T3.TextureLoader.prototype.load = function (url, onLoad, onProgress, onError) { 
 T3.DRACOLoader = function () { return { setDecoderPath: noop, setWorkerLimit: noop, preload: noop, dispose: noop }; };
 
 // ---------------------------------------------------------------- the game
-const EXTRA = "window.TGPX = { cityPreset: (M, i) => cityPreset(M, i), setPts: p => { trackPts = p; }, TP_CIRCUITS, TP_ELEVATED, loadTaipei };\nwindow.TGP = (() =>";
+const EXTRA = "window.TGPX = { cityPreset: (M, i) => cityPreset(M, i), setPts: p => { trackPts = p; }, TP_CIRCUITS, TP_ELEVATED, loadTaipei, TEX };\nwindow.TGP = (() =>";
 let src = fs.readFileSync(path.join(copy, 'game.js'), 'utf8');
 if (src.split('window.TGP = (() =>').length !== 2) { console.error('world.js: the copy is not instrumented (run instrument.py first)'); process.exit(2); }
 src = src.replace('window.TGP = (() =>', EXTRA);
+// spec.dump: also record the street trees the game keeps (position, scale, species), for tools/streetview/blender_render.py
+const TREE_ANCHOR = '(pk ? park : street).push([x, z, h / 9, kind]);';
+if (spec.dump) {
+  if (src.split(TREE_ANCHOR).length !== 2) { console.error('world.js: tree anchor not found in game.js'); process.exit(2); }
+  src = src.replace(TREE_ANCHOR, TREE_ANCHOR + ' (window.__TREES || (window.__TREES = [])).push([x, z, h / 9, kind, pk ? 1 : 0]);');
+}
 const errors = [];
 const origErr = console.error; console.error = (...a) => { errors.push(a.map(String).join(' ').slice(0, 300)); };
 const origWarn = console.warn; console.warn = noop; console.log = noop;
 process.on('unhandledRejection', e => errors.push('unhandledRejection: ' + String(e && e.stack || e).slice(0, 300)));
 try { vm.runInThisContext(src, { filename: 'game.js' }); }
 catch (e) { origErr('game.js failed to boot in Node: ' + (e.stack || e)); process.exit(2); }
+
+function dumpScene(W, file, R) {
+  const T3 = G.THREE, cs = 50, near = new Set();
+  for (let k = 0; k < W.n; k++) { const i = Math.floor(W.x[k] / cs), j = Math.floor(W.z[k] / cs), r = Math.ceil(R / cs); for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) near.add((i + a) + ',' + (j + b)); }
+  const keep = (x, z) => near.has(Math.floor(x / cs) + ',' + Math.floor(z / cs));
+  const groups = {}, v = new T3.Vector3(), m = new T3.Matrix4(), mi = new T3.Matrix4();
+  W.group.updateMatrixWorld(true);
+  W.group.traverse(o => {
+    if (!o.isMesh || !o.visible) return;
+    const g = o.geometry, pos = g && g.attributes && g.attributes.position; if (!pos) return;
+    const mat = Array.isArray(o.material) ? o.material[0] : o.material; if (!mat || (mat.blending === T3.AdditiveBlending)) return;
+    const col = mat.color ? mat.color.getHexString() : 'ffffff', vc = !!mat.vertexColors && g.attributes.color;
+    const texKey = mat.map ? (Object.keys(G.TGPX.TEX).find(k => G.TGPX.TEX[k] === mat.map) || 'canvas') : (mat.uniforms ? 'shader' : ''); const key = [col, texKey, mat.transparent ? 'tr' : '', o.isInstancedMesh ? 'inst' : '', g.type].join('|');
+    const gr = groups[key] || (groups[key] = { color: col, map: !!mat.map, tex: texKey, rough: mat.roughness, metal: mat.metalness, vc: !!vc, transparent: !!mat.transparent, opacity: mat.opacity, type: mat.type, geo: g.type, name: o.name || '', inst: !!o.isInstancedMesh, p: [], c: [] });
+    const idx = g.index ? g.index.array : null, nt = idx ? idx.length / 3 : pos.count / 3;
+    const cnt = o.isInstancedMesh ? o.count : 1;
+    for (let ii = 0; ii < cnt; ii++) {
+      m.copy(o.matrixWorld); if (o.isInstancedMesh) { o.getMatrixAt(ii, mi); m.multiply(mi); }
+      const ic = o.isInstancedMesh && o.instanceColor ? [o.instanceColor.getX(ii), o.instanceColor.getY(ii), o.instanceColor.getZ(ii)] : null;
+      for (let t = 0; t < nt; t++) {
+        const tri = [];
+        for (let q = 0; q < 3; q++) { const vi = idx ? idx[t * 3 + q] : t * 3 + q; v.fromBufferAttribute(pos, vi).applyMatrix4(m); tri.push(v.x, v.y, v.z); }
+        if (!keep((tri[0] + tri[3] + tri[6]) / 3, (tri[2] + tri[5] + tri[8]) / 3)) continue;
+        for (const f of tri) gr.p.push(Math.round(f * 100) / 100);
+        let cc = [1, 1, 1];
+        if (vc) { const vi = idx ? idx[t * 3] : t * 3, ca = g.attributes.color; cc = [ca.getX(vi), ca.getY(vi), ca.getZ(vi)]; }
+        if (ic) cc = [cc[0] * ic[0], cc[1] * ic[1], cc[2] * ic[2]];
+        gr.c.push(...cc.map(x => Math.round(x * 255)));
+      }
+    }
+  });
+  const out = { R, groups: Object.values(groups).filter(g => g.p.length).map(g => ({ ...g, p: Buffer.from(new Float32Array(g.p).buffer).toString('base64'), c: Buffer.from(Uint8Array.from(g.c)).toString('base64'), tris: g.p.length / 9 })),
+    trees: (G.__TREES || []).filter(([x, z]) => keep(x, z)) };
+  fs.writeFileSync(file, JSON.stringify(out));
+  return { file, groups: out.groups.length, tris: out.groups.reduce((s, g) => s + g.tris, 0), trees: out.trees.length };
+}
 
 (async () => {
   const TGP = G.TGP, X = G.TGPX;
@@ -148,6 +190,10 @@ catch (e) { origErr('game.js failed to boot in Node: ' + (e.stack || e)); proces
     route: seq.filter(s => s[1] > 120).map(s => s[0] + ' ' + Math.round(s[1])).join(' → '),
     errors,
   };
+  // optional: dump the scene the game built (everything in W.group: ground, road, kerbs, green areas, signals, lamps,
+  // procedural buildings) within spec.dumpR m of the centreline, as triangle soups per material, plus the street trees.
+  // glTF content (Blender tiles, props) does not load in Node; tools/streetview/blender_render.py imports it itself.
+  if (spec.dump) out.dump = dumpScene(TGP.W, spec.dump, spec.dumpR || 300);
   // optional: run one of tools/test/js/*.js against this world (the same function Playwright evaluates in the page)
   if (spec.check) { try { out.check = await vm.runInThisContext('(' + fs.readFileSync(path.join(__dirname, '..', 'js', spec.check), 'utf8') + ')')(spec.arg); } catch (e) { out.check = { error: String(e && e.stack || e).slice(0, 400) }; } }
   fs.writeSync(1, JSON.stringify(out)); // synchronous: process.exit would cut a piped stdout at 64 KB
