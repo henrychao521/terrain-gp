@@ -137,10 +137,39 @@ def glazed(name, c0, c1):
     for y in range(0, W, 24): d.line([0, y, W, y], fill=tuple(int(v * 0.7) for v in c0), width=3)
     noise(im, 6); im.save(f'{OUT}/{name}.png')
 
+def roof_concrete(name, base):
+    """Flat concrete roof seen from above: weathered slab, expansion joints, drain stains (16 m per tile)."""
+    W = 256; im = Image.new('RGB', (W, W), base); d = ImageDraw.Draw(im)
+    for _ in range(60):
+        x, y = R.randrange(W), R.randrange(W); k = R.randint(-18, 10); d.ellipse([x, y, x + R.randint(8, 50), y + R.randint(8, 50)], fill=tuple(max(0, min(255, c + k)) for c in base))
+    im = im.filter(ImageFilter.GaussianBlur(4)); d = ImageDraw.Draw(im)
+    for v in range(0, W, 64): d.line([v, 0, v, W], fill=tuple(c - 22 for c in base), width=2); d.line([0, v, W, v], fill=tuple(c - 22 for c in base), width=2)
+    noise(im, 7); im.save(f'{OUT}/{name}.png')
+
+def roof_metal(name, col):
+    """Corrugated metal sheet (rooftop sheds, 鐵皮加蓋), ribs along v (8 m per tile)."""
+    W = 256; im = Image.new('RGB', (W, W), col); d = ImageDraw.Draw(im)
+    for x in range(0, W, 8):
+        for xx in range(8): t = abs(xx - 4) / 4; d.line([x + xx, 0, x + xx, W], fill=tuple(int(c * (0.78 + 0.3 * (1 - t))) for c in col))
+    for _ in range(25): x, y = R.randrange(W), R.randrange(W); d.line([x, y, x + R.randint(-4, 4), y + R.randint(20, 80)], fill=tuple(int(c * 0.7) for c in col), width=R.randint(1, 3))  # rust streaks
+    for y in range(0, W, 128): d.line([0, y, W, y], fill=tuple(int(c * 0.6) for c in col), width=2)  # sheet overlap
+    noise(im, 6); im.save(f'{OUT}/{name}.png')
+
+def roof_solar(name):
+    """Rows of PV panels on a flat roof (16 m per tile)."""
+    W = 256; im = Image.new('RGB', (W, W), (150, 148, 142)); d = ImageDraw.Draw(im)
+    for y in range(8, W, 32):
+        for x in range(6, W - 20, 26):
+            d.rectangle([x, y, x + 22, y + 24], fill=(38, 52, 78)); d.line([x + 11, y, x + 11, y + 24], fill=(70, 84, 110), width=1); d.line([x, y + 12, x + 22, y + 12], fill=(70, 84, 110), width=1)
+    noise(im, 5); im.save(f'{OUT}/{name}.png')
+
 mosaic_walkup('facade_mosaic_cream', (214, 204, 182), (186, 176, 156))
 mosaic_walkup('facade_mosaic_pink', (204, 176, 168), (176, 150, 142))
 mosaic_walkup('facade_mosaic_grey', (176, 178, 176), (150, 152, 150))
 glass_office('facade_glass'); concrete_old('facade_concrete'); storefront('storefront'); signboards('signboards'); roof('roof')
 signs_h('signs_h'); storefront_ai(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ai_textures'))
+roof_concrete('roof_concrete_a', (156, 154, 148)); roof_concrete('roof_concrete_b', (176, 172, 162)); roof_concrete('roof_concrete_c', (128, 126, 122))
+roof_metal('roof_metal_red', (150, 70, 58)); roof_metal('roof_metal_blue', (82, 110, 140)); roof_metal('roof_metal_green', (112, 150, 120)); roof_metal('roof_metal_grey', (170, 172, 170))
+roof_solar('roof_solar'); glazed('tile_green', (40, 104, 92), (96, 168, 150)); glazed('tile_slate', (52, 54, 58), (92, 94, 98))
 glazed('tile_blue', (28, 62, 128), (70, 120, 196)); glazed('tile_gold', (176, 120, 30), (236, 186, 70)); glazed('tile_orange', (150, 70, 30), (210, 120, 60))
 print('textures in', OUT, sorted(os.listdir(OUT)))

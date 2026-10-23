@@ -148,6 +148,8 @@ catch (e) { origErr('game.js failed to boot in Node: ' + (e.stack || e)); proces
     route: seq.filter(s => s[1] > 120).map(s => s[0] + ' ' + Math.round(s[1])).join(' → '),
     errors,
   };
-  process.stdout.write(JSON.stringify(out));
+  // optional: run one of tools/test/js/*.js against this world (the same function Playwright evaluates in the page)
+  if (spec.check) { try { out.check = await vm.runInThisContext('(' + fs.readFileSync(path.join(__dirname, '..', 'js', spec.check), 'utf8') + ')')(spec.arg); } catch (e) { out.check = { error: String(e && e.stack || e).slice(0, 400) }; } }
+  fs.writeSync(1, JSON.stringify(out)); // synchronous: process.exit would cut a piped stdout at 64 KB
   process.exit(0);
 })().catch(e => { origErr('world.js: ' + (e.stack || e)); process.exit(2); });

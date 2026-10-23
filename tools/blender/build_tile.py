@@ -66,6 +66,8 @@ MAT['signboards'] = img_mat('signboards', 'signboards', rough=0.4, emit=0.8)
 MAT['signs_h'] = img_mat('signs_h', 'signs_h', rough=0.4, emit=0.6)
 SHOP_AI = sorted(f[:-4] for f in os.listdir(TEX) if f.startswith('storefront_ai_') and f.endswith('.png') and not f.endswith('_n.png'))  # make_textures.py composites
 for k in SHOP_AI: MAT[k] = img_mat(k, k, emit=0.25)
+for k in ('roof_concrete_a', 'roof_concrete_b', 'roof_concrete_c', 'roof_metal_red', 'roof_metal_blue', 'roof_metal_green', 'roof_metal_grey', 'roof_solar', 'tile_green', 'tile_slate'):
+    if os.path.exists(f'{TEX}/{k}.png'): MAT[k] = img_mat(k, k, rough=0.35 if k.startswith('tile') else 0.6 if 'metal' in k or 'solar' in k else 0.9, metal=0.4 if 'metal' in k else 0.0)
 MAT['tile_blue'] = img_mat('tile_blue', 'tile_blue', rough=0.3); MAT['tile_gold'] = img_mat('tile_gold', 'tile_gold', rough=0.3); MAT['tile_orange'] = img_mat('tile_orange', 'tile_orange', rough=0.35)
 for k, rgb, r, mt in [('cage', (0.55, 0.56, 0.55), 0.5, 0.6), ('ac', (0.86, 0.86, 0.83), 0.6, 0), ('ceiling', (0.62, 0.6, 0.56), 0.9, 0), ('column', (0.7, 0.68, 0.63), 0.8, 0),
                       ('tank', (0.82, 0.84, 0.86), 0.3, 0.8), ('marble', (0.93, 0.92, 0.89), 0.35, 0), ('stone', (0.62, 0.58, 0.52), 0.85, 0), ('lacquer', (0.56, 0.1, 0.08), 0.45, 0),
@@ -137,6 +139,7 @@ def clear_roads(ring):
     """Push footprint corners out of every carriageway (the 3D-model footprints and OSM roads don't line up exactly,
     and the game's track uses at least 3.6 m half width). Returns None when the building itself stands in a road."""
     out = [list(p) for p in ring]
+    cx0 = sum(p[0] for p in ring) / len(ring); cy0 = sum(p[1] for p in ring) / len(ring)
     for _ in range(2):
         for v in out:
             for (ax, ay), (bx, by), w, c in road_segs:
@@ -144,8 +147,12 @@ def clear_roads(ring):
                 dx, dy = bx - ax, by - ay; l2 = dx * dx + dy * dy or 1; f = min(1, max(0, ((v[0] - ax) * dx + (v[1] - ay) * dy) / l2))
                 px, py = ax + dx * f, ay + dy * f; d = math.hypot(v[0] - px, v[1] - py); half = max(w / 2, 3.6) + 0.6
                 if d < half:
-                    if d < 1e-3: continue
-                    v[0] = px + (v[0] - px) / d * half; v[1] = py + (v[1] - py) / d * half
+                    # push toward the side of the street the building stands on: a corner past the centreline used to be
+                    # pushed to the far kerb, stretching the building across the road (南海路, tpe3d 2410)
+                    ln = math.sqrt(l2); nx_, ny_ = -dy / ln, dx / ln
+                    sd = 1 if (cx0 - ax) * nx_ + (cy0 - ay) * ny_ >= 0 else -1
+                    if 0 < f < 1 or d < 1e-3: v[0] = px + nx_ * sd * half; v[1] = py + ny_ * sd * half
+                    else: v[0] = px + (v[0] - px) / d * half; v[1] = py + (v[1] - py) / d * half
     gx = sum(p[0] for p in out) / len(out); gy = sum(p[1] for p in out) / len(out)
     return None if street_dist(gx, gy) < 0 else [tuple(p) for p in out]
 def street_dist(X, Y):
@@ -315,6 +322,33 @@ def build_landmarks():
             else: bld.face('marble' if mat == 'marble' else 'roof', [(*B(x, y), walls_top) for x, y in ring])
     return bld.to_object('landmarks')
 
+# ---------- corridors with per-building parameters (data/corridors/*.json, tools/jianzhong/derive_params.py)
+# Inside a corridor's area the data/taipei.json buildings are replaced by the corridor's own list: footprints already
+# cleared of the roads, heights from permits, and roof / arcade / use / landmark decided per building.
+CORR = []
+for f in sorted(os.listdir(os.path.join(DATA, 'corridors'))) if os.path.isdir(os.path.join(DATA, 'corridors')) else []:
+    if f.endswith('.json'): CORR.append(json.load(open(os.path.join(DATA, 'corridors', f))))
+CORR_AREAS = [[tuple(p) for p in c['area']] for c in CORR]
+def simple_ring(r):
+    """no two non-adjacent edges cross (offset_ring can fold concave footprints)"""
+    n = len(r)
+    def cross(p, q, a, b):
+        d = lambda u, v, w: (v[0] - u[0]) * (w[1] - u[1]) - (v[1] - u[1]) * (w[0] - u[0])
+        return d(p, q, a) * d(p, q, b) < 0 and d(a, b, p) * d(a, b, q) < 0
+    for i in range(n):
+        for j in range(i + 2, n):
+            if i == 0 and j == n - 1: continue
+            if cross(r[i], r[(i + 1) % n], r[j], r[(j + 1) % n]): return False
+    return True
+def near_ring(x, y, r, tol=0.05):
+    for i in range(len(r)):
+        (ax, ay), (bx, by) = r[i], r[(i + 1) % len(r)]; dx, dy = bx - ax, by - ay; l2 = dx * dx + dy * dy or 1
+        f = min(1, max(0, ((x - ax) * dx + (y - ay) * dy) / l2))
+        if math.hypot(x - ax - dx * f, y - ay - dy * f) < tol: return True
+    return False
+INST_FACADES = ['school_corridor', 'concrete', 'grey_wash', 'white_tile_apts']
+LANDMARK_FACADE = {'redhouse': 'red_brick_old', 'palace': 'cream', 'temple': 'red_brick_old', 'dome': 'white_tile_apts'}
+
 # ---------- ordinary buildings
 DUMP = []  # final footprint and choices per building, written to $TGP_DUMP (debugging and the corridor audit)
 def build_buildings():
@@ -324,13 +358,28 @@ def build_buildings():
         h = b[0] / 10; pts = b[1:]; ring = [(pts[2 * i], pts[2 * i + 1]) for i in range(len(pts) // 2)]
         if len(ring) < 3: continue
         gx = sum(p[0] for p in ring) / len(ring); gy = sum(p[1] for p in ring) / len(ring)
-        if not inside(gx, gy) or any(pip(gx, gy, r) for r in lm_rings): continue
-        ring0 = ccw(ring); ring = clear_roads(ring0)
-        if ring is None or len(ring) < 3: stats['dropped'] = stats.get('dropped', 0) + 1; DUMP.append({'bid': bi, 'dropped': True, 'ring0': ring0, 'h': h}); continue
+        if not inside(gx, gy) or any(pip(gx, gy, r) for r in lm_rings) or any(pip(gx, gy, r) for r in CORR_AREAS): continue
+        one_building(bld, stats, pal, bi, h, ring, gx, gy)
+    for c in CORR:
+        for ci, P in enumerate(c['buildings']):
+            ring = [tuple(p) for p in P['ring']]; gx = sum(p[0] for p in ring) / len(ring); gy = sum(p[1] for p in ring) / len(ring)
+            if inside(gx, gy) and not any(pip(gx, gy, r) for r in lm_rings): one_building(bld, stats, pal, 1000000 + ci, P['h'], ring, gx, gy, P)
+    print('buildings', stats)
+    return bld.to_object('buildings')
+
+def one_building(bld, stats, pal, bi, h, ring, gx, gy, P=None):
+    """One ordinary building. P: corridor parameters (footprint already clear of the roads), or None for data/taipei.json."""
+    if True:
+        ring0 = ccw(ring); ring = clear_roads(ring0) if P is None else ring0
+        if ring is None or len(ring) < 3: stats['dropped'] = stats.get('dropped', 0) + 1; DUMP.append({'bid': bi, 'dropped': True, 'ring0': ring0, 'h': h}); return
         ring = ccw(ring); hsh = (bi * 2654435761) & 0xffffffff
         fam = ('facade_concrete' if hsh % 3 == 0 else 'facade_glass') if h > 42 else [pal[hsh % 3], 'facade_concrete', 'facade_glass'][hsh % 3] if h > 24 else ('facade_concrete' if hsh % 5 == 0 else pal[hsh % 3])
         if AI:  # AI facades by building height; the drawn ones remain the fallback
             fam = ai_facade(h, hsh) or (AI_FOR[fam] if AI_FOR.get(fam) in AI else fam)
+        use = P['use'] if P else None; lmk = P.get('landmark') if P else None
+        if P and AI:  # schools, offices and museums get institutional facades; landmarks their own
+            pick = LANDMARK_FACADE.get(lmk) or (INST_FACADES[(hsh // 7) % len(INST_FACADES)] if use in ('institutional', 'religious') else None)
+            if pick and 'facade_ai_' + pick in MAT: fam = 'facade_ai_' + pick
         rx, ry = FACADE_REPEAT(fam)
         base = min(dem(x, y) for x, y in ring) - 1.5; top = dem(gx, gy) + h
         n = len(ring)
@@ -342,10 +391,14 @@ def build_buildings():
             street.append(street_dist((ax + bx) / 2 + nx_ * 4, (ay + by) / 2 + ny_ * 4) < 6)
         lowrise = h <= 40 and fam != 'facade_glass'
         painted_grilles = fam.startswith('facade_ai')  # the AI facades already show window grilles; 3D cages would not line up with them
-        arcade = lowrise and h >= 7
+        arcade = (lowrise and h >= 7) if P is None else bool(P['arcade']) and h >= 7
+        shops = (P is None or use == 'storefront')
+        details = P is None or use in ('storefront', 'residential')  # no cages, AC units or signboards on schools, offices, landmarks
         g0 = base + 1.5 + 4.5  # top of the ground floor
         inner = offset_ring(ring, [3.0 if (arcade and street[i]) else 0 for i in range(n)]) if arcade and any(street) else ring
-        DUMP.append({'bid': bi, 'ring0': ring0, 'ring': ring, 'inner': inner if inner is not ring else None, 'h': h, 'base': base, 'top': top, 'facade': fam, 'arcade': arcade and any(street), 'street': street, 'shops': bool(arcade and SHOP_AI and hsh % 5)})
+        if inner is not ring and (not simple_ring(inner) or not all(pip(x, y, ring) or near_ring(x, y, ring) for x, y in inner)):
+            arcade, inner = False, ring; stats['arcade_dropped'] = stats.get('arcade_dropped', 0) + 1  # folded inner ring: shop walls would stick out of the building
+        DUMP.append({'bid': bi, 'id': P and P['id'], 'src': P and P['src'], 'params': P and {k: P.get(k) for k in ('roof', 'use', 'landmark', 'floors', 'arcade')}, 'ring0': ring0, 'ring': ring, 'inner': inner if inner is not ring else None, 'h': h, 'base': base, 'top': top, 'facade': fam, 'arcade': arcade and any(street), 'street': street, 'shops': bool(arcade and shops and SHOP_AI and hsh % 5)})
         per = 0.0
         for i in range(n):
             (ax, ay), (bx, by) = ring[i], ring[(i + 1) % n]; L = math.hypot(bx - ax, by - ay)
@@ -355,7 +408,7 @@ def build_buildings():
             bld.quad(fam, (*A, low), (*Bp, low), (*Bp, top), (*A, top), [(per / rx, (low - base) / ry), ((per + L) / rx, (low - base) / ry), ((per + L) / rx, (top - base) / ry), (per / rx, (top - base) / ry)])
             if arcade:
                 (ix, iy), (jx, jy) = inner[i], inner[(i + 1) % n]; Ai, Bi = B(ix, iy), B(jx, jy); Li = math.hypot(jx - ix, jy - iy)
-                shop = SHOP_AI[(hsh // 3 + i) % len(SHOP_AI)] if SHOP_AI and hsh % 5 else 'storefront'
+                shop = (SHOP_AI[(hsh // 3 + i) % len(SHOP_AI)] if SHOP_AI and hsh % 5 else 'storefront') if shops else fam
                 bld.quad(shop if street[i] else fam, (*Ai, base), (*Bi, base), (*Bi, g0), (*Ai, g0), [(0, 0), (Li / 12, 0), (Li / 12, 1), (0, 1)] if street[i] else None)
                 if street[i]:  # arcade ceiling and columns along the kerb side
                     bld.quad('ceiling', (*A, g0), (*Ai, g0), (*Bi, g0), (*Bp, g0)); stats['arcades'] += 1
@@ -365,14 +418,14 @@ def build_buildings():
                         px -= uy * 0.35; py += ux * 0.35
                         inst('column', *B(px, py), base, math.atan2(uy, ux))
                     # 橫式招牌: one lit sign per bay on the fascia above the arcade
-                    for k in range(int(L // 4.2)):
+                    for k in range(int(L // 4.2)) if shops else ():
                         if R.random() < 0.25: continue
                         s0, s1 = k * 4.2 + 0.45, k * 4.2 + 4.05; zs = g0 + 0.15 + R.choice((0, 0, 0.3))
                         p0 = B(ax + ux * s0 + nx_ * 0.12, ay + uy * s0 + ny_ * 0.12); p1 = B(ax + ux * s1 + nx_ * 0.12, ay + uy * s1 + ny_ * 0.12)
                         si = R.randrange(32); u0, v0 = (si % 4) / 4, 1 - (si // 4 + 1) / 8
                         bld.quad('signs_h', (*p0, zs), (*p1, zs), (*p1, zs + 1.0), (*p0, zs + 1.0), [(u0, v0), (u0 + 0.25, v0), (u0 + 0.25, v0 + 0.125), (u0, v0 + 0.125)]); stats['hsigns'] = stats.get('hsigns', 0) + 1
                     # 機車 parked side by side across the arcade, nose to the shops or to the street, gaps here and there
-                    s = 0.9
+                    s = 0.9 if shops else L
                     while s < L - 0.9:
                         if R.random() < 0.5: s += R.uniform(1.5, 4.0); continue
                         px, py = ax + ux * s - nx_ * 1.55, ay + uy * s - ny_ * 1.55
@@ -380,7 +433,7 @@ def build_buildings():
                         inst('scooter', *B(px, py), dem(px, py), yaw); stats['scooters'] = stats.get('scooters', 0) + 1
                         s += R.uniform(0.68, 0.8)
             # street-face details on walk-ups: window cages, AC units, vertical signboards
-            if lowrise and street[i] and L > 4:
+            if lowrise and details and street[i] and L > 4:
                 ux, uy = (bx - ax) / L, (by - ay) / L; nx_, ny_ = uy, -ux; yaw = math.atan2(uy, ux)
                 floors = int((top - g0) // 3.2)
                 for fl in range(floors):
@@ -390,7 +443,7 @@ def build_buildings():
                         f = (k + 0.5) * 3 / L; px, py = ax + (bx - ax) * f + nx_ * 0.2, ay + (by - ay) * f + ny_ * 0.2
                         if not painted_grilles: inst('cage', *B(px, py), zf + 0.6, yaw); stats['cages'] += 1
                         if R.random() < 0.35: inst('ac', *B(px + ux * 0.9 + nx_ * 0.25, py + uy * 0.9 + ny_ * 0.25), zf + 0.15, yaw)
-                if h < 30:
+                if h < 30 and shops:
                     for k in range(int(L // 7)):
                         if R.random() > 0.6: continue
                         f = (k + 0.5) * 7 / L; px, py = ax + (bx - ax) * f + nx_ * 0.9, ay + (by - ay) * f + ny_ * 0.9
@@ -409,14 +462,29 @@ def build_buildings():
         # flat roof, rooftop water tank and stair hut
         roofs = [k for k in ('roof_ai_0', 'roof_ai_1') if k in AI]
         rm, rs = (roofs[hsh % len(roofs)], 16) if roofs else ('roof', 8)
-        bld.face(rm, [(*B(x, y), top) for x, y in ring], [((x - X0) / rs, (y - Y0) / rs) for x, y in ring])
-        if h < 60 and R.random() < 0.6:
-            inst('tank', *B(gx + R.uniform(-2, 2), gy + R.uniform(-2, 2)), top + 0.3, 0.0)
-        if h < 60 and R.random() < 0.4:
-            bld.box('facade_concrete', *B(gx, gy), top, 3.0, 2.6, 2.8, R.uniform(0, math.pi))
+        kind = P['roof'] if P else 'flat_green'
+        pick = lambda names: [k for k in names if k in MAT]
+        if kind in ('flat_concrete', 'mixed', 'dome') and pick(('roof_concrete_a', 'roof_concrete_b', 'roof_concrete_c')): ks = pick(('roof_concrete_a', 'roof_concrete_b', 'roof_concrete_c')); rm, rs = ks[hsh % len(ks)], 16
+        elif kind == 'metal_sheet' and pick(('roof_metal_red', 'roof_metal_blue', 'roof_metal_green', 'roof_metal_grey')): ks = pick(('roof_metal_red', 'roof_metal_blue', 'roof_metal_green', 'roof_metal_grey')); rm, rs = ks[(hsh // 5) % len(ks)], 8
+        elif kind == 'solar' and 'roof_solar' in MAT: rm, rs = 'roof_solar', 16
+        if kind == 'pitched_tile':  # hip roof over the footprint's oriented box; glazed green for palace style, slate for 紅樓
+            (cx, cy), hl, hw, ang = obb(ring); cb = B(cx, cy)
+            mat = {'palace': 'tile_green', 'redhouse': 'tile_slate', 'temple': 'tile_orange'}.get(lmk, 'tile_slate' if 'tile_slate' in MAT else 'tile_orange')
+            mat = mat if mat in MAT else 'tile_orange'
+            bld.face('roof', [(*B(x, y), top) for x, y in ring], [((x - X0) / 8, (y - Y0) / 8) for x, y in ring])
+            chinese_roof(bld, mat, cb[0], cb[1], ang, hl + 0.8, hw + 0.8, top, min(6.0, max(2.5, hw * 0.55)), hip=True, lift=0.9 if lmk in ('palace', 'temple') else 0.15, steps=4, ridge_mat='gold' if lmk == 'temple' else mat)
+        else:
+            bld.face(rm, [(*B(x, y), top) for x, y in ring], [((x - X0) / rs, (y - Y0) / rs) for x, y in ring])
+            if kind == 'dome':
+                (cx, cy), hl, hw, ang = obb(ring); cb = B(cx, cy); rr = min(hl, hw) * 0.85
+                bld.cyl('tile_green' if 'tile_green' in MAT else 'tile_blue', cb[0], cb[1], top, rr, rr * 0.45, 16, r2=rr * 0.75); bld.cyl('tile_green' if 'tile_green' in MAT else 'tile_blue', cb[0], cb[1], top + rr * 0.45, rr * 0.75, rr * 0.4, 16, r2=0.4)
+            elif h < 60 and details and R.random() < 0.6:
+                inst('tank', *B(gx + R.uniform(-2, 2), gy + R.uniform(-2, 2)), top + 0.3, 0.0)
+            if kind == 'mixed' and 'roof_metal_grey' in MAT:  # 鐵皮加蓋 on part of the roof
+                (cx, cy), hl, hw, ang = obb(ring); bld.box('roof_metal_grey', *B(cx, cy), top, hl * 1.1, hw * 1.1, 2.6, ang)
+            elif h < 60 and kind != 'dome' and R.random() < 0.4:
+                bld.box('facade_concrete', *B(gx, gy), top, 3.0, 2.6, 2.8, R.uniform(0, math.pi))
         stats['n'] += 1
-    print('buildings', stats)
-    return bld.to_object('buildings')
 
 def build_bridges():
     bld = Builder(); cnt = 0
