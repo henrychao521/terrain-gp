@@ -2301,12 +2301,13 @@ function physicsStep(dt, inp) {
       Vx -= 1.12 * vn * Lx; Vz -= 1.12 * vn * Lz;
       const scrub = 1 - Math.min(0.22, 0.015 * Math.abs(vn)); Vx *= scrub; Vz *= scrub;
       const tf = Math.atan2(-W.lx[loc.k], -W.lz[loc.k]);
-      // only a real impact turns the nose back: a car merely resting against the barrier (sliding into it down a cross slope
-      // at walking pace) must still be able to steer away from it, or it stays pinned there (丘陵 run-off, 2026-10-24)
-      const hard = Math.abs(vn) > 0.6;
-      let dpsi = tf - c.psi; dpsi = Math.atan2(Math.sin(dpsi), Math.cos(dpsi)); if (hard && Math.abs(dpsi) < Math.PI / 2) c.psi += dpsi * 0.35;
+      // the nose is turned back (and the yaw damped) only while it points into the barrier: a car resting against it with the
+      // nose already turned away (sliding into it down a cross slope, or a standing start beside it) must be free to steer
+      // off, or it stays pinned there (丘陵 run-off; 中正 start grid, seed 8; 2026-10-24)
+      const into = (Math.cos(c.psi) * Lx - Math.sin(c.psi) * Lz) * s > 0;
+      let dpsi = tf - c.psi; dpsi = Math.atan2(Math.sin(dpsi), Math.cos(dpsi)); if (into && Math.abs(dpsi) < Math.PI / 2) c.psi += dpsi * 0.35;
       const cp2 = Math.cos(c.psi), sn2 = Math.sin(c.psi), fx2 = cp2, fz2 = -sn2, lx2 = -sn2, lz2 = -cp2;
-      c.vx = Vx * fx2 + Vz * fz2; c.vy = Vx * lx2 + Vz * lz2; if (hard) c.r *= 0.3;
+      c.vx = Vx * fx2 + Vz * fz2; c.vy = Vx * lx2 + Vz * lz2; if (into) c.r *= 0.3;
       c.hit = Math.max(c.hit, Math.abs(vn)); c.wallT = state.t; // raceUpdate clears hit every frame; autoRecover reads the time
     }
   }
