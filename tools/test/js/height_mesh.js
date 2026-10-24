@@ -62,7 +62,7 @@
     groundDiag = { firstCell: [a, b, c, d4, e, f], shared: sh, note: sh[1] - sh[0] === W.nx - 1 ? 'diagonal (i+1, j)–(i, j+1)' : sh[1] - sh[0] === W.nx + 1 ? 'diagonal (i, j)–(i+1, j+1)' : '?' }; }
   const G = ground && surface(ground, 0), A = asphalt && surface(asphalt, 0.05), S = street && surface(street, 0.03);
   // ---------------------------------------------------------------- sample the lane
-  const Hs = [], rec = { visible: [], asphalt: [], ground: [], street: [], pokeGround: [], streetOver: [] }, worst = { visible: [], asphalt: [], ground: [], pokeGround: [], streetOver: [] };
+  const Hs = [], rec = { contact: [], visible: [], asphalt: [], ground: [], street: [], pokeGround: [], streetOver: [] }, worst = { visible: [], asphalt: [], ground: [], pokeGround: [], streetOver: [] };
   const push = (arr, v) => arr.push(v);
   // the worst samples, at least 30 m apart; pruned in batches
   const prune = list => { list.sort((p, q) => Math.abs(q.d) - Math.abs(p.d)); const out = []; for (const w of list) { if (out.every(u => Math.hypot(u.x - w.x, u.z - w.z) > 30)) out.push(w); if (out.length >= nWorst) break; } list.length = 0; list.push(...out); };
@@ -93,6 +93,8 @@
         if (G) { const hg = G.at(x, z).h; if (hg === hg) { const d = ph - hg; push(rec.ground, Math.abs(d)); if (Math.abs(d) > 0.02) keepWorst(worst.ground, { ...here, d: Math.round(d * 1000) / 1000 });
           if (ha === ha) { const poke = hg - (ha + 0.05); push(rec.pokeGround, poke); if (poke > 0) keepWorst(worst.pokeGround, { ...here, d: Math.round(poke * 1000) / 1000 }); }
           // what is seen under the car: the higher of the ground and the drawn asphalt, less the asphalt's deliberate 0.05 m lift
+          // tyre contact: where the car is drawn (Sq + the game's surface lift, 0 before 2026-10-24) against the top drawn surface
+          const top = ha === ha ? Math.max(hg, ha + 0.05) : hg, lift = X && X.surfLift ? X.surfLift(kk, lat) : 0; if (ha === ha) push(rec.contact, Math.abs(ph + lift - top)); // on the asphalt
           const vis = (ha === ha ? Math.max(hg, ha + 0.05) - 0.05 : hg) - ph; push(rec.visible, Math.abs(vis)); if (Math.abs(vis) > 0.02) keepWorst(worst.visible, { ...here, d: Math.round(vis * 1000) / 1000 }); } }
         if (S) { const hs = S.at(x, z).h; if (hs === hs) { push(rec.street, Math.abs(ph - hs)); if (ha === ha) { const ov = (hs + 0.03) - (ha + 0.05); push(rec.streetOver, ov); if (ov > 0) keepWorst(worst.streetOver, { ...here, d: Math.round(ov * 1000) / 1000 }); } } }
       }
@@ -107,6 +109,7 @@
     meshes: { ground: G ? G.tris : 0, asphalt: A ? A.tris : 0, street: S ? S.tris : 0, groundDiag },
     samples, onDeck: onDeckN, noAsphalt: noAsph,
     // |physics − surface| (surface minus the mesh's own constant lift: asphalt 0.05 m, street 0.03 m)
+    contact: stats(rec.contact), // |car drawn height − top drawn surface| (no allowance for the asphalt lift)
     visible: stats(rec.visible), asphalt: stats(rec.asphalt), ground: stats(rec.ground), street: stats(rec.street),
     twist: stats(twist), // per-cell |p − q − c + d|; bilinear − triangle ≤ twist / 4
     pokeGround: stats(rec.pokeGround, true), streetOver: stats(rec.streetOver, true), // > 0: that mesh is drawn above the circuit asphalt

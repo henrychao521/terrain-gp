@@ -920,6 +920,16 @@ function otherStretchNear(k, x, z, r) {
 // surface height for the track at sample k: the deck where the lap is elevated, the ground elsewhere
 const onDeck = k => W.anyElev && k >= 0 && W.elev[k % W.n] > 0;
 const Sq = (x, z, k) => onDeck(k) ? W.deck[k % W.n] : Hq(x, z);
+// how far above Sq the surface under a car at lateral offset lat of sample k is drawn: the asphalt ribbon 0.05 m (so it never
+// z-fights with the ground mesh), road-course kerbs 0.09 m, gravel 0.035 m, city streets 0.03 m. The car (physics height and
+// model) sits on it, so the tyres no longer sink 5 cm into the asphalt; blended over the 0.4 m past the asphalt edge
+function surfLift(k, lat) {
+  if (!(k >= 0) || !W.n) return 0;
+  k %= W.n; const al = Math.abs(lat), sd = lat > 0 ? 1 : -1, hw = sd > 0 ? W.hwL[k] : W.hwR[k];
+  const out = W.city ? 0.03 : al < hw + 1.5 && W.kerb[k] ? 0.09 : al >= hw + 1.5 && al < hw + 17 && W.grav[k] === sd ? 0.035 : 0;
+  const w = clamp((al - hw) / 0.4, 0, 1); // 0 on the asphalt, 1 from 0.4 m past its edge
+  return 0.05 + (out - 0.05) * w;
+}
 function normalS(x, z, k, out) {
   if (!onDeck(k)) return normalAt(x, z, out);
   const n = W.n, a = (k - 2 + n) % n, b = (k + 2) % n, g = (W.deck[b] - W.deck[a]) / (4 * W.ds); // the deck is flat across, sloped along
@@ -2138,7 +2148,7 @@ function placeCar(k, lat = 0, keepTyres = false) {
     thr: 0, brk: 0, aF: 0, aR: 0, Fzf: 0, Fzr: 0, down: 0, drag: 0, rho: 1.2, surf: 0, spin: false, lockF: false, tcAct: false, grade: 0, bankV: 0,
     tf, tr: trr, hit: 0,
   });
-  car.y = Sq(car.x, car.z, car.k);
+  car.y = Sq(car.x, car.z, car.k) + surfLift(car.k, lat);
 }
 
 function physicsStep(dt, inp) {
@@ -2149,7 +2159,7 @@ function physicsStep(dt, inp) {
   const surf = al < hw ? 0 : (al < hw + 1.5 && W.kerb[loc.k]) ? 1 : (gs && Math.sign(loc.lat) === gs && al < hw + 17) ? 3 : 2; c.surf = surf;
   const off = surf === 2 && W.city; // city run-off is pavement, not grass
   const mu0 = [1.9 * ATMO.grip, 1.55 * ATMO.grip, off ? 1.05 : 0.85, 0.6][surf], crr = [0.012, 0.02, off ? 0.02 : 0.06, 0.18][surf];
-  const h = Sq(c.x, c.z, loc.k); c.y = h; normalS(c.x, c.z, loc.k, nrm);
+  const h = Sq(c.x, c.z, loc.k); c.y = h + surfLift(loc.k, loc.lat); normalS(c.x, c.z, loc.k, nrm);
   const cp = Math.cos(c.psi), sn = Math.sin(c.psi);
   fp.set(cp, 0, -sn); fp.addScaledVector(nrm, -fp.dot(nrm)).normalize();
   lp.crossVectors(nrm, fp);
@@ -2600,7 +2610,7 @@ let camInit = false, shake = 0;
 function updateCarVisual() {
   const c = car, mdl = carModel;
   if (headlight.parent !== mdl.root) mdl.root.add(headlight, headlight.target);
-  c.y = Sq(c.x, c.z, c.k); normalS(c.x, c.z, c.k, nrm);
+  c.y = Sq(c.x, c.z, c.k) + surfLift(c.k, c.lat); normalS(c.x, c.z, c.k, nrm);
   const cp = Math.cos(c.psi), sn = Math.sin(c.psi);
   fp.set(cp, 0, -sn); fp.addScaledVector(nrm, -fp.dot(nrm)).normalize(); rt.crossVectors(fp, nrm);
   m4.makeBasis(fp, nrm, rt); mdl.root.quaternion.setFromRotationMatrix(m4); mdl.root.position.set(c.x, c.y, c.z);
@@ -3242,7 +3252,7 @@ function poseOpponent(c) {
   for (const w of c.model.wheels) { w.spin.rotation.z = -c.wheel; if (w.front) w.pivot.rotation.y = Math.atan(W.kappa[k] * SPEC.L); }
 }
 function poseModel(mdl, x, z, psi, k = -1) {
-  const y = Sq(x, z, k); normalS(x, z, k, nrm);
+  const y = Sq(x, z, k) + (k >= 0 ? surfLift(k, (x - W.x[k % W.n]) * W.lx[k % W.n] + (z - W.z[k % W.n]) * W.lz[k % W.n]) : 0); normalS(x, z, k, nrm);
   fp.set(Math.cos(psi), 0, -Math.sin(psi)); fp.addScaledVector(nrm, -fp.dot(nrm)).normalize(); rt.crossVectors(fp, nrm);
   m4.makeBasis(fp, nrm, rt); mdl.root.quaternion.setFromRotationMatrix(m4); mdl.root.position.set(x, y, z);
 }
