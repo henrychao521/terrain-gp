@@ -24,7 +24,7 @@ else: X0, Y0, X1, Y1 = ox, oy1 - meta['height'] * res, ox + meta['width'] * res,
 crop = img.crop((int((X0 - ox) / res), int((oy1 - Y1) / res), int((X1 - ox) / res), int((oy1 - Y0) / res)))
 s = a.scale  # output pixels per data metre = s / res
 W, H = int(crop.width * s), int(crop.height * s)
-base = crop.resize((W, H), Image.LANCZOS) if 'ortho' in L else Image.new('RGB', (W, H), (40, 40, 40))
+base = crop.resize((W, H), Image.LANCZOS) if 'ortho' in L else Image.new('RGB', (W, H), (40, 40, 40))  # without 'ortho' only the image's extent is used
 if a.fade: base = Image.blend(base, Image.new('RGB', base.size, (255, 255, 255)), a.fade)
 ppm = s / res
 P = lambda x, y: ((x - X0) * ppm, (Y1 - y) * ppm)
@@ -113,7 +113,9 @@ out = Image.alpha_composite(base.convert('RGBA'), ov).convert('RGB')
 dd = ImageDraw.Draw(out)
 try: f2 = ImageFont.truetype('/System/Library/Fonts/STHeiti Medium.ttc', 18)
 except OSError: f2 = None
-cap = (a.title + '　' if a.title else '') + '底圖：內政部國土測繪中心 PHOTO2 正射影像（2024，國土測繪圖資服務雲，僅供比對顯示）'
+src = ('底圖：內政部國土測繪中心 PHOTO2 正射影像（2024，國土測繪圖資服務雲，僅供比對顯示，不得放進公開 repo）' if 'ortho' in L
+       else '底圖：遊戲區塊的 Blender 俯視渲染' if a.render else '底圖：無（只畫向量圖層）')
+cap = (a.title + '　' if a.title else '') + src
 dd.rectangle([0, H - 26, W, H], fill=(0, 0, 0)); dd.text((6, H - 23), cap, fill=(255, 255, 255), font=f2)
 # scale bar 50 m
 bx = 10; dd.rectangle([bx, 10, bx + 50 * ppm, 16], fill=(255, 255, 255)); dd.text((bx, 18), '50 m', fill=(255, 255, 255), font=f2, stroke_width=2, stroke_fill=(0, 0, 0))
