@@ -269,7 +269,7 @@ function finishCity(M) {
 function loadTaipei() {
   if (CITY.taipei) return Promise.resolve(CITY.taipei);
   const get = u => fetch(u).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
-  return Promise.all([get('data/taipei.json'), get('data/taipei_osm.json').catch(() => null), get('models/taipei/tiles.json').catch(() => null), loadProps(), loadTreeAtlas(), get('data/skyline.json').catch(() => null)]).then(([d, o, tl, , , sky]) => {
+  return Promise.all([get('data/taipei.json'), get('data/taipei_osm.json').catch(() => null), get('models/taipei/tiles.json').catch(() => null), loadProps(), loadTreeAtlas(), get('data/skyline.json').catch(() => null), loadPacks(), get('models/taipei/footprints.json').catch(() => null)]).then(([d, o, tl, , , sky, packs, fp]) => {
     const sx = d.nx * d.d, sz = d.ny * d.d, cell = 10, nx = sx / cell + 1, nz = sz / cell + 1;
     const zr = atob(d.z), mr = atob(d.mask), dz = new Float32Array(d.nx * d.ny), dm = new Uint8Array(d.nx * d.ny);
     for (let k = 0; k < dz.length; k++) { let v = zr.charCodeAt(2 * k) | (zr.charCodeAt(2 * k + 1) << 8); if (v > 32767) v -= 65536; dz[k] = v / 100; dm[k] = mr.charCodeAt(k); }
@@ -284,6 +284,12 @@ function loadTaipei() {
     const dW = a => toW(a.map(v => v / 10)), pt = (x, y) => [x / 10 - sx / 2, sz / 2 - y / 10];
     let roads = d.roads.map(r => ({ c: r[0], n: r[1], p: toW(r.slice(2).map(v => v / 10)) }));
     let blds = d.buildings.map(b => ({ h: b[0] / 10, p: toW(b.slice(1)) })), env = null;
+    if (fp && fp.tiles) { // rebuilt Blender tiles: their final footprints replace data/taipei.json inside them (minimap, tree spots; D3)
+      const boxes = Object.values(fp.tiles).map(t => [t.x0 - sx / 2, t.x1 - sx / 2, sz / 2 - t.y1, sz / 2 - t.y0]);
+      const inBox = b => { const p = b.p, m = p.length / 2; let gx = 0, gz = 0; for (let i = 0; i < m; i++) { gx += p[i * 2]; gz += p[i * 2 + 1]; } gx /= m; gz /= m; return boxes.some(([x0, x1, z0, z1]) => gx >= x0 && gx < x1 && gz >= z0 && gz < z1); };
+      blds = blds.filter(b => !inBox(b));
+      for (const t of Object.values(fp.tiles)) for (const b of t.b) blds.push({ h: b[0] / 10, p: dW(b.slice(1)) });
+    }
     if (o) { // OpenStreetMap detail: carriageway widths and lanes, one-way streets, street furniture and landmarks
       roads = o.roads.map(r => ({ c: r[0], n: r[1], one: r[2], ln: r[3], w: r[4] / 10, lay: r[5], p: dW(r.slice(6)) }));
       const bridges = (o.bridges || []).map(r => { const p = dW(r.slice(6)), m = p.length / 2, S = [0]; for (let i = 1; i < m; i++) S.push(S[i - 1] + Math.hypot(p[i * 2] - p[i * 2 - 2], p[i * 2 + 1] - p[i * 2 - 1]));
@@ -301,6 +307,7 @@ function loadTaipei() {
     }
     // Blender-built scenery tiles replace the generated buildings and landmarks inside their bounds
     const tiles = tl && window.THREE.GLTFLoader ? tl.tiles.map(t => ({ file: 'models/taipei/' + t.file, x0: t.x0 - sx / 2, x1: t.x1 - sx / 2, z0: sz / 2 - t.y1, z1: sz / 2 - t.y0 })) : [];
+    addPackTracks(packs);
     return (CITY.taipei = finishCity({ kind: 'city', id: 'taipei', name: d.name, sx, sz, nx, nz, raw, mask, base: 0, water: 0.35, roads, blds, env, tiles, skyline: sky, credits: d.credits + (o ? '；' + o.credits : '') + (sky ? '；' + sky.note : '') }));
   });
 }
@@ -348,6 +355,15 @@ function parseOSM(text, fileName) {
 /* ================= Track points ================= */
 // points live in the editor's square view: u,v ∈ [0,1] over V = max(map width, map height); city points also carry a street node id
 let trackPts = [];
+// hill tracks come from a seed (mulberry32), so a track can be driven again and its lap times compared (D7):
+// 「標準丘陵 A」 is the default, any other seed can be typed in. hillSeed is null once the points are edited by hand.
+const HILL_STD = 20261024; let hillSeed = HILL_STD, HILL_DEF = '';
+const hillSig = () => ['size', 'range', 'base', 'width'].map(id => $('#' + id).value).concat([$('#walls').checked, $('#banking').checked]).join('|');
+function newHillTrack(seed) {
+  hillSeed = clamp(Math.floor(+seed) || HILL_STD, 1, 999999999); trackPts = randomTrack(hillSeed);
+  const el = $('#hillSeed'); if (el) el.value = hillSeed;
+}
+const randomSeed = () => 1 + Math.floor(Math.random() * 999999998);
 function randomTrack(seed) {
   const r = mulberry32(seed), n = 9 + Math.floor(r() * 5), pts = [];
   const cx = 0.5 + (r() - 0.5) * 0.06, cy = 0.5 + (r() - 0.5) * 0.06;
@@ -363,6 +379,18 @@ const TP_CIRCUITS = [ // street junctions in data coordinates (m east, m north o
   [[4312, 3718], [4207, 3247], [4745, 3209], [4760, 3709]], // counter-clockwise: 信義路 is one way eastbound
 ];
 const TP_ELEVATED = [false, false, false]; // presets that need elevated roads in the route (none: no viaduct in the map can be driven as a loop in its own direction)
+// Optional track packs (data/trackpacks/*.json, format in data/trackpacks/README.md): circuits kept out of the default lists.
+// Only the files listed here are loaded, and only their tracks get a button; a pack that is not listed never shows up anywhere.
+const TRACK_PACKS = [];
+const loadPacks = () => Promise.all(TRACK_PACKS.map(u => fetch(u).then(r => (r.ok ? r.json() : null)).catch(() => null)));
+function addPackTracks(packs) { // Taipei tracks of the listed packs become extra preset buttons
+  for (const P of packs) for (const t of (P && P.tracks) || []) {
+    if (t.map !== 'taipei' || !Array.isArray(t.loop) || t.loop.length < 3) continue;
+    const i = TP_CIRCUITS.push(t.loop.map(p => [+p[0], +p[1]])) - 1; TP_ELEVATED.push(!!t.elevated);
+    const b = document.createElement('button'); b.className = 'btn'; b.type = 'button'; b.dataset.c = String(i); b.textContent = t.name || '環線 ' + (i + 1);
+    b.onclick = () => tpPick(b); $('#tpPresets').appendChild(b);
+  }
+}
 // nearest street node; a main carriageway within 40 m wins over a closer frontage road or lane
 function snapNode(M, x, z) { const g = M.graph; let best = 0, bd = Infinity; for (let i = 0; i < g.x.length; i++) { const d = (g.x[i] - x) ** 2 + (g.z[i] - z) ** 2 + (g.major && !g.major[i] ? 1600 : 0); if (d < bd) { bd = d; best = i; } } return best; }
 const viewSize = M => Math.max(M.sx, M.sz);
@@ -506,7 +534,12 @@ function cleanRoute(P, M) {
 
 /* ================= Three setup ================= */
 const canvas = $('#view');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+// antialiasing is fixed when the WebGL context is made, so it follows the saved quality: always on 高, never on 低, and on 中 / 自動
+// only on desktops (phones are fill-rate bound and their screens dense); window.TGP_ANTIALIAS (true / false) overrides it
+const SAVED_Q = (() => { try { return (JSON.parse(localStorage.getItem('tgp-prefs') || 'null') || {}).quality || 'auto'; } catch (e) { return 'auto'; } })();
+const wantAA = q => (typeof window.TGP_ANTIALIAS === 'boolean' ? window.TGP_ANTIALIAS : q === 'high' || (q !== 'low' && !COARSE));
+const AA = wantAA(SAVED_Q);
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: AA, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, COARSE ? 1.5 : 2));
 renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95;
@@ -682,6 +715,13 @@ function realWidths(M, hw) {
     for (let k = 0; k < n; k++) { const a = []; for (let o = -h; o <= h; o++) a.push(wid[(k + o + n) % n]); a.sort((p, q) => p - q); med[k] = a[a.length >> 1]; }
     smoothCirc(med, Math.round(8 / W.ds), 2);
     for (let k = 0; k < n; k++) { L[k] = R[k] = clamp(med[k] / 2, 3.6, 13); W.lanes[k] = ln[k]; W.two[k] = two[k]; }
+    // the barriers sit on these edges and cannot step sideways: where the road narrows (a junction, a lane drop) it narrows over
+    // a taper of 1 m per 10 m, starting early, so a car along the barrier is guided in instead of shoved 2 m in one step (P5)
+    const slope = 0.1 * W.ds;
+    for (const A of [L, R]) for (let pass = 0; pass < 2; pass++) {
+      for (let k = 1; k <= 2 * n; k++) { const i = k % n, j = (k - 1) % n; if (A[i] > A[j] + slope) A[i] = A[j] + slope; }
+      for (let k = 2 * n - 1; k >= 0; k--) { const i = k % n, j = (k + 1) % n; if (A[i] > A[j] + slope) A[i] = A[j] + slope; }
+    }
   }
   W.hwMax = Math.max(...L, ...R);
 }
@@ -1441,6 +1481,25 @@ function updateLods() {
   }
 }
 let tileT = 0;
+// Blender tiles of the circuit: the ones within 800 m of the start line load at once, the rest one after another in a few lanes,
+// so the countdown is not held up by tiles at the far end of the lap (phones: 2 lanes)
+function queueTiles(grp, M, x0, z0) {
+  const order = W.activeTiles.map(t => ({ t, d: Math.hypot((t.x0 + t.x1) / 2 - x0, (t.z0 + t.z1) / 2 - z0) })).sort((a, b) => a.d - b.d);
+  let next = 0;
+  const lane = () => {
+    if (W.group !== grp || next >= order.length) return;
+    const { t } = order[next++];
+    loadTile(t.file, M).then(sc => { if (W.group !== grp) return; grp.add(sc); autoHold(1.5); W.tiles.push({ sc, cx: (t.x0 + t.x1) / 2, cz: (t.z0 + t.z1) / 2, r: Math.hypot(t.x1 - t.x0, t.z1 - t.z0) / 2, near: null }); })
+      .catch(e => console.warn('tile', t.file, e)).then(lane);
+  };
+  const lanes = Math.max(order.filter(o => o.d < 800).length, COARSE ? 2 : 4);
+  for (let i = 0; i < lanes; i++) lane();
+}
+// work buildMeshes() left for later (city streets, generated buildings, trees, street furniture, landmarks): a little each frame
+function runLater(budgetMs) {
+  const L = W.later; if (!L || !L.length) return;
+  const t0 = performance.now(); do L.shift()(); while (L.length && performance.now() - t0 < budgetMs);
+}
 function updateTiles(dt) {
   if ((tileT -= dt) > 0) return; tileT = 0.3;
   updateLods();
@@ -1454,6 +1513,7 @@ function buildMeshes() {
   W.lampPools = null;
   if (W.group) { scene.remove(W.group); W.group.traverse(o => { if (o.userData.tile || o.userData.keep) return; if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => m.dispose()); }); }
   const grp = W.group = new THREE.Group(); scene.add(grp);
+  const later = W.later = [], defer = f => later.push(() => { if (W.group === grp) f(); }); // built a few frames later, during the countdown (runLater)
   W.activeTiles = W.real ? pickTiles(W.M) : [];
   const M = W.M, NX = W.nx, NZ = W.nz, cx = W.sx / (NX - 1), cz = W.sz / (NZ - 1), H = W.H, D = W.dist, hw = setup.width / 2, n = W.n, X = W.x, Z = W.z;
   const nrm = new THREE.Vector3();
@@ -1506,7 +1566,7 @@ function buildMeshes() {
     grp.add(new THREE.Mesh(wg, new THREE.MeshStandardMaterial({ color: lin(0x2c4650), roughness: 0.12, metalness: 0.15, envMapIntensity: 1.3, normalMap: TEX.waterN, normalScale: new THREE.Vector2(0.35, 0.35) })));
   }
   // --- city streets (not the circuit)
-  if (W.city) {
+  if (W.city) defer(() => {
     const g = ribbonGeo((push, I) => {
       const grey = lin(0x6f6f6f);
       for (const r of M.roads) {
@@ -1524,7 +1584,7 @@ function buildMeshes() {
     });
     const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, map: TEX.asphalt, roughness: 0.92, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));
     mesh.receiveShadow = true; grp.add(mesh);
-  }
+  });
   // --- circuit ribbons
   const S = new Float32Array(n + 1); for (let k = 1; k <= n; k++) S[k] = S[k - 1] + W.ds;
   // from / to: lateral offsets, either numbers or functions of the sample index (real road widths vary along the lap)
@@ -1617,7 +1677,8 @@ function buildMeshes() {
   const facM = [TEX.facA, TEX.facB, TEX.facC].map(t => new THREE.MeshStandardMaterial({ map: t, vertexColors: true, roughness: t === TEX.facB ? 0.25 : 0.85, metalness: t === TEX.facB ? 0.35 : 0, envMapIntensity: t === TEX.facB ? 1.1 : 0.3 }));
   const shopM = new THREE.MeshStandardMaterial({ map: TEX.shop, roughness: 0.8 }), roofM = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
   const stand = standFrame();
-  if (W.city && M.blds.length) {
+  if (W.city && M.blds.length) { W.tiles = []; queueTiles(grp, M, X[0], Z[0]); } // Blender tiles: the start area at once, the rest a few at a time
+  if (W.city && M.blds.length) defer(() => {
     const tile = 500, tiles = new Map(), pal = [0xffffff, 0xf2ece2, 0xe6ddd0, 0xdfe2e4, 0xd2cbbf, 0xf5efe6, 0xe9dccb, 0xd9dcdf].map(lin);
     const near = (x, z) => gridSample(D, x, z) < (isFinite(W.wall) ? W.wall + 3 : hw + 6) || stand.inside(x, z);
     const props = { tank: [], hut: [], shed: [] }, br = mulberry32(17);
@@ -1668,10 +1729,6 @@ function buildMeshes() {
       const rm = new THREE.Mesh(rg, roofM); rm.castShadow = rm.receiveShadow = true; grp.add(rm);
     }
     W.bldKept = kept;
-    // nearest tiles to the start line first; window cages, signs and other street detail only on tiles near the camera
-    W.tiles = [];
-    const order = W.activeTiles.map(t => ({ t, d: Math.hypot((t.x0 + t.x1) / 2 - X[0], (t.z0 + t.z1) / 2 - Z[0]) })).sort((a, b) => a.d - b.d);
-    for (const { t } of order) loadTile(t.file, M).then(sc => { if (W.group !== grp) return; grp.add(sc); autoHold(1.5); W.tiles.push({ sc, cx: (t.x0 + t.x1) / 2, cz: (t.z0 + t.z1) / 2, r: Math.hypot(t.x1 - t.x0, t.z1 - t.z0) / 2, near: null }); }).catch(e => console.warn('tile', t.file, e));
     const inst = (list, geo, mat, set) => { if (!list.length) return; const im = new THREE.InstancedMesh(geo, mat, list.length), mm = new THREE.Matrix4(), qq = new THREE.Quaternion(), vv = new THREE.Vector3(), ss = new THREE.Vector3(), ee = new THREE.Euler(); list.forEach((it, i) => { set(it, vv, ee, ss); qq.setFromEuler(ee); mm.compose(vv, qq, ss); im.setMatrixAt(i, mm); }); im.castShadow = im.receiveShadow = true; grp.add(im); };
     const tankG = new THREE.CylinderGeometry(0.75, 0.75, 1.4, 12); tankG.translate(0, 1.6, 0);
     inst(props.tank, tankG, new THREE.MeshStandardMaterial({ color: lin(0xd5d9dd), roughness: 0.3, metalness: 0.8 }), ([x, y, z, sc], v, e, sv) => { v.set(x, y, z); e.set(0, 0, 0); sv.set(sc, sc, sc); });
@@ -1679,9 +1736,10 @@ function buildMeshes() {
     inst(props.hut, hutG, new THREE.MeshStandardMaterial({ color: lin(0xb9b4ab), roughness: 0.9 }), ([x, y, z, a], v, e, sv) => { v.set(x, y, z); e.set(0, -a, 0); sv.set(1, 1, 1); });
     const shedG = new THREE.BoxGeometry(1, 2.6, 1); shedG.translate(0, 1.3, 0);
     inst(props.shed, shedG, new THREE.MeshStandardMaterial({ color: lin(0x6f8796), roughness: 0.45, metalness: 0.6 }), ([x, y, z, a, w], v, e, sv) => { v.set(x, y, z); e.set(0, -a, 0); sv.set(w, 1, w * 0.8); });
-  }
+  });
   if (!W.real) buildStands(grp, stand);
-  // --- vegetation
+  // --- vegetation, street furniture and scenery
+  defer(() => {
   const tr = mulberry32(42), m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), tc = new THREE.Color();
   const treeGeo = crossGeo(0.4), eu = new THREE.Euler();
   const placeTrees = (spots, broadleaf) => {
@@ -1791,6 +1849,8 @@ function buildMeshes() {
     const broad = spots.filter((_, i) => i % 3 === 0), con = spots.filter((_, i) => i % 3 !== 0);
     placeTrees(broad, true); placeTrees(con, false);
   }
+  if (W.lampPools) applyAtmo(); // the lamp pools exist now: night visibility
+  });
   // --- start gantry
   const gm = new THREE.MeshStandardMaterial({ color: lin(0x2b3038), roughness: 0.5, metalness: 0.6 }), fx = -W.lz[0], fz = W.lx[0], gw = (isFinite(W.wall) ? W.wall : hw + 3);
   for (const s of [-1, 1]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.5, 7, 0.5), gm), x = X[0] + W.lx[0] * gw * s, z = Z[0] + W.lz[0] * gw * s; post.position.set(x, Hq(x, z) + 3.5, z); post.castShadow = true; grp.add(post); }
@@ -2081,7 +2141,7 @@ function physicsStep(dt, inp) {
       let dpsi = tf - c.psi; dpsi = Math.atan2(Math.sin(dpsi), Math.cos(dpsi)); if (Math.abs(dpsi) < Math.PI / 2) c.psi += dpsi * 0.35;
       const cp2 = Math.cos(c.psi), sn2 = Math.sin(c.psi), fx2 = cp2, fz2 = -sn2, lx2 = -sn2, lz2 = -cp2;
       c.vx = Vx * fx2 + Vz * fz2; c.vy = Vx * lx2 + Vz * lz2; c.r *= 0.3;
-      c.hit = Math.max(c.hit, Math.abs(vn));
+      c.hit = Math.max(c.hit, Math.abs(vn)); c.wallT = state.t; // raceUpdate clears hit every frame; autoRecover reads the time
     }
   }
   const limE = W.sx / 2 - 4, limZ = W.sz / 2 - 4;
@@ -2143,6 +2203,7 @@ function readInput(dt) {
   if (analog) { inp.thr = tK; inp.brk = bK; }
   else { inp.thr += clamp(tK - inp.thr, -8 * dt, 5 * dt); inp.brk += clamp(bK - inp.brk, -10 * dt, 8 * dt); }
   inp.steer = sK;
+  autoRecover(dt, inp); // automatic throttle: back off a barrier the car is stuck against
   // full lock is limited to what the tyres can use at this speed: Ackermann angle for the available lateral grip plus a small slip margin
   const spd = Math.hypot(car.vx, car.vy), aAvail = 1.7 * G * (1 + (car.down || 0) / (SPEC.m * G));
   const easy = setup.level === 'easy';
@@ -2161,6 +2222,56 @@ function readInput(dt) {
     if (spd > vT + 0.5) { inp.brk = Math.max(inp.brk, clamp((spd - vT) / 6, 0.25, 1)); inp.thr = 0; car.baAct = true; }
   }
 }
+// Automatic throttle against a barrier (P2, docs/賽道修正_2026-10.md): throttle on, not moving and touching the
+// barrier for 1.2 s -> reverse out for up to 1 s (2 s when it does not move), then drive on; still stuck -> resetToTrack().
+// Only with setup.autogas in a race; the player's own reverse gear or reset always wins. Writes inp (thr, brk, steer).
+/* P2-begin: autoRecover (written by the collaborating AI from the spec in docs/賽道修正_2026-10.md; changes marked 「改」) */
+const REC_STEER = 0.8; // hands off the wheel while reversing near the left barrier (lat > 0): steer left, which swings the nose to the right, back along the road (改: the spec had the opposite sign, which turned the car further into the barrier); mirrored on the right
+const REC = { phase: 'drive', t: 0, x0: 0, z0: 0, activeRev: false };
+function autoRecover(dt, inp) {
+  if (!setup.autogas || state.mode !== 'race') { REC.phase = 'drive'; REC.t = 0; REC.activeRev = false; return; }
+  // 改: raceUpdate() clears car.hit at the end of every frame, before the next frame reads the input, so car.hit is always 0
+  // here; physicsStep() keeps the time of the last barrier contact in car.wallT
+  const touching = car.hit > 0 || state.t - (car.wallT === undefined ? -9 : car.wallT) < 0.25;
+  if (REC.phase === 'drive') {
+    if (car.gear === -1) { REC.t = 0; return; } // the player's own reverse
+  } else if (REC.phase === 'reverse') {
+    if ((REC.activeRev && car.gear !== -1) || inp.uB > 0.1) { REC.phase = 'drive'; REC.t = 0; REC.activeRev = false; return; } // the player took over (改: braking counts too)
+  }
+  if (REC.phase === 'drive') {
+    if (inp.uB <= 0.1 && inp.thr > 0.5 && Math.abs(car.vx) < 0.8 && touching) {
+      REC.t += dt;
+      if (REC.t >= 1.2) { REC.phase = 'reverse'; REC.t = 0; REC.x0 = car.x; REC.z0 = car.z; REC.activeRev = false; } else return;
+    } else { REC.t = 0; return; }
+  }
+  if (REC.phase === 'reverse') {
+    // 改: shift(-1) never goes below 1st gear (reverse only comes from holding the brake at a standstill, gearLogic), so the
+    // spec's while (gear > -1) shift(-1) did nothing; the car is standing, so reverse is engaged directly
+    if (car.gear !== -1) { car.gear = -1; car.shiftT = 0; car.revT = 0; }
+    REC.activeRev = true; REC.t += dt;
+    const dist = Math.hypot(car.x - REC.x0, car.z - REC.z0);
+    const k = car.k || 0, tx = -W.lz[k], tz = W.lx[k], cx = Math.cos(car.psi), cz = -Math.sin(car.psi);
+    const angleDeg = Math.acos(clamp(cx * tx + cz * tz, -1, 1)) * (180 / Math.PI);
+    if (dist >= 2.5 || angleDeg < 35) REC.phase = 'resume';
+    else if (REC.t >= 2.0) {
+      if (dist < 0.3) { resetToTrack(); REC.phase = 'drive'; REC.t = 0; REC.activeRev = false; return; }
+      REC.phase = 'resume';
+    } else if (REC.t >= 1.0 && dist >= 0.3) REC.phase = 'resume';
+    if (REC.phase === 'reverse') {
+      // 改: in reverse gear physicsStep() takes the brake pedal as the reverse throttle and the throttle as the brake (and
+      // gearLogic() shifts back to 1st on throttle > 0.3), so the spec's thr = 0.7 / brk = 0 would have braked
+      inp.brk = 0.7; inp.thr = 0;
+      if (Math.abs(inp.steer) < 0.1) inp.steer = car.lat >= 0 ? REC_STEER : -REC_STEER;
+      else inp.steer = -inp.steer;
+      return;
+    }
+  }
+  if (REC.phase === 'resume') {
+    if (car.gear === -1) { car.gear = 1; car.shiftT = 0; } // 改: back to 1st directly (shift(+1) from reverse does the same)
+    REC.phase = 'drive'; REC.t = 0; REC.activeRev = false;
+  }
+}
+/* P2-end */
 function bindTouch(id, key) {
   const el = $(id);
   const on = e => { e.preventDefault(); el.setPointerCapture && el.setPointerCapture(e.pointerId); touch[key] = 1; el.classList.add('held'); };
@@ -2268,7 +2379,12 @@ function trackId() { // hash of the lap as built (centreline, surface height, wi
   let h = 0x811c9dc5 ^ W.n; const mix = v => { h = Math.imul(h ^ Math.round(v), 16777619); };
   for (let k = 0; k < W.n; k++) { mix(W.x[k] * 10); mix(W.z[k] * 10); mix(W.h[k] * 10); mix(W.hwL[k] * 10); mix(W.hwR[k] * 10); mix(W.bank[k] * 1000); }
   mix(setup.walls ? 1 : 0);
-  return setup.map + '-' + W.n + '-' + (h >>> 0).toString(36);
+  const hash = (h >>> 0).toString(36);
+  if (setup.map === 'terrain' && hillSeed !== null && TER.source === 'hills' && TER.seed === 7 && !TER.meters) { // a seeded hill track: hill_<seed>, plus the hash when the terrain or road settings are not the defaults
+    const id = 'hill_' + hillSeed + (setup.reverse ? '_r' : '');
+    return hillSig() === HILL_DEF ? id : id + '_' + hash;
+  }
+  return setup.map + '-' + W.n + '-' + hash;
 }
 const b64 = a => { const u = new Uint8Array(a.buffer, a.byteOffset, a.byteLength); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
 const unb64 = (s, T) => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new T(u.buffer); };
@@ -2573,7 +2689,7 @@ function selectMap(m) {
     $('#mapCredit').hidden = !M; if (M) $('#mapCredit').textContent = M.credits;
     readSetup();
     if (m === 'taipei' && (!trackPts.length || trackPts[0].node === undefined)) trackPts = cityPreset(M, 0);
-    if (m === 'terrain' && (!trackPts.length || trackPts[0].node !== undefined)) trackPts = randomTrack(Math.floor(Math.random() * 1e9));
+    if (m === 'terrain' && (!trackPts.length || trackPts[0].node !== undefined)) newHillTrack(HILL_STD);
     $('#btnRand').textContent = m === 'taipei' ? '換一條預設環線' : '隨機賽道'; $('#btnRand').disabled = m === 'osm';
     refreshRoute(); mapChanged();
   };
@@ -2587,7 +2703,8 @@ function selectMap(m) {
   } else go();
 }
 document.querySelectorAll('#mapTabs .tab').forEach(t => t.onclick = () => { if (t.dataset.m !== setup.map || (t.dataset.m === 'osm' && !CITY.osm)) { trackPts = []; selectMap(t.dataset.m); } });
-document.querySelectorAll('#tpPresets .btn').forEach(b => b.onclick = () => { if (TP_ELEVATED[+b.dataset.c]) { setup.elevated = true; $('#elevated').checked = true; } trackPts = cityPreset(CITY.taipei, +b.dataset.c); setup.reverse = false; $('#btnRev').classList.remove('sel'); mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn(); });
+function tpPick(b) { if (TP_ELEVATED[+b.dataset.c]) { setup.elevated = true; $('#elevated').checked = true; } trackPts = cityPreset(CITY.taipei, +b.dataset.c); setup.reverse = false; $('#btnRev').classList.remove('sel'); mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn(); }
+document.querySelectorAll('#tpPresets .btn').forEach(b => b.onclick = () => tpPick(b));
 
 // ---- editor map
 const ed = $('#editor'); let edBase = null, edSize = 0, routePreview = null, presetCycle = 0;
@@ -2677,19 +2794,22 @@ ed.addEventListener('pointerdown', e => {
   const p = edPos(e), r = ed.getBoundingClientRect(); dragI = -1;
   trackPts.forEach((q, i) => { if (Math.hypot((q.u - p.u) * r.width, (q.v - p.v) * r.height) < 14) dragI = i; });
   if (dragI < 0) { trackPts.push(snapIfCity(p)); dragI = trackPts.length - 1; }
+  if (setup.map === 'terrain') hillSeed = null; // edited by hand: no longer the seeded track
   ed.setPointerCapture(e.pointerId); mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn();
 });
 ed.addEventListener('pointermove', e => { if (dragI >= 0) { trackPts[dragI] = setup.map === 'terrain' ? edPos(e) : snapIfCity(edPos(e)); if (setup.map === 'terrain') drawEditor(); else { drawEditor(); } } });
 ed.addEventListener('pointerup', () => { if (dragI >= 0) { refreshRoute(); drawEditor(); } dragI = -1; });
 $('#btnRand').onclick = () => {
-  if (setup.map === 'terrain') trackPts = randomTrack(Math.floor(Math.random() * 1e9));
+  if (setup.map === 'terrain') newHillTrack(randomSeed());
   else if (setup.map === 'taipei') trackPts = cityPreset(CITY.taipei, presetCycle = (presetCycle + 1) % TP_CIRCUITS.length);
   else return;
   mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn();
 };
-$('#btnUndo').onclick = () => { trackPts.pop(); mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn(); };
-$('#btnClear').onclick = () => { trackPts = []; mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn(); };
+$('#btnUndo').onclick = () => { trackPts.pop(); hillSeed = null; mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn(); };
+$('#btnClear').onclick = () => { trackPts = []; hillSeed = null; mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn(); };
 $('#btnRev').onclick = () => { setup.reverse = !setup.reverse; $('#btnRev').classList.toggle('sel', setup.reverse); mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn(); };
+$('#hillSeed').addEventListener('change', () => { if (setup.map !== 'terrain') return; newHillTrack($('#hillSeed').value); mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn(); });
+$('#btnHillStd').onclick = () => { if (setup.map !== 'terrain') return; newHillTrack(HILL_STD); mapDirty = true; refreshRoute(); drawEditor(); updateStartBtn(); };
 addEventListener('resize', () => { if (!$('#setup').hidden) drawEditor(); });
 function updateStartBtn() {
   const ok = trackPts.length >= (setup.map === 'terrain' ? 4 : 3) && (setup.map === 'terrain' || CITY[setup.map]);
@@ -2770,9 +2890,12 @@ function pixelRatioFor(level) {
 }
 // the auto ladder, best first: named level (shadows, post), render scale on its pixel ratio, share of the near-model budget
 // (trees, barriers), range of the tiles' street detail (m). Tiers 0, 2 and 4 are exactly the fixed high, mid and low.
+// Range of the tiles' small street props (AC units, window cages, signs, scooters) per quality, m (P7): instanced by the
+// tens of thousands, they cost phones the most, and at speed nobody sees them a block away. window.TGP_DETAIL_R overrides one or all levels.
+const DETAIL_R = Object.assign(COARSE ? { high: 300, mid: 150, low: 120 } : { high: 450, mid: 450, low: 450 }, window.TGP_DETAIL_R || {});
 const QTIERS = [
-  { q: 'high', rs: 1, lod: 1, det: 450 }, { q: 'high', rs: 0.85, lod: 1, det: 450 }, { q: 'mid', rs: 1, lod: 1, det: 450 }, { q: 'mid', rs: 0.85, lod: 1, det: 450 },
-  { q: 'low', rs: 1, lod: 1, det: 450 }, { q: 'low', rs: 0.85, lod: 0.5, det: 300 }, { q: 'low', rs: 0.7, lod: 0.25, det: 200 }];
+  { q: 'high', rs: 1, lod: 1, det: DETAIL_R.high }, { q: 'high', rs: 0.85, lod: 1, det: DETAIL_R.high }, { q: 'mid', rs: 1, lod: 1, det: DETAIL_R.mid }, { q: 'mid', rs: 0.85, lod: 1, det: DETAIL_R.mid },
+  { q: 'low', rs: 1, lod: 1, det: DETAIL_R.low }, { q: 'low', rs: 0.85, lod: 0.5, det: Math.round(DETAIL_R.low * 2 / 3) }, { q: 'low', rs: 0.7, lod: 0.25, det: Math.round(DETAIL_R.low * 4 / 9) }];
 function pixelRatioNow() {
   if (qTier < 0) return pixelRatioFor(qLevel);
   let pr = Infinity; for (let i = AQ.start; i <= qTier; i++) pr = Math.min(pr, pixelRatioFor(QTIERS[i].q) * QTIERS[i].rs); // never more pixels than a better tier (1x screens)
@@ -2780,9 +2903,9 @@ function pixelRatioNow() {
 }
 function applyQuality(level, tier = -1) { // a fixed level ('low' | 'mid' | 'high'), or a tier of the auto ladder
   const T = QTIERS[tier], lv = T ? T.q : level; if (lv === qLevel && tier === qTier) return;
-  qTier = T ? tier : -1; lodK = T ? T.lod : 1; detailR = T ? T.det : 450; LODS.forEach(L => L.at.set(1e9, 0, 0)); // near models re-picked on the next tile tick
+  qTier = T ? tier : -1; lodK = T ? T.lod : 1; detailR = T ? T.det : DETAIL_R[lv]; LODS.forEach(L => L.at.set(1e9, 0, 0)); // near models re-picked on the next tile tick
   if (lv !== qLevel) {
-    qLevel = lv; const shadows = lv !== 'low', size = lv === 'high' ? 2048 : 1024;
+    qLevel = lv; const shadows = COARSE ? lv === 'high' : lv !== 'low', size = lv === 'high' ? 2048 : 1024; // phones: shadows only on 高 (P7: 19 -> 28 fps on 中)
     if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
     sun.shadow.mapSize.set(size, size); sun.castShadow = shadows;
     POST.on = lv === 'high' && setupPost();
@@ -2791,7 +2914,7 @@ function applyQuality(level, tier = -1) { // a fixed level ('low' | 'mid' | 'hig
   resize(); qualityHint();
   if (POST.bloom) POST.bloom.strength = (ATMO_P[ATMO.tod] || ATMO_P.day).bloom; // a fresh composer starts with the daytime bloom
 }
-// auto: rAF intervals while racing, in one-second windows. Four windows in a row with the 95th percentile above 22 ms step one
+// auto: rAF intervals while racing, in one-second windows. Four windows in a row with the 95th percentile above 22 ms (on phones: the mean above 20 ms, under 50 fps) step one
 // tier down; forty in a row under 20 ms (no dropped frames) step one back up. A tier that has to be left again after such a
 // step up is not offered a third time. When three step downs in a row leave the frame time as it was although the main
 // thread has time to spare (a 30 Hz cap), they are undone and auto stays put for the session.
@@ -2803,7 +2926,7 @@ function setQuality() {
   Object.assign(AQ, { hold: 0, on: false, n: 0, t: 0, b: 0, win: [], bad: 0, good: 0, upTo: [], check: null, useless: 0, frozen: false, msg: '' });
   applyQuality(null, AQ.start);
 }
-function qualityHint() { const el = $('#qNow'); if (el) el.textContent = setup.quality === 'auto' && qTier > AQ.start ? '目前已自動調低 ' + (qTier - AQ.start) + ' 級。' : ''; }
+function qualityHint() { const el = $('#qNow'); if (el) el.textContent = (setup.quality === 'auto' && qTier > AQ.start ? '目前已自動調低 ' + (qTier - AQ.start) + ' 級。' : '') + (wantAA(setup.quality) !== AA ? '反鋸齒在重新載入頁面後' + (AA ? '關閉' : '開啟') + '。' : ''); }
 function autoHold(s) { AQ.hold = Math.max(AQ.hold, s); AQ.n = AQ.t = AQ.b = 0; }
 function autoStep(tier, msg) { applyQuality(null, tier); AQ.bad = AQ.good = 0; AQ.win = []; autoHold(2.5); AQ.msg = msg; }
 function autoQuality(rawDt) { // first thing in a frame: rawDt is the previous frame's interval, AQ.busy its time in frame()
@@ -2823,7 +2946,7 @@ function autoQuality(rawDt) { // first thing in a frame: rawDt is the previous f
     if (avg('mean') > c.mean * 0.96 && c.busy < c.mean * 0.5) { if (++AQ.useless === 1) AQ.from = c.from; } else AQ.useless = 0;
     if (AQ.useless >= 3) { AQ.frozen = true; autoStep(AQ.from, '已恢復原本畫質'); return; }
   }
-  AQ.bad = p95 > 22 ? AQ.bad + 1 : 0; AQ.good = p95 < 20 ? AQ.good + 1 : 0;
+  AQ.bad = (COARSE ? AQ.win[AQ.win.length - 1].mean > 20 : p95 > 22) ? AQ.bad + 1 : 0; AQ.good = p95 < 20 ? AQ.good + 1 : 0; // phones: under 50 fps on average for 4 s steps down
   if (AQ.bad >= 4 && qTier < QTIERS.length - 1) {
     if (AQ.upTo[qTier]) AQ.ceil = qTier + 1; // this tier already had its second chance
     AQ.check = { w: 0, mean: avg('mean'), busy: avg('busy'), from: qTier };
@@ -2871,8 +2994,10 @@ function racingLine() {
       for (let o = -w; o <= w; o++) { const j = (k + o + n) % n; a = Math.min(a, W.hwR[j]); b = Math.min(b, W.hwL[j]); } // narrowest width near the node
       cx[i] = W.x[k]; cz[i] = W.z[k]; lx[i] = W.lx[k]; lz[i] = W.lz[k]; lo[i] = -Math.max(0, a - 1.6); hi[i] = Math.max(0, b - 1.6); e[i] = clamp(E[k], lo[i], hi[i]);
     }
-    const px = i => cx[i] + lx[i] * e[i], pz = i => cz[i] + lz[i] * e[i], w = new Float64Array(m).fill(1);
-    const dx = i => px((i - 1 + m) % m) - 2 * px(i) + px((i + 1) % m), dz = i => pz((i - 1 + m) % m) - 2 * pz(i) + pz((i + 1) % m);
+    // positions of the line points kept in arrays and updated with e (same arithmetic as computing them on the fly, a few times faster)
+    const PX = Float64Array.from(cx, (v, i) => v + lx[i] * e[i]), PZ = Float64Array.from(cz, (v, i) => v + lz[i] * e[i]), w = new Float64Array(m).fill(1);
+    const prv = Int32Array.from({ length: m }, (_, i) => (i - 1 + m) % m), nxt = Int32Array.from({ length: m }, (_, i) => (i + 1) % m);
+    const dx = i => PX[prv[i]] - 2 * PX[i] + PX[nxt[i]], dz = i => PZ[prv[i]] - 2 * PZ[i] + PZ[nxt[i]];
     // weighted sum of w_i |D_i|^2; on the finest level the weights grow with the curvature (iteratively reweighted), which
     // trades a little overall smoothness for flatter peaks: the tightest point of a corner is what sets its speed
     for (let round = 0; round < (spacing === 8 ? 6 : 1); round++) {
@@ -2880,10 +3005,11 @@ function racingLine() {
       for (let it = 0; it < 3000; it++) {
         let moved = 0;
         for (let i = 0; i < m; i++) {
-          const a1 = (i - 1 + m) % m, b1 = (i + 1) % m, wa = w[a1], wi = w[i], wb = w[b1];
+          const a1 = prv[i], b1 = nxt[i], wa = w[a1], wi = w[i], wb = w[b1];
           // d/de_i of sum w_j |D_j|^2: point i is in D[i-1], D[i], D[i+1] with weights 1, -2, 1
           const rx = wa * dx(a1) - 2 * wi * dx(i) + wb * dx(b1), rz = wa * dz(a1) - 2 * wi * dz(i) + wb * dz(b1);
           const ne = clamp(e[i] - 1.7 * (lx[i] * rx + lz[i] * rz) / (wa + 4 * wi + wb), lo[i], hi[i]); moved = Math.max(moved, Math.abs(ne - e[i])); e[i] = ne;
+          PX[i] = cx[i] + lx[i] * ne; PZ[i] = cz[i] + lz[i] * ne;
         }
         if (moved < 2e-4) break;
       }
@@ -3041,14 +3167,102 @@ function opponentsStep(dt) {
     }
     poseOpponent(c);
   }
+  separateOpponents(dt); for (const c of RACE.cars) if (state.t >= c.delay) poseOpponent(c); // computer cars never drive through each other: pose again after
   // contact with the player: two circles per car (nose and tail), the player's car is the one pushed
   for (const c of RACE.cars) if (bump(c)) { const kk = Math.floor((((c.s % L) + L) % L) / W.ds) % n, hk = Math.min(W.hwL[kk], W.hwR[kk]); c.v *= 0.97; c.lat = clamp(c.lat + Math.sign(c.lat - car.lat || 1) * 0.3, -(hk - 1), hk - 1); }
   for (const r of NET.remote.values()) if (r.inRace && r.x !== undefined) bump(r);
 }
+// Computer cars against each other, in track coordinates (s along the centreline, lat across): an overlapping pair is
+// pushed apart sideways, or the car behind drops back when there is no room (P1, docs/賽道修正_2026-10.md).
+/* P1-begin: separateOpponents (written by the collaborating AI from the spec in docs/賽道修正_2026-10.md; changes marked 「改」) */
+function _oppTrackIdx(s) {
+  const L = W.len, sMod = ((s % L) + L) % L;
+  let k = Math.floor(sMod / W.ds);
+  if (k >= W.n) k = W.n - 1; else if (k < 0) k = 0;
+  return k;
+}
+// 改: s is measured along the centreline, so on the inside of a tight corner two cars 8 m apart in s can stand on each other
+// (the campus loop's first corner). This is how many metres a car moves per metre of s at this offset, from the geometry.
+function _oppLatScale(kA, kB, lat) {
+  const n = W.n; let d = ((kB - kA) % n + n) % n; if (d > n / 2) { const t = kA; kA = kB; kB = t; d = n - d; }
+  if (!d) { kB = (kA + 1) % n; d = 1; }
+  const x0 = W.x[kA] + W.lx[kA] * lat, z0 = W.z[kA] + W.lz[kA] * lat, x1 = W.x[kB] + W.lx[kB] * lat, z1 = W.z[kB] + W.lz[kB] * lat;
+  return clamp(Math.hypot(x1 - x0, z1 - z0) / (d * W.ds), 0.15, 2);
+}
+// 改: where the centreline turns sharply (junction corners), the line at a fixed offset on the inside folds back on itself and
+// two cars 8 m apart in s land on the same spot. Per sample, the largest offset on each side whose line still runs forward.
+function _oppFoldLimits() {
+  if (W._fold && W._fold.x === W.x) return W._fold;
+  const n = W.n, L = new Float32Array(n), R = new Float32Array(n), seg = (k, lat) => { const j = (k + 1) % n, x0 = W.x[k] + W.lx[k] * lat, z0 = W.z[k] + W.lz[k] * lat, x1 = W.x[j] + W.lx[j] * lat, z1 = W.z[j] + W.lz[j] * lat;
+    return ((x1 - x0) * (W.x[j] - W.x[k]) + (z1 - z0) * (W.z[j] - W.z[k])) / (W.ds * W.ds); }; // forward progress of the offset line per metre of centreline
+  for (let k = 0; k < n; k++) for (const [arr, sd, hw] of [[L, 1, W.hwL[k]], [R, -1, W.hwR[k]]]) {
+    let lim = hw;
+    for (let o = -3; o <= 3; o++) { const kk = (k + o + n) % n; for (let l = 0.5; l <= hw; l += 0.25) if (seg(kk, sd * l) < 0.35) { lim = Math.min(lim, l - 0.25); break; } }
+    arr[k] = Math.max(0, lim);
+  }
+  return (W._fold = { x: W.x, L, R });
+}
+const OPP_LONG_RATE = 6; // 改: m/s; the car behind drops back at most this fast when there is no room beside, instead of jumping up to 4.6 m in one frame
+function separateOpponents(dt) {
+  if (!RACE.on) return;
+  const L = W.len, maxLatStep = 3.0 * dt, active = [];
+  const FL = _oppFoldLimits();
+  for (const c of RACE.cars) if (state.t >= c.delay) {
+    const k = _oppTrackIdx(c.s); c.lat = clamp(c.lat, -Math.max(0, FL.R[k] - 1.0), Math.max(0, FL.L[k] - 1.0)); // 改: off the folded inside of a sharp corner
+    active.push({ c, sMod: ((c.s % L) + L) % L, remPos: maxLatStep, remNeg: maxLatStep });
+  }
+  const m = active.length;
+  if (m < 2) return;
+  active.sort((a, b) => a.sMod - b.sMod);
+  const seen = new Set();
+  for (let i = 0; i < m; i++) {
+    for (let offset = 1; offset <= 2 && offset < m; offset++) { // neighbours in track order, across the start line too: three abreast at most
+      const j = (i + offset) % m, p1 = i < j ? i : j, p2 = i < j ? j : i, pairKey = p1 * 32 + p2;
+      if (seen.has(pairKey)) continue;
+      seen.add(pairKey);
+      const wa = active[i], wb = active[j], a = wa.c, b = wb.c;
+      const ds = wrapGap(a.s - b.s);
+      if (Math.abs(ds) >= 12) continue; // 改: wider window, the corner scale below can shrink it to 4.6 m
+      const dlat = a.lat - b.lat, absDlat = Math.abs(dlat);
+      if (absDlat >= 2.0) continue;
+      const kA = _oppTrackIdx(a.s), minA = -Math.min(W.hwR[kA] - 1.2, FL.R[kA] - 1.0), maxA = Math.min(W.hwL[kA] - 1.2, FL.L[kA] - 1.0);
+      const kB = _oppTrackIdx(b.s), minB = -Math.min(W.hwR[kB] - 1.2, FL.R[kB] - 1.0), maxB = Math.min(W.hwL[kB] - 1.2, FL.L[kB] - 1.0);
+      const f = _oppLatScale(kA, kB, (a.lat + b.lat) / 2), absDs = Math.abs(ds) * f; // 改: distance along the cars' own path
+      if (absDs >= 4.6) continue;
+      const aIsHi = dlat > 0 || (dlat === 0 && ds < 0);
+      const wHi = aIsHi ? wa : wb, wLo = aIsHi ? wb : wa, hi = wHi.c, lo = wLo.c;
+      const minHi = aIsHi ? minA : minB, maxHi = aIsHi ? maxA : maxB, minLo = aIsHi ? minB : minA, maxLo = aIsHi ? maxB : maxA;
+      const curSpan = hi.lat - lo.lat, ovLat = 2.0 - curSpan;
+      const roomHi = Math.max(0, maxHi - hi.lat), roomLo = Math.max(0, lo.lat - minLo);
+      const front = ds >= 0 ? a : b, rear = ds >= 0 ? b : a;
+      if (roomHi + roomLo > ovLat + 1e-6) { // room beside: each moves half the overlap away, at most 3 m/s; one at its edge, the other takes it all
+        const targetOv = 2.0 + 1e-7 - curSpan;
+        let wantHi = 0.5 * targetOv, wantLo = 0.5 * targetOv;
+        if (wantHi > roomHi) { wantHi = roomHi; wantLo = Math.min(roomLo, targetOv - wantHi); }
+        else if (wantLo > roomLo) { wantLo = roomLo; wantHi = Math.min(roomHi, targetOv - wantLo); }
+        const stepHi = Math.min(wantHi, wHi.remPos), stepLo = Math.min(wantLo, wLo.remNeg);
+        hi.lat = clamp(hi.lat + stepHi, minHi, maxHi); lo.lat = clamp(lo.lat - stepLo, minLo, maxLo);
+        wHi.remPos -= stepHi; wLo.remNeg -= stepLo;
+        if (absDs > 1e-4) { // still nearly on top of each other this frame: the car behind backs off just enough
+          const newDlat = hi.lat - lo.lat, minSafeDist = 1.25;
+          if (absDs * absDs + newDlat * newDlat < minSafeDist * minSafeDist) {
+            const reqDs = Math.min(4.6, Math.sqrt(Math.max(0, minSafeDist * minSafeDist - newDlat * newDlat))), pushBack = Math.min(4.6 - absDs, reqDs - absDs);
+            if (pushBack > 0) { rear.s -= pushBack / f; if (rear.v > front.v * 0.95) rear.v = front.v * 0.95; }
+          }
+        }
+      } else { // no room beside: the car behind drops back (改: gradually, OPP_LONG_RATE, but never closer than 1.25 m centre to centre)
+        const ovS = 4.6 - absDs, need = Math.max(0, Math.sqrt(Math.max(0, 1.25 * 1.25 - absDlat * absDlat)) - absDs);
+        rear.s -= Math.min(ovS, Math.max(need, OPP_LONG_RATE * dt)) / f;
+        if (rear.v > front.v * 0.95) rear.v = front.v * 0.95;
+      }
+    }
+  }
+}
+/* P1-end */
 function bump(o) {
   if (o.x === undefined) return false;
   const cf = [Math.cos(car.psi), -Math.sin(car.psi)], cl = [-Math.sin(car.psi), -Math.cos(car.psi)], of = [Math.cos(o.psi), -Math.sin(o.psi)];
-  let hit = false;
+  let hit = false; const d0 = car.x + car.z;
   for (const a of [1.25, -1.25]) for (const b of [1.25, -1.25]) {
     const dx = car.x + cf[0] * a - (o.x + of[0] * b), dz = car.z + cf[1] * a - (o.z + of[1] * b), d = Math.hypot(dx, dz);
     if (d >= 2.1 || d < 1e-3) continue;
@@ -3056,6 +3270,10 @@ function bump(o) {
     let Vx = car.vx * cf[0] + car.vy * cl[0], Vz = car.vx * cf[1] + car.vy * cl[1];
     const vn = (Vx - o.v * of[0]) * nx + (Vz - o.v * of[1]) * nz;
     if (vn < 0) { Vx -= 0.7 * vn * nx; Vz -= 0.7 * vn * nz; car.vx = Vx * cf[0] + Vz * cf[1]; car.vy = Vx * cl[0] + Vz * cl[1]; car.r *= 0.7; hit = true; }
+  }
+  if (hit || d0 !== car.x + car.z) { // a push never moves the player's car through the barrier (it used to, by up to a metre, at the start)
+    const loc = trackLocate(car.x, car.z, car.k), lim = (loc.lat > 0 ? W.wallL[loc.k] : W.wallR[loc.k]) - 1.0;
+    if (Math.abs(loc.lat) > lim) { const sg = Math.sign(loc.lat), e = Math.abs(loc.lat) - lim; car.x -= W.lx[loc.k] * e * sg; car.z -= W.lz[loc.k] * e * sg; }
   }
   return hit;
 }
@@ -3120,7 +3338,7 @@ function netMySlot() { const i = netPlayers().findIndex(p => p.sameTab); return 
 function myTrack() {
   if (setup.map === 'osm' || (setup.map === 'terrain' && (TER.source === 'file' || TER.meters))) return null;
   const pts = setup.map === 'taipei' ? trackPts.map(p => p.node) : trackPts.map(p => [+p.u.toFixed(4), +p.v.toFixed(4)]);
-  return { m: setup.map, ps: TER.source, sd: TER.seed, sz: TER.size, rg: TER.range, bs: TER.base, w: setup.width, wl: setup.walls ? 1 : 0, bk: setup.banking ? 1 : 0, rv: setup.reverse ? 1 : 0, laps: setup.laps, pts };
+  return { m: setup.map, hs: setup.map === 'terrain' ? hillSeed : null, ps: TER.source, sd: TER.seed, sz: TER.size, rg: TER.range, bs: TER.base, w: setup.width, wl: setup.walls ? 1 : 0, bk: setup.banking ? 1 : 0, rv: setup.reverse ? 1 : 0, laps: setup.laps, pts };
 }
 const netCanHost = () => !!myTrack() && trackPts.length >= (setup.map === 'terrain' ? 4 : 3);
 function netPresence() {
@@ -3200,7 +3418,7 @@ async function netApplyTrack(trk) {
       netShowMap('terrain');
       $('#size').value = trk.sz; $('#range').value = trk.rg; $('#base').value = trk.bs;
       document.querySelectorAll('#presets .btn').forEach(x => x.classList.toggle('sel', x.dataset.p === trk.ps));
-      trackPts = trk.pts.map(([u, v]) => ({ u: clamp(+u, 0, 1), v: clamp(+v, 0, 1) }));
+      trackPts = trk.pts.map(([u, v]) => ({ u: clamp(+u, 0, 1), v: clamp(+v, 0, 1) })); hillSeed = trk.hs > 0 ? trk.hs : null; if (hillSeed) $('#hillSeed').value = hillSeed;
     }
     $('#width').value = trk.w; $('#walls').checked = !!trk.wl; $('#banking').checked = !!trk.bk; $('#laps').value = trk.laps;
     setup.reverse = !!trk.rv; $('#btnRev').classList.toggle('sel', setup.reverse);
@@ -3359,11 +3577,14 @@ $('#tutReplay').onclick = () => tutBegin();
 $('#tutSkip').onclick = () => { const end = TUT.s.id === 'end'; tutStop(true); if (!end) banner('已跳過教學，設定的「操作」頁可以重看', 'info'); };
 
 /* ================= Main loop ================= */
+// longest frame step: below 10 fps the game slows down instead of jumping; physics always runs in fixed 1/240 s steps (P4)
+const MAX_DT = 0.1;
 let last = performance.now(), acc = 0;
 function frame(now) {
   requestAnimationFrame(frame);
-  const rawDt = (now - last) / 1000, dt = Math.min(0.05, rawDt); last = now;
+  const rawDt = (now - last) / 1000, dt = Math.min(window.TGP_MAX_DT || MAX_DT, rawDt); last = now;
   autoQuality(rawDt);
+  runLater(COARSE ? 6 : 12); // the rest of the world build, a job or two per frame
   if (state.mode === 'race' || state.mode === 'lights') readInput(dt);
   if (state.mode === 'lights') {
     state.lightsT += dt; const on = Math.min(5, Math.floor(state.lightsT / 0.8)), out = state.lightsT >= state.lightsOut;
@@ -3400,7 +3621,8 @@ function frame(now) {
 
 /* ================= Boot ================= */
 genPreset('hills', TER.seed);
-trackPts = randomTrack(20251019);
+HILL_DEF = hillSig(); // the page's default terrain and road settings, before saved preferences
+newHillTrack(HILL_STD);
 loadPrefs(); applyLevel(); readSetup(); syncLabels(); applyControls(); applyRaceMode();
 setQuality();
 if (!COARSE && innerWidth >= 900) { $('#tele').hidden = false; $('#bTele').classList.add('on'); }
