@@ -913,11 +913,14 @@ function buildWorld() {
   const tgt = new Float32Array(NX * NZ), HW = new Float32Array(NX * NZ), R = W.hwMax + (W.city ? 28 : 48), R2 = R * R, rci = Math.ceil(R / cx), rcj = Math.ceil(R / cz);
   for (let k = 0; k < n; k++) {
     const gi = Math.round((X[k] + W.sx / 2) / cx), gj = Math.round((Z[k] + W.sz / 2) / cz);
+    // grid nodes take the height of their nearest sample k; carry it on along the track at k's grade (the nearest sample is
+    // up to half a sample spacing ahead or behind: without this the carved road steps by grade × ds, which twists the cells)
+    const tx = -LZ[k], tz = LX[k], gr = (TH[(k + 1) % n] - TH[(k - 1 + n) % n]) / (2 * W.ds);
     for (let j = Math.max(0, gj - rcj); j <= Math.min(NZ - 1, gj + rcj); j++) {
       const dz = -W.sz / 2 + j * cz - Z[k];
       for (let i = Math.max(0, gi - rci); i <= Math.min(NX - 1, gi + rci); i++) {
         const dx = -W.sx / 2 + i * cx - X[k], d2 = dx * dx + dz * dz, o = j * NX + i;
-        if (d2 < R2 && d2 < D[o]) { D[o] = d2; HW[o] = Math.max(W.hwL[k], W.hwR[k]); tgt[o] = W.elev[k] > 0 ? NaN : TH[k] + BK[k] * clamp(dx * LX[k] + dz * LZ[k], -HW[o] - 5, HW[o] + 5); }
+        if (d2 < R2 && d2 < D[o]) { D[o] = d2; HW[o] = Math.max(W.hwL[k], W.hwR[k]); tgt[o] = W.elev[k] > 0 ? NaN : TH[k] + gr * (dx * tx + dz * tz) + BK[k] * clamp(dx * LX[k] + dz * LZ[k], -HW[o] - 5, HW[o] + 5); }
       }
     }
   }
