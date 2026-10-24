@@ -1050,6 +1050,12 @@ function buildWorld() {
     if (gridSample(D, wx, wz) < off - 3 && (!W.anyElev || otherStretchNear(k, wx, wz, off - 3))) off = Infinity; // another stretch of track is nearer: leave a gap
     (side > 0 ? W.wallL : W.wallR)[k] = off;
   }
+  if (!W.city) for (const arr of [W.wallL, W.wallR]) { // where a run-off ends the barrier stepped 4 m (17 → 13 m out) and threw a car
+    // running along it 4 m sideways in one step: taper it at 1 : 5 instead
+    const lim = 0.2 * W.ds;
+    for (let pass = 0; pass < 2; pass++) { for (let i = 0; i < 2 * n; i++) { const k = i % n, p = (k - 1 + n) % n; if (isFinite(arr[k]) && isFinite(arr[p])) arr[k] = Math.max(arr[k], arr[p] - lim); }
+      for (let i = 2 * n - 1; i >= 0; i--) { const k = i % n, q = (k + 1) % n; if (isFinite(arr[k]) && isFinite(arr[q])) arr[k] = Math.max(arr[k], arr[q] - lim); } }
+  }
   for (const arr of [W.wallL, W.wallR]) { // drop barrier fragments shorter than 30 m
     let k = 0; while (k < n) { if (!isFinite(arr[k])) { k++; continue; } let e = k; while (e < n && isFinite(arr[e])) e++; if ((e - k) * W.ds < 30 && !(k === 0 || e === n)) for (let j = k; j < e; j++) arr[j] = Infinity; k = e; }
   }
