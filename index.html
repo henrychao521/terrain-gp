@@ -500,6 +500,8 @@ body.tut-on .zhint{display:none} /* the card says the same, and needs the room o
             </div>
           </div>
           <div class="group" id="terrainOpts">
+            <div class="field" id="hillSeedRow" style="grid-template-columns:6.5em minmax(0,1fr) auto"><label for="hillSeed">賽道種子</label><input type="number" id="hillSeed" style="min-height:40px;min-width:0;font:inherit;font-family:var(--f-data);padding:0 10px;background:var(--raise);color:inherit;border:1px solid var(--line);border-radius:8px" min="1" max="999999999" step="1" value="20261024" inputmode="numeric"><button class="btn" id="btnHillStd" type="button">標準丘陵 A</button></div>
+            <p class="hint">同一個種子永遠是同一條賽道，最佳圈速分開記錄；「隨機賽道」會換一個新種子，在地圖上改動控制點後就不再是種子賽道。</p>
             <div class="btnrow" id="presets">
               <button class="btn sel" data-p="hills" type="button">丘陵</button>
               <button class="btn" data-p="mountain" type="button">山脈峽谷</button>

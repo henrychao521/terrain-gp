@@ -1,0 +1,15 @@
+{
+ "pack": "campus_a",
+ "note": "Optional circuit kept out of the game until the owner of the area agrees to a public track. Not loaded unless listed in TRACK_PACKS (game.js).",
+ "tracks": [
+  {
+   "id": "campus_a",
+   "name": "校園周邊環線",
+   "map": "taipei",
+   "elevated": false,
+   "loop": [[2915, 3002], [2700, 2962], [2470, 2878], [2760, 2655], [3050, 2510], [2995, 2760]],
+   "lengthM": 1862,
+   "direction": "counter-clockwise (one-way carriageways, keep right)"
+  }
+ ]
+}
