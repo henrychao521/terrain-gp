@@ -196,34 +196,79 @@ function applyTerrainScale() {
   if (TER.meters) for (let i = 0; i < raw.length; i++) raw[i] = TER.meters[i];
   else for (let i = 0; i < raw.length; i++) raw[i] = TER.norm[i] * TER.range;
 }
-function loadHeightImage(file) {
+// heights from an uploaded image. The encoded bytes are read at the image's own size with no smoothing, no colour
+// management and no premultiplied alpha, decoded to metres, and only then resampled to N×N: blending encoded bytes
+// corrupts Terrarium heights (−1 m = R 127 G 255 next to 0 m = R 128 G 0 blend to R 128 G 128, read as +128 m)
+function decodeHeightPixels(d, w, h, enc) {
+  const m = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) { const r = d[i * 4], g = d[i * 4 + 1], b = d[i * 4 + 2];
+    m[i] = enc === 'terrarium' ? r * 256 + g + b / 256 - 32768 : (0.299 * r + 0.587 * g + 0.114 * b) / 255; }
+  return m;
+}
+// one axis of a w×h grid to n samples over the same extent (pixel centres, as drawImage(img, 0, 0, n, n) maps them);
+// tent filter, widened to the source spacing when shrinking so every source pixel counts
+function resampleAxis(src, w, h, n, alongX) {
+  const L = alongX ? w : h, M = alongX ? h : w, s = L / n, r = Math.max(1, s), out = new Float32Array(alongX ? n * h : w * n);
+  for (let o = 0; o < n; o++) {
+    const c = Math.max(0, Math.min(L - 1, (o + 0.5) * s - 0.5)), i0 = Math.max(0, Math.ceil(c - r + 1e-9)), i1 = Math.min(L - 1, Math.floor(c + r - 1e-9));
+    const wt = []; let sum = 0; for (let i = i0; i <= i1; i++) { const v = 1 - Math.abs(i - c) / r; wt.push(v); sum += v; }
+    for (let q = 0; q < M; q++) { let acc = 0; for (let k = 0; k < wt.length; k++) acc += wt[k] * src[alongX ? q * w + i0 + k : (i0 + k) * w + q]; out[alongX ? q * n + o : o * w + q] = acc / sum; }
+  }
+  return out;
+}
+function resampleGrid(src, w, h, n) { return resampleAxis(resampleAxis(src, w, h, n, true), n, h, n, false); }
+// WGS84 metres per degree of longitude and of latitude at latitude lat
+function degMetres(lat) { const p = lat * Math.PI / 180; return [111412.84 * Math.cos(p) - 93.5 * Math.cos(3 * p) + 0.118 * Math.cos(5 * p), 111132.92 - 559.82 * Math.cos(2 * p) + 1.175 * Math.cos(4 * p) - 0.0023 * Math.cos(6 * p)]; }
+// slippy-map tiles: bounds from the tile's corners, ground size in metres (E–W at the middle latitude, N–S along a meridian)
+function tile2lon(x, z) { return x / 2 ** z * 360 - 180; }
+function tile2lat(y, z) { const t = Math.PI - 2 * Math.PI * y / 2 ** z; return 180 / Math.PI * Math.atan(Math.sinh(t)); }
+function tileGround(z, x, y) {
+  const w = tile2lon(x, z), e = tile2lon(x + 1, z), n = tile2lat(y, z), s = tile2lat(y + 1, z), [kx] = degMetres((n + s) / 2);
+  const p0 = s * Math.PI / 180, p1 = n * Math.PI / 180, ns = 111132.92 * (n - s) - 559.82 / 2 * 180 / Math.PI * (Math.sin(2 * p1) - Math.sin(2 * p0)); // meridian arc
+  return { w, e, n, s, sx: (e - w) * kx, sz: ns };
+}
+// a tile saved as z_x_y.png (also z-x-y, z.x.y, or a z/x/y path when a folder is dropped); null if the name is not one
+function tileFromName(name) {
+  const m = /(?:^|[^0-9])(\d{1,2})[_\-./](\d{1,7})[_\-./](\d{1,7})\.(?:png|webp|jpe?g)$/i.exec(name || ''); if (!m) return null;
+  const z = +m[1], x = +m[2], y = +m[3]; return z >= 1 && z <= 22 && x < 2 ** z && y < 2 ** z ? { z, x, y } : null;
+}
+async function imagePixels(file) {
+  const draw = (src, w, h) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const cx = cv.getContext('2d', { willReadFrequently: true }); cx.imageSmoothingEnabled = false; cx.drawImage(src, 0, 0, w, h); return { w, h, d: cx.getImageData(0, 0, w, h).data }; };
+  const fit = (w, h) => { const k = Math.min(1, 4096 / Math.max(w, h)); return [Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k))]; }; // past 4096 px: nearest pixels, never blended bytes
+  if (typeof createImageBitmap === 'function') {
+    try { const bmp = await createImageBitmap(file, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' }); const [w, h] = fit(bmp.width, bmp.height), px = draw(bmp, w, h); px.srcW = bmp.width; px.srcH = bmp.height; bmp.close && bmp.close(); return px; }
+    catch (e) { /* older browsers: fall back to <img> */ }
+  }
   const url = URL.createObjectURL(file), img = new Image();
-  img.onload = () => {
-    const cv = document.createElement('canvas'); cv.width = N; cv.height = N;
-    const cx = cv.getContext('2d', { willReadFrequently: true }); cx.imageSmoothingEnabled = true; cx.drawImage(img, 0, 0, N, N);
-    const d = cx.getImageData(0, 0, N, N).data, enc = $('#enc').value, inv = $('#invert').checked;
-    if (enc === 'terrarium') {
-      const m = new Float32Array(N * N);
-      for (let i = 0; i < N * N; i++) m[i] = d[i * 4] * 256 + d[i * 4 + 1] + d[i * 4 + 2] / 256 - 32768;
-      blur(m, 1);
-      let lo = Infinity, hi = -Infinity; for (const v of m) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
-      for (let i = 0; i < m.length; i++) m[i] = inv ? hi - m[i] : m[i] - lo;
-      TER.meters = m; TER.base = Math.max(0, Math.round(lo)); TER.range = Math.round(hi - lo);
-      $('#base').value = TER.base; $('#range').value = Math.min(500, TER.range);
-      $('#fileInfo').textContent = `${file.name}：${img.width}×${img.height}，實際海拔 ${Math.round(lo)}–${Math.round(hi)} m（高低差 ${Math.round(hi - lo)} m）。`;
-    } else {
-      const a = TER.norm;
-      for (let i = 0; i < N * N; i++) { const l = (0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]) / 255; a[i] = inv ? 1 - l : l; }
-      blur(a, 3); normalize01(a); TER.meters = null;
-      $('#fileInfo').textContent = `${file.name}：${img.width}×${img.height}，已重新取樣為 ${N}×${N}。高低差由下方滑桿決定。`;
-    }
-    TER.source = 'file';
-    document.querySelectorAll('#presets .btn').forEach(b => b.classList.remove('sel'));
-    URL.revokeObjectURL(url);
-    syncLabels(); mapChanged();
-  };
-  img.onerror = () => { $('#fileInfo').textContent = '無法讀取這個檔案。請使用 PNG 或 JPG 圖片。'; URL.revokeObjectURL(url); };
-  img.src = url;
+  try { await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; img.src = url; }); const [w, h] = fit(img.naturalWidth || img.width, img.naturalHeight || img.height), px = draw(img, w, h); px.srcW = img.naturalWidth || img.width; px.srcH = img.naturalHeight || img.height; return px; }
+  finally { URL.revokeObjectURL(url); }
+}
+async function loadHeightImage(file) {
+  let px; try { px = await imagePixels(file); } catch (e) { $('#fileInfo').textContent = '無法讀取這個檔案。請使用 PNG 或 JPG 圖片。'; return; }
+  const enc = $('#enc').value, inv = $('#invert').checked, raw = decodeHeightPixels(px.d, px.w, px.h, enc), dims = `${px.srcW}×${px.srcH}`;
+  if (enc === 'terrarium') {
+    const m = resampleGrid(raw, px.w, px.h, N);
+    blur(m, 1);
+    let lo = Infinity, hi = -Infinity; for (const v of m) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    for (let i = 0; i < m.length; i++) m[i] = inv ? hi - m[i] : m[i] - lo;
+    TER.meters = m; TER.base = Math.max(0, Math.round(lo)); TER.range = Math.round(hi - lo);
+    $('#base').value = TER.base; $('#range').value = Math.min(500, TER.range);
+    // a z_x_y tile: its real ground size sets the map size, so slopes stay real (the map is square; the tile is within 1 %)
+    const t = tileFromName(file.webkitRelativePath || file.name); let sizeNote = '水平尺寸由「地圖邊長」決定（檔名若是 z_x_y.png 的圖磚會自動換算實際大小）。';
+    if (t) { const g = tileGround(t.z, t.x, t.y), side = (g.sx + g.sz) / 2, set = clamp(Math.round(side / 100) * 100, 1000, 6000);
+      $('#size').value = set; TER.size = set;
+      sizeNote = `圖磚 z${t.z}/${t.x}/${t.y} 實際約 ${(g.sx / 1000).toFixed(2)} × ${(g.sz / 1000).toFixed(2)} km` + (Math.abs(set - side) / side > 0.03 ? `，超出可用範圍，地圖邊長設為 ${(set / 1000).toFixed(1)} km（坡度是實際的 ${(side / set).toFixed(2)} 倍）。` : `，地圖邊長已設為 ${(set / 1000).toFixed(1)} km。`); }
+    $('#fileInfo').textContent = `${file.name}：${dims}，實際海拔 ${Math.round(lo)}–${Math.round(hi)} m（高低差 ${Math.round(hi - lo)} m）。${sizeNote}`;
+  } else {
+    const a = TER.norm; a.set(resampleGrid(raw, px.w, px.h, N));
+    if (inv) for (let i = 0; i < a.length; i++) a[i] = 1 - a[i];
+    blur(a, 3); normalize01(a); TER.meters = null;
+    $('#fileInfo').textContent = `${file.name}：${dims}，已重新取樣為 ${N}×${N}。高低差由下方滑桿決定。`;
+  }
+  TER.source = 'file';
+  document.querySelectorAll('#presets .btn').forEach(b => b.classList.remove('sel'));
+  syncLabels(); mapChanged();
 }
 
 /* ================= City maps (Taipei data file, or an imported .osm) ================= */
@@ -311,6 +356,9 @@ function loadTaipei() {
     return (CITY.taipei = finishCity({ kind: 'city', id: 'taipei', name: d.name, sx, sz, nx, nz, raw, mask, base: 0, water: 0.35, roads, blds, env, tiles, skyline: sky, credits: d.credits + (o ? '；' + o.credits : '') + (sky ? '；' + sky.note : '') }));
   });
 }
+// lat/lon → metres east (x) / south (z) of (lat0, lon0): local equirectangular with WGS84 metres per degree at lat0
+// (was 111320·cos φ0 and a fixed 110540 m per degree of latitude: −0.21 % north–south at 25°N)
+function lonLatProjector(lat0, lon0) { const [kx, ky] = degMetres(lat0); return ([la, lo]) => [(lo - lon0) * kx, -(la - lat0) * ky]; }
 function parseOSM(text, fileName) {
   const doc = new DOMParser().parseFromString(text, 'application/xml');
   if (doc.getElementsByTagName('parsererror').length) throw new Error('不是有效的 OSM XML 檔。');
@@ -321,10 +369,9 @@ function parseOSM(text, fileName) {
   const bd = doc.getElementsByTagName('bounds')[0];
   if (bd) { la0 = +bd.getAttribute('minlat'); la1 = +bd.getAttribute('maxlat'); lo0 = +bd.getAttribute('minlon'); lo1 = +bd.getAttribute('maxlon'); }
   else for (const [la, lo] of nodes.values()) { la0 = Math.min(la0, la); la1 = Math.max(la1, la); lo0 = Math.min(lo0, lo); lo1 = Math.max(lo1, lo); }
-  const lat0 = (la0 + la1) / 2, lon0 = (lo0 + lo1) / 2, kx = 111320 * Math.cos(lat0 * Math.PI / 180), ky = 110540;
+  const lat0 = (la0 + la1) / 2, lon0 = (lo0 + lo1) / 2, P = lonLatProjector(lat0, lon0), [kx, ky] = degMetres(lat0);
   const sx = Math.max(600, Math.ceil(((lo1 - lo0) * kx + 160) / 10) * 10), sz = Math.max(600, Math.ceil(((la1 - la0) * ky + 160) / 10) * 10);
   if (sx > 12000 || sz > 12000) throw new Error(`範圍 ${(sx / 1000).toFixed(1)} × ${(sz / 1000).toFixed(1)} km 太大，請匯出 10 km 以內的範圍。`);
-  const P = ([la, lo]) => [(lo - lon0) * kx, -(la - lat0) * ky];
   const HW = { motorway: 0, trunk: 0, primary: 1, secondary: 2, tertiary: 3, residential: 4, unclassified: 4, living_street: 4, service: 4, road: 4, motorway_link: 5, trunk_link: 5, primary_link: 5, secondary_link: 5, tertiary_link: 5 };
   const roads = [], blds = [], water = [];
   for (const w of doc.getElementsByTagName('way')) {
