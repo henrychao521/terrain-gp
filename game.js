@@ -2306,8 +2306,11 @@ function physicsStep(dt, inp) {
       const tf = Math.atan2(-W.lx[loc.k], -W.lz[loc.k]);
       // the nose is turned back (and the yaw damped) only while it points into the barrier: a car resting against it with the
       // nose already turned away (sliding into it down a cross slope, or a standing start beside it) must be free to steer
-      // off, or it stays pinned there (丘陵 run-off; 中正 start grid, seed 8; 2026-10-24)
-      const into = (Math.cos(c.psi) * Lx - Math.sin(c.psi) * Lz) * s > 0;
+      // off, or it stays pinned there (丘陵 run-off; 中正 start grid, seed 8; 2026-10-24). On road courses "into" is taken
+      // across the track rather than across the barrier line: where a run-off ends the line closes in at 1 : 5, and a car
+      // running parallel to the track there would count as nosing into it on every step and could never turn away
+      const into = W.city ? (Math.cos(c.psi) * Lx - Math.sin(c.psi) * Lz) * s > 0
+        : (Math.cos(c.psi) * W.lx[loc.k] - Math.sin(c.psi) * W.lz[loc.k]) * (Math.sign(loc.lat + dx * W.lx[loc.k] + dz * W.lz[loc.k]) || 1) > 0;
       let dpsi = tf - c.psi; dpsi = Math.atan2(Math.sin(dpsi), Math.cos(dpsi)); if (into && Math.abs(dpsi) < Math.PI / 2) c.psi += dpsi * 0.35;
       const cp2 = Math.cos(c.psi), sn2 = Math.sin(c.psi), fx2 = cp2, fz2 = -sn2, lx2 = -sn2, lz2 = -cp2;
       c.vx = Vx * fx2 + Vz * fz2; c.vy = Vx * lx2 + Vz * lz2; if (into) c.r *= 0.3;
