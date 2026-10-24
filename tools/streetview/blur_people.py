@@ -28,7 +28,7 @@ for r in reqs:
         reg = im.crop(box).filter(ImageFilter.GaussianBlur(max(6, (box[3] - box[1]) // 4))); im.paste(reg, box); n += 1
 if a.credit:
     d = ImageDraw.Draw(im); fh = max(14, H // 34)
-    try: font = ImageFont.truetype('/System/Library/Fonts/PingFang.ttc', fh)
+    try: font = ImageFont.truetype('/System/Library/Fonts/STHeiti Medium.ttc', fh)
     except Exception: font = ImageFont.load_default()
     d.rectangle((0, H - fh - 10, W, H), fill=(0, 0, 0)); d.text((8, H - fh - 6), a.credit, fill=(255, 255, 255), font=font)
 im.save(a.out, quality=88); print('blurred', n)
