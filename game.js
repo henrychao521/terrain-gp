@@ -1656,19 +1656,33 @@ function buildMeshes() {
     grp.add(new THREE.Mesh(wg, new THREE.MeshStandardMaterial({ color: lin(0x2c4650), roughness: 0.12, metalness: 0.15, envMapIntensity: 1.3, normalMap: TEX.waterN, normalScale: new THREE.Vector2(0.35, 0.35) })));
   }
   // --- city streets (not the circuit)
+  // vertices at Hq + 0.03 on the OSM nodes alone used to span tens of metres, and the flat triangles between them rose up to
+  // 0.16 m above the circuit asphalt (Hq + 0.05) where a street runs along or across the lap. Streets near the circuit get a row
+  // every 2 m and a column every ~2 m across (same columns along the whole street, so no T-junction cracks): they then follow
+  // the ground as closely as the asphalt does and stay 0.02 m under it
   if (W.city) defer(() => {
     const g = ribbonGeo((push, I) => {
-      const grey = lin(0x6f6f6f);
+      const grey = lin(0x6f6f6f), nearC = (x, z) => gridSample(D, x, z) < W.hwMax + 25;
       for (const r of M.roads) {
-        const pts = r.p, m = pts.length / 2, hwR = (r.w || ROAD_W[r.c]) / 2; if (m < 2 || r.lay > 0) continue; let s = 0, prevBase = -1;
+        const pts = r.p, m = pts.length / 2, hwR = (r.w || ROAD_W[r.c]) / 2; if (m < 2 || r.lay > 0) continue;
+        let close = false;
+        for (let i = 0; i < m && !close; i++) { close = nearC(pts[i * 2], pts[i * 2 + 1]);
+          if (!close && i + 1 < m) { const L = Math.hypot(pts[i * 2 + 2] - pts[i * 2], pts[i * 2 + 3] - pts[i * 2 + 1]); for (let f = 4; f < L && !close; f += 4) { const t = f / L; close = nearC(pts[i * 2] + (pts[i * 2 + 2] - pts[i * 2]) * t, pts[i * 2 + 1] + (pts[i * 2 + 3] - pts[i * 2 + 1]) * t); } } }
+        const cols = close ? Math.max(1, Math.ceil(hwR)) : 1, rows = []; // [x, z, tx, tz, s]
+        let s = 0;
         for (let i = 0; i < m; i++) {
           const a = Math.max(0, i - 1), b = Math.min(m - 1, i + 1); let tx = pts[b * 2] - pts[a * 2], tz = pts[b * 2 + 1] - pts[a * 2 + 1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
           if (i) s += Math.hypot(pts[i * 2] - pts[i * 2 - 2], pts[i * 2 + 1] - pts[i * 2 - 1]);
-          const x = pts[i * 2], z = pts[i * 2 + 1], lx = tz, lz = -tx;
-          const v0 = push(x + lx * hwR, Hq(x + lx * hwR, z + lz * hwR) + 0.03, z + lz * hwR, 0, s / 8, grey);
-          push(x - lx * hwR, Hq(x - lx * hwR, z - lz * hwR) + 0.03, z - lz * hwR, 1, s / 8, grey);
-          if (prevBase >= 0) I.push(prevBase, v0, prevBase + 1, prevBase + 1, v0, v0 + 1);
-          prevBase = v0;
+          rows.push([pts[i * 2], pts[i * 2 + 1], tx, tz, s]);
+          if (close && i + 1 < m) { const dx = pts[i * 2 + 2] - pts[i * 2], dz = pts[i * 2 + 3] - pts[i * 2 + 1], L = Math.hypot(dx, dz), q = Math.ceil(L / 2);
+            for (let j = 1; j < q; j++) { const t = j / q, x = pts[i * 2] + dx * t, z = pts[i * 2 + 1] + dz * t; if (nearC(x, z)) rows.push([x, z, dx / L, dz / L, s + L * t]); } }
+        }
+        let prevBase = -1;
+        for (const [x, z, tx, tz, sr] of rows) {
+          const lx = tz, lz = -tx, base = push(x + lx * hwR, Hq(x + lx * hwR, z + lz * hwR) + 0.03, z + lz * hwR, 0, sr / 8, grey);
+          for (let q = 1; q <= cols; q++) { const o = hwR - 2 * hwR * q / cols, px = x + lx * o, pz = z + lz * o; push(px, Hq(px, pz) + 0.03, pz, q / cols, sr / 8, grey); }
+          if (prevBase >= 0) for (let q = 0; q < cols; q++) I.push(prevBase + q, base + q, prevBase + q + 1, prevBase + q + 1, base + q, base + q + 1);
+          prevBase = base;
         }
       }
     });

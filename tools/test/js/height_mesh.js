@@ -62,12 +62,12 @@
     groundDiag = { firstCell: [a, b, c, d4, e, f], shared: sh, note: sh[1] - sh[0] === W.nx - 1 ? 'diagonal (i+1, j)–(i, j+1)' : sh[1] - sh[0] === W.nx + 1 ? 'diagonal (i, j)–(i+1, j+1)' : '?' }; }
   const G = ground && surface(ground, 0), A = asphalt && surface(asphalt, 0.05), S = street && surface(street, 0.03);
   // ---------------------------------------------------------------- sample the lane
-  const Hs = [], rec = { visible: [], asphalt: [], ground: [], street: [], pokeGround: [], streetOver: [] }, worst = { visible: [], asphalt: [], ground: [], pokeGround: [] };
+  const Hs = [], rec = { visible: [], asphalt: [], ground: [], street: [], pokeGround: [], streetOver: [] }, worst = { visible: [], asphalt: [], ground: [], pokeGround: [], streetOver: [] };
   const push = (arr, v) => arr.push(v);
   // the worst samples, at least 30 m apart; pruned in batches
   const prune = list => { list.sort((p, q) => Math.abs(q.d) - Math.abs(p.d)); const out = []; for (const w of list) { if (out.every(u => Math.hypot(u.x - w.x, u.z - w.z) > 30)) out.push(w); if (out.length >= nWorst) break; } list.length = 0; list.push(...out); };
   const keepWorst = (list, o) => { list.push(o); if (list.length > 2000) prune(list); };
-  let samples = 0, noAsph = 0, onDeckN = 0;
+  let samples = 0, noAsph = 0, onDeckN = 0; const edge = { street: 0, streetUnderGround: 0, samples: [] };
   const twist = []; // per sample: |p - q - c + d| of the height-grid cell under it (the bilinear vs triangle gap is |twist| / 4 at most)
   for (let k = 0; k < n; k++) {
     const k1 = (k + 1) % n, segL = Math.hypot(W.x[k1] - W.x[k], W.z[k1] - W.z[k]), m = Math.max(1, Math.round(segL / step));
@@ -76,6 +76,11 @@
       let lx = W.lx[k] + (W.lx[k1] - W.lx[k]) * f, lz = W.lz[k] + (W.lz[k1] - W.lz[k]) * f; const ll = Math.hypot(lx, lz) || 1; lx /= ll; lz /= ll;
       const hl = W.hwL[k] + (W.hwL[k1] - W.hwL[k]) * f, hr = W.hwR[k] + (W.hwR[k1] - W.hwR[k]) * f;
       const kk = f < 0.5 ? k : k1;
+      // just outside the lane (0.25 … 3 m past each edge): does the street mesh still cover what it covered, and is it above the ground there?
+      if (S && G) for (const sd of [1, -1]) for (let e = 0.25; e <= 3; e += step) {
+        const lat = sd > 0 ? hl + e : -hr - e, x = cxp + lx * lat, z = czp + lz * lat, hs = S.at(x, z).h;
+        if (hs === hs) { edge.street++; const hg = G.at(x, z).h; if (hs + 0.03 < hg - 1e-4) { edge.streetUnderGround++; if (edge.samples.length < 5) edge.samples.push({ x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10, k: kk, below_mm: Math.round((hg - hs - 0.03) * 1000) }); } }
+      }
       for (let lat = -hr; lat <= hl + 1e-6; lat += step) {
         const x = cxp + lx * lat, z = czp + lz * lat, ph = T.Sq(x, z, kk); samples++;
         if (W.anyElev && W.elev[kk] > 0) onDeckN++;
@@ -89,7 +94,7 @@
           if (ha === ha) { const poke = hg - (ha + 0.05); push(rec.pokeGround, poke); if (poke > 0) keepWorst(worst.pokeGround, { ...here, d: Math.round(poke * 1000) / 1000 }); }
           // what is seen under the car: the higher of the ground and the drawn asphalt, less the asphalt's deliberate 0.05 m lift
           const vis = (ha === ha ? Math.max(hg, ha + 0.05) - 0.05 : hg) - ph; push(rec.visible, Math.abs(vis)); if (Math.abs(vis) > 0.02) keepWorst(worst.visible, { ...here, d: Math.round(vis * 1000) / 1000 }); } }
-        if (S) { const hs = S.at(x, z).h; if (hs === hs) { push(rec.street, Math.abs(ph - hs)); if (ha === ha) push(rec.streetOver, (hs + 0.03) - (ha + 0.05)); } }
+        if (S) { const hs = S.at(x, z).h; if (hs === hs) { push(rec.street, Math.abs(ph - hs)); if (ha === ha) { const ov = (hs + 0.03) - (ha + 0.05); push(rec.streetOver, ov); if (ov > 0) keepWorst(worst.streetOver, { ...here, d: Math.round(ov * 1000) / 1000 }); } } }
       }
     }
   }
@@ -105,6 +110,7 @@
     visible: stats(rec.visible), asphalt: stats(rec.asphalt), ground: stats(rec.ground), street: stats(rec.street),
     twist: stats(twist), // per-cell |p − q − c + d|; bilinear − triangle ≤ twist / 4
     pokeGround: stats(rec.pokeGround, true), streetOver: stats(rec.streetOver, true), // > 0: that mesh is drawn above the circuit asphalt
+    edge, // street coverage just outside the lane edges, and where it sinks under the ground (a hole)
     worst,
   };
 }
