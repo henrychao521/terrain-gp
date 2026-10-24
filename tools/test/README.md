@@ -61,6 +61,7 @@ JSON 的 `src` 會記下測的是哪個 commit，以及 `game.js`、`index.html`
 | `envelope` | 賽車在平坦柏油上的性能 | 極速約 309 km/h、100→200 km/h 約 2.3 秒 | 車子離開柏油、量不到極速 | 約 3 秒 | 不用 |
 | `bench` | 畫面更新率、每一幀各階段花的時間 | 依機器而定，只能同一台前後比 | 只有 `--min-fps` 時才判斷 | 實際 30 秒＋載入 | **要** |
 | `novice` | 新手機器人實際開 60 秒會不會打滑、撞牆 | 三條賽道 0 次打滑、0 次撞牆 | 只有給 `--max-spins`／`--max-hits` 時才判斷 | 實際 60 秒＋載入 | **要** |
+| `phys` | 不開瀏覽器：Node 跑真正的 game.js，穿牆、車身進建物、瞬移、卡住、電腦車互相重疊／停住（`physaudit.py`） | 2026-10：電腦車重疊 0、頂牆 3 秒內脫困、建物 0；彎道口瞬移與高速撞牆 0.6～0.7 m 見 docs/賽道修正_2026-10.md | 建物、索引跳動、瞬移、自動油門卡住、電腦車重疊或停住 > 0、穿過護欄 > 0.8 m、頂牆沒脫困 | 每條賽道約 3 秒 | 不用 |
 
 時間是在 M4 Max 上量的。臺北預設環線：0＝中正紀念堂環線（5.2 km）、1＝萬華艋舺環線（3.4 km）、2＝大安仁愛短程（1.9 km）。
 
@@ -195,3 +196,18 @@ blender -b --factory-startup --python tools/test/blender_walls.py -- . walls.jso
 - `node/world.js` 在 Node 裡跑複本的 `game.js`（假 DOM、假 WebGL，three.js r128 快取在 `.cache/`），輸出中線、車道半寬、路面高度、用到的區塊。
 - `blender_walls.py` 規則同 `js/walls.js`，另外輸出 4／8 m 高的懸空（`overhang`）與騎樓柱（`columns`）。`TGP_TILE_DIR` 可以指定另一組區塊。
 - `ai`、`envelope` 沒有替代版本（假 DOM 的設定值和瀏覽器不同，envelope 數字對不上）。
+
+## 不開瀏覽器的物理稽核（2026-10 加）
+
+```
+python3 tools/test/run.py phys [--presets 0,1,2] [--set full|quick]
+python3 tools/test/physaudit.py --loop '[[X,Y],...]'            # 另外加一條環線（資料座標）
+python3 tools/test/physaudit.py --pack data/trackpacks/campus_a.json --track campus_a
+python3 tools/test/run.py quick --no-browser                     # phys（quick）＋ node/opponents_test.js、recover_test.js
+node tools/test/node/opponents_test.js [game.js]                 # P1 電腦車間距（協作 AI 的四個情境，測 game.js 裡的程式）
+node tools/test/node/recover_test.js [game.js]                   # P2 自動油門脫困
+```
+
+- 原本是 iOS 移植 CampusRacer 的 `tools/physaudit/`。`js/physaudit.js` 在 `node/world.js` 建好的世界裡照遊戲的 `frame()` 步驟開車（輸入 → 換檔 → 1/240 秒物理 → 計圈 → 電腦車），不畫畫面。
+- 亂數固定（每個情境開頭用種子重設 `Math.random`，預設 1），同一個版本每次數字相同；「電腦車9台故意撞 種子8」排第一個，重現中正紀念堂起跑格頂牆卡住。
+- `--set quick` 是 `run.py quick --no-browser` 用的短版。
