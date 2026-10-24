@@ -113,7 +113,7 @@ T3.TextureLoader.prototype.load = function (url, onLoad, onProgress, onError) { 
 T3.DRACOLoader = function () { return { setDecoderPath: noop, setWorkerLimit: noop, preload: noop, dispose: noop }; };
 
 // ---------------------------------------------------------------- the game
-const EXTRA = "window.TGPX = { cityPreset: (M, i) => cityPreset(M, i), setPts: p => { trackPts = p; }, TP_CIRCUITS, TP_ELEVATED, loadTaipei, TEX, raceUpdate: () => raceUpdate(), startLap: () => startLap(), trackLocate: (x, z, k) => trackLocate(x, z, k), resetRace: () => resetRace(), runLater: ms => (typeof runLater === 'function' ? runLater(ms) : 0), normalS: (...a) => normalS(...a), RACE, ATMO };\nwindow.TGP = (() =>";
+const EXTRA = "window.TGPX = { cityPreset: (M, i) => cityPreset(M, i), setPts: p => { trackPts = p; }, TP_CIRCUITS, TP_ELEVATED, loadTaipei, TEX, raceUpdate: () => raceUpdate(), startLap: () => startLap(), trackLocate: (x, z, k) => trackLocate(x, z, k), resetRace: () => resetRace(), runLater: ms => (typeof runLater === 'function' ? runLater(ms) : 0), normalS: (...a) => normalS(...a), newHillTrack: s => (typeof newHillTrack === 'function' ? newHillTrack(s) : null), RACE, ATMO };\nwindow.TGP = (() =>";
 let src = fs.readFileSync(path.join(copy, 'game.js'), 'utf8');
 if (src.split('window.TGP = (() =>').length !== 2) { console.error('world.js: the copy is not instrumented (run instrument.py first)'); process.exit(2); }
 src = src.replace('window.TGP = (() =>', EXTRA);
