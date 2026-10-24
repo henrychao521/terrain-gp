@@ -1034,11 +1034,9 @@ function buildWorld() {
     // drag (0.18) plus the climb asks more than its grip (0.6 on the driven rear axle) can give, so a car that stops there
     // can never drive out. Real circuits put gravel on flat run-off for the same reason; steep run-off stays grass (same width,
     // same barrier line: only the surface changes)
-    const steep = (j, sd) => {
-      const hs = sd > 0 ? W.hwL[j] : W.hwR[j], at = (kk, t) => Hq(X[kk] + LX[kk] * t * sd, Z[kk] + LZ[kk] * t * sd), a = (j - 5 + n) % n, b = (j + 5) % n;
-      let g = Math.abs(TH[b] - TH[a]) / (10 * W.ds);
-      for (const t of [hs + 1.5, hs + 9, hs + 17]) g = Math.max(g, Math.abs(at(b, t) - at(a, t)) / (10 * W.ds));
-      for (const [t0, t1] of [[hs + 1.5, hs + 6.5], [hs + 6.5, hs + 11.5], [hs + 11.5, hs + 17]]) g = Math.max(g, Math.abs(at(j, t1) - at(j, t0)) / (t1 - t0));
+    const steep = (j, sd) => { // steepest ground (gradient magnitude, any direction, over 4 m) across the trap at sample j
+      const hs = sd > 0 ? W.hwL[j] : W.hwR[j]; let g = 0;
+      for (const t of [1.5, 5, 9, 13, 17]) { const x = X[j] + LX[j] * (hs + t) * sd, z = Z[j] + LZ[j] * (hs + t) * sd; g = Math.max(g, Math.hypot(Hq(x + 2, z) - Hq(x - 2, z), Hq(x, z + 2) - Hq(x, z - 2)) / 4); }
       return g > GRAVEL_MAX_GRADE;
     };
     for (let k = 0; k < n; k++) if (g0[k]) for (let o = -4; o <= Math.round(70 / W.ds); o++) { const j = (k + o + n) % n; if (!W.runoff[j]) { W.runoff[j] = g0[k]; if (!steep(j, g0[k])) W.grav[j] = g0[k]; } }
@@ -2297,9 +2295,12 @@ function physicsStep(dt, inp) {
       Vx -= 1.12 * vn * Lx; Vz -= 1.12 * vn * Lz;
       const scrub = 1 - Math.min(0.22, 0.015 * Math.abs(vn)); Vx *= scrub; Vz *= scrub;
       const tf = Math.atan2(-W.lx[loc.k], -W.lz[loc.k]);
-      let dpsi = tf - c.psi; dpsi = Math.atan2(Math.sin(dpsi), Math.cos(dpsi)); if (Math.abs(dpsi) < Math.PI / 2) c.psi += dpsi * 0.35;
+      // only a real impact turns the nose back: a car merely resting against the barrier (sliding into it down a cross slope
+      // at walking pace) must still be able to steer away from it, or it stays pinned there (丘陵 run-off, 2026-10-24)
+      const hard = Math.abs(vn) > 0.6;
+      let dpsi = tf - c.psi; dpsi = Math.atan2(Math.sin(dpsi), Math.cos(dpsi)); if (hard && Math.abs(dpsi) < Math.PI / 2) c.psi += dpsi * 0.35;
       const cp2 = Math.cos(c.psi), sn2 = Math.sin(c.psi), fx2 = cp2, fz2 = -sn2, lx2 = -sn2, lz2 = -cp2;
-      c.vx = Vx * fx2 + Vz * fz2; c.vy = Vx * lx2 + Vz * lz2; c.r *= 0.3;
+      c.vx = Vx * fx2 + Vz * fz2; c.vy = Vx * lx2 + Vz * lz2; if (hard) c.r *= 0.3;
       c.hit = Math.max(c.hit, Math.abs(vn)); c.wallT = state.t; // raceUpdate clears hit every frame; autoRecover reads the time
     }
   }

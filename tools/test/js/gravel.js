@@ -3,7 +3,8 @@
 //
 // escape: the car stands still in the middle of a gravel trap (or at arg.spots [[k, lat], ...]), full throttle, steering
 //   for the centreline 20 m ahead; it has escaped when it is back on the asphalt within arg.secs (default 25 s).
-//   Spots: the arg.worst (default 12) steepest run-off samples, gravel or grass (ground gradient under the car), plus arg.spots.
+//   Spots: the arg.worst (default 12) steepest run-off samples, gravel or grass (ground gradient under the car), the arg.wall
+//   (default 6) steepest of them again right at the barrier, plus arg.spots.
 // decel: from 100 km/h with no throttle or brake, the speed lost in the first second on asphalt, grass and flat gravel.
 (arg = {}) => {
   const T = window.TGP, X = window.TGPX, W = T.W, car = T.car, n = W.n, DT = 1 / 240, FPS = 60, secs = arg.secs || 25;
@@ -34,8 +35,10 @@
   const RO = W.runoff || W.grav, cand = [], all = [];
   for (let k = 0; k < n; k += 2) { const sd = RO[k]; if (!sd) continue; const hs = sd > 0 ? W.hwL[k] : W.hwR[k], lat = sd * (hs + 9), [x, z] = spotXZ(k, lat), c = { k, lat: r2(lat), slope: grad(x, z), gravel: W.grav[k] === sd }; all.push(c); if (c.gravel) cand.push(c); }
   cand.sort((a, b) => b.slope - a.slope); all.sort((a, b) => b.slope - a.slope);
-  const spots = all.slice(0, arg.worst ?? 12).concat((arg.spots || []).map(([k, lat]) => { const [x, z] = spotXZ(k, lat); return { k, lat, slope: grad(x, z), given: true }; }));
-  const escape = spots.map(s => ({ k: s.k, lat: s.lat, slopePct: r2(s.slope * 100), given: !!s.given, gravelHere: (W.grav[s.k] === Math.sign(s.lat)), ...drive(s.k, s.lat, 0, 1, 'asphalt') }));
+  // the same steepest run-off, but against the barrier (lateral = barrier − 1 m, where the barrier code stops the car)
+  const atWall = all.slice(0, arg.wall ?? 6).map(c => { const sd = Math.sign(c.lat), w = (sd > 0 ? W.wallL : W.wallR)[c.k], lat = isFinite(w) ? sd * (w - 1) : c.lat, [x, z] = spotXZ(c.k, lat); return { k: c.k, lat: r2(lat), slope: grad(x, z), wall: true }; });
+  const spots = all.slice(0, arg.worst ?? 12).concat(atWall).concat((arg.spots || []).map(([k, lat]) => { const [x, z] = spotXZ(k, lat); return { k, lat, slope: grad(x, z), given: true }; }));
+  const escape = spots.map(s => ({ k: s.k, lat: s.lat, slopePct: r2(s.slope * 100), given: !!s.given, wall: !!s.wall, gravelHere: (W.grav[s.k] === Math.sign(s.lat)), ...drive(s.k, s.lat, 0, 1, 'asphalt') }));
   // deceleration from 100 km/h in the first second
   const v0 = 100 / 3.6, flat = cand.filter(c => c.slope < 0.02);
   const dec = (k, lat) => { const r = drive(k, lat, v0, 0, 'time'); return { k, lat: r2(lat), surf: r.surf0, decel_ms2: r.v1 != null ? r2(v0 - r.v1) : null }; };
