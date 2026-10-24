@@ -8,7 +8,7 @@
    "map": "taipei",
    "elevated": false,
    "loop": [[2915, 3002], [2700, 2962], [2470, 2878], [2760, 2655], [3050, 2510], [2995, 2760]],
-   "lengthM": 1847,
+   "lengthM": 1862,
    "direction": "counter-clockwise (one-way carriageways, keep right)"
   }
  ]

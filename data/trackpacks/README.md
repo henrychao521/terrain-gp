@@ -40,4 +40,4 @@ node tools/test/node/world.js <instrument.py 的複本> '{"pack": "data/trackpac
 
 | 檔案 | 賽道 | 狀態 |
 |---|---|---|
-| `campus_a.json` | 一條校園周邊的街道環線（1,847 m，逆時針） | 未啟用：需取得該校書面同意後才列入 `TRACK_PACKS` |
+| `campus_a.json` | 一條校園周邊的街道環線（1,862 m，逆時針） | 未啟用：需取得該校書面同意後才列入 `TRACK_PACKS` |
