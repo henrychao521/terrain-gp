@@ -18,6 +18,8 @@ F1 風格的瀏覽器賽車，可用高度圖、臺北實測地形或 OpenStreet
   ```
   區塊範圍登記在 `models/taipei/tiles.json`；範圍內的建物與地標改用 Blender 模型，範圍外仍由遊戲即時產生。公寓立面與屋頂貼圖是 AI 生成（Colab SDXL，`tools/blender/ai_textures/`，見該目錄說明）。鐵窗、冷氣、騎樓柱、水塔以位置清單（`*.inst.json`）儲存，遊戲用 instancing 繪製。`models/props/` 是 Blender 建模的行道樹（樟樹、榕樹、台灣欒樹）、水馬、路燈與號誌燈頭；樹和水馬在鏡頭附近換成模型，遠處用簡化版本。
 
+- `data/corridors/`：個別走廊的逐棟建物參數（輪廓、高度、屋頂、騎樓、用途、地標），`build_tile.py` 在範圍內改用它；目前有建中周邊（`tools/jianzhong/derive_params.py` 產生，說明見 `docs/jianzhong/`）。
+
 - `tools/test/`：回歸測試與量測工具（建物有沒有長在車道裡、行車線、電腦車模擬、賽車性能、畫面效能、新手機器人）。`python3 tools/test/run.py quick` 約 35 秒跑完不需要獨佔電腦的檢查，說明見 `tools/test/README.md`。
 
 線上對戰使用 claude.ai Artifact 的即時房間功能，只在 claude.ai 上開啟時可用；GitHub Pages 版本支援單人計時與電腦對手。

@@ -1,0 +1,51 @@
+row,building_id,bid,footprint_source_id,permit_ids,floors,height_m,height_source,h_tpe3d,building_present,footprint_ok,roof_type,arcade,use_class,landmark,zone,centroid_x,centroid_y,verified,notes
+0,tpe3d:9822,9822,tpe3d:9822,,,,unverified,41.5,yes,no,flat_concrete,no,institutional,yes,機關用地,2855.0,3032.1,building_present;footprint_ok;roof_type;arcade;use_class;landmark,圓形建物，tpe3d 輪廓只蓋到一部分屋頂、位置偏；名稱未查證
+1,tpe3d:4364,4364,tpe3d:4364,,,,unverified,17.0,yes,partial,pitched_tile,no,institutional,yes,公園用地,2557.4,2957.9,building_present;footprint_ok;roof_type;arcade;use_class;landmark,綠色琉璃瓦斜屋頂（南海學園宮殿式建築）；輪廓只蓋到屋頂一角
+2,tpe3d:4156,4156,tpe3d:4156,,,,unverified,15.6,yes,partial,pitched_tile,no,institutional,yes,公園用地,2581.0,2973.5,building_present;footprint_ok;roof_type;arcade;use_class;landmark,綠色琉璃瓦斜屋頂，同一組宮殿式建築
+3,tpe3d:9647,9647,tpe3d:9647,,,,unverified,16.4,yes,yes,flat_concrete,unknown,institutional,no,機關用地,2971.6,3147.5,building_present;footprint_ok;roof_type;use_class;landmark,機關用地；平屋頂深灰
+4,tpe3d:5800,5800,tpe3d:5800,,,,unverified,23.4,yes,yes,flat_concrete,no,institutional,no,高中用地,2826.8,2896.4,building_present;footprint_ok;roof_type;arcade;use_class;landmark,高中用地 L 形校舍，屋頂有機房
+5,tpe3d:9832,9832,tpe3d:9832,,,,unverified,9.7,yes,no,pitched_tile,no,institutional,yes,公園用地,2610.3,2966.5,building_present;footprint_ok;roof_type;arcade;use_class;landmark,輪廓只是宮殿式建築邊緣一條窄帶
+6,tpe3d:9777,9777,tpe3d:9777,,,,unverified,15.6,yes,yes,dome,no,institutional,yes,公園用地,2697.1,3014.0,building_present;footprint_ok;roof_type;arcade;use_class;landmark,八角形綠色圓頂建物；名稱未查證
+7,tpe3d:9876,9876,tpe3d:9876,,,,unverified,24.2,yes,partial,flat_concrete,unknown,residential_mixed,no,第三之一種住宅區,2915.6,3041.4,building_present;footprint_ok;roof_type;landmark,輪廓偏移、只蓋到部分屋頂
+8,tpe3d:9884,9884,tpe3d:9884,,,,unverified,15.5,yes,partial,flat_concrete,unknown,residential_mixed,no,第三種住宅區,2970.0,3077.3,building_present;footprint_ok;roof_type;landmark,屋頂深褐，看不出是防水層還是鐵皮
+9,tpe3d:9780,9780,tpe3d:9780,permit:1856,,,unverified,19.7,yes,yes,solar,unknown,residential_mixed,no,第三種住宅區,2984.3,3054.8,building_present;footprint_ok;roof_type;landmark,平屋頂鋪滿太陽能板；建照輪廓較大
+10,tpe3d:2401,2401,tpe3d:2401,,,,unverified,17.1,yes,partial,metal_sheet,unknown,residential_mixed,no,第三之一種住宅區,2427.6,2713.0,building_present;footprint_ok;roof_type;landmark,輪廓跨兩三間透天，屋頂紅色鐵皮與平頂混合；面寬馬路
+11,tpe3d:2200,2200,tpe3d:2200,permit:1774,21,,permit_floors,24.4,yes,no,flat_concrete,unknown,residential_mixed,no,第三之一種住宅區,2490.3,2656.7,floors;building_present;footprint_ok;roof_type;landmark,建照 21 樓新大樓，tpe3d 還是舊的低矮輪廓（24 m）
+12,tpe3d:4362,4362,tpe3d:4362,,,,unverified,17.5,yes,partial,flat_concrete,no,institutional,no,公園用地,2477.4,2949.7,building_present;footprint_ok;roof_type;arcade;use_class;landmark,tpe3d 只畫了大屋頂上的屋突
+13,tpe3d:2199,2199,tpe3d:2199,,,,unverified,8.0,no,no,none,n/a,none,no,第三種住宅區,2468.5,2729.1,building_present;footprint_ok;roof_type;use_class;landmark,影像上是樹林，沒有建物（多出來的建物）
+14,tpe3d:4158,4158,tpe3d:4158,permit:1893,,,unverified,8.8,no,no,none,n/a,none,no,公園用地,2533.6,2939.1,building_present;footprint_ok;roof_type;use_class;landmark,工地（已拆除、建照新案施工中），沒有完成的建物
+15,tpe3d:2194,2194,tpe3d:2194,,,,unverified,17.6,yes,partial,mixed,unknown,residential_mixed,no,第三之一種住宅區,2412.0,2727.8,building_present;footprint_ok;roof_type;landmark,輪廓跨兩三間，綠色鐵皮與平頂混合
+16,tpe3d:2410,2410,tpe3d:2410,,,,unverified,16.0,yes,yes,flat_concrete,no,institutional,no,國小用地,2533.3,2877.5,building_present;footprint_ok;roof_type;arcade;use_class;landmark,國小用地校舍 L 形，平屋頂
+17,tpe3d:4155,4155,tpe3d:4155,,,,unverified,15.7,yes,yes,flat_concrete,no,institutional,no,公園用地,2477.8,2944.6,building_present;footprint_ok;roof_type;arcade;use_class;landmark,平屋頂加屋突
+18,tpe3d:2179,2179,tpe3d:2179,,,,unverified,17.7,yes,partial,metal_sheet,unknown,residential_mixed,no,第三之一種住宅區,2393.4,2744.7,building_present;footprint_ok;roof_type;landmark,兩塊輪廓，奶油色鐵皮與平頂
+19,tpe3d:2324,2324,tpe3d:2324,,,,unverified,7.9,unknown,unknown,unknown,unknown,residential_mixed,no,第三之一種住宅區,2257.7,2816.2,landmark,超出正射影像範圍，無法判讀
+20,tpe3d:5321,5321,tpe3d:5321,,,,unverified,23.1,yes,partial,mixed,unknown,residential_mixed,no,第三之一種住宅區,2698.3,2655.2,building_present;footprint_ok;roof_type;landmark,屋頂有綠色加蓋
+21,tpe3d:5500,5500,tpe3d:5500,,,,unverified,6.5,yes,yes,flat_concrete,unknown,residential_mixed,no,第三之一種住宅區,2684.0,2580.2,building_present;footprint_ok;roof_type;landmark,高度 6 m 比周圍低，無法查證
+22,tpe3d:5580,5580,tpe3d:5580,,,,unverified,4.2,yes,no,metal_sheet,unknown,residential_mixed,no,第三種住宅區,2848.9,2678.2,building_present;footprint_ok;roof_type;landmark,輪廓橫跨停車場，實際建物只有紅色鐵皮那一小塊
+23,tpe3d:5318,5318,tpe3d:5318,,,,unverified,24.0,yes,partial,mixed,unknown,residential_mixed,no,第三之一種住宅區,2710.2,2637.1,building_present;footprint_ok;roof_type;landmark,
+24,tpe3d:5502,5502,tpe3d:5502,,,,unverified,15.0,yes,yes,flat_concrete,unknown,residential_mixed,no,第三種住宅區,2679.3,2637.6,building_present;footprint_ok;roof_type;landmark,
+25,tpe3d:5494,5494,tpe3d:5494,,,,unverified,24.0,yes,yes,flat_concrete,unknown,residential_mixed,no,第三之一種住宅區,2664.0,2647.9,building_present;footprint_ok;roof_type;landmark,
+26,tpe3d:2481,2481,tpe3d:2481,,,,unverified,11.7,yes,partial,mixed,unknown,residential_mixed,no,第三種住宅區,2561.3,2665.3,building_present;footprint_ok;roof_type;landmark,淺綠與米色鐵皮
+27,tpe3d:5319,5319,tpe3d:5319,,,,unverified,23.8,yes,no,mixed,unknown,residential_mixed,no,第三種住宅區,2636.9,2657.7,building_present;footprint_ok;roof_type;landmark,輪廓破碎，大半落在中庭
+28,tpe3d:5562,5562,tpe3d:5562,,,,unverified,20.5,yes,no,flat_concrete,unknown,residential_mixed,no,第三之一種住宅區,2860.9,2624.1,building_present;footprint_ok;roof_type;landmark,輪廓有一根尖刺（簡化後的破圖來源）
+29,tpe3d:5496,5496,tpe3d:5496,,,,unverified,20.6,yes,yes,flat_concrete,unknown,residential_mixed,no,第三之一種住宅區,2694.0,2589.2,building_present;footprint_ok;roof_type;landmark,
+30,tpe3d:5617,5617,tpe3d:5617,,,,unverified,19.2,yes,partial,flat_concrete,unknown,residential_mixed,no,第三之一種住宅區(特),2986.2,2552.7,building_present;footprint_ok;roof_type;landmark,面向和平西路
+31,tpe3d:5676,5676,tpe3d:5676,,,,unverified,6.5,no,no,none,n/a,none,no,第三種住宅區,3162.4,2530.8,building_present;footprint_ok;roof_type;use_class;landmark,空地／停車場，停著綠色車輛或貨櫃，沒有建物
+32,tpe3d:5701,5701,tpe3d:5701,,,,unverified,15.3,yes,yes,metal_sheet,unknown,residential_mixed,no,第三種住宅區,3082.0,2661.2,building_present;footprint_ok;roof_type;landmark,淺綠鐵皮
+33,tpe3d:5810,5810,tpe3d:5810,,,,unverified,16.4,yes,no,mixed,unknown,residential_mixed,no,第三之一種住宅區,3047.6,2458.4,building_present;footprint_ok;roof_type;landmark,街角一大塊輪廓包住好幾棟
+34,tpe3d:5623,5623,tpe3d:5623,,,,unverified,24.2,yes,yes,flat_concrete,unknown,residential_mixed,no,第三種住宅區,2938.2,2630.0,building_present;footprint_ok;roof_type;landmark,面向重慶南路
+35,tpe3d:5373,5373,tpe3d:5373,,,,unverified,25.0,yes,partial,metal_sheet,unknown,residential_mixed,no,第三之一種住宅區,3100.1,2458.6,building_present;footprint_ok;roof_type;landmark,紅橘色鐵皮加蓋，街角
+36,tpe3d:5297,5297,tpe3d:5297,,,,unverified,31.6,yes,partial,solar,no,institutional,no,機關用地,3200.2,2607.8,building_present;footprint_ok;roof_type;arcade;use_class;landmark,機關用地大樓，部分超出影像範圍
+37,tpe3d:5275,5275,tpe3d:5275,,,,unverified,11.8,yes,yes,solar,no,institutional,no,機關用地,3162.3,2594.8,building_present;footprint_ok;roof_type;arcade;use_class;landmark,機關用地長條建物，屋頂太陽能板
+38,tpe3d:5372,5372,tpe3d:5372,,,,unverified,9.5,yes,yes,flat_concrete,no,institutional,no,機關用地,3125.6,2594.2,building_present;footprint_ok;roof_type;arcade;use_class;landmark,
+39,tpe3d:5537,5537,tpe3d:5537,,,,unverified,22.1,yes,partial,flat_concrete,unknown,residential_mixed,no,第三種住宅區,2882.9,2455.3,building_present;footprint_ok;roof_type;landmark,
+40,tpe3d:5650,5650,tpe3d:5650,,,,unverified,17.5,yes,yes,flat_concrete,unknown,residential_mixed,no,第三種住宅區,2957.1,2672.5,building_present;footprint_ok;roof_type;landmark,屋頂有水塔
+41,tpe3d:5631,5631,tpe3d:5631,,,,unverified,21.1,yes,yes,flat_concrete,unknown,residential_mixed,no,第三之一種住宅區,3036.0,2721.0,building_present;footprint_ok;roof_type;landmark,
+42,tpe3d:5644,5644,tpe3d:5644,,,,unverified,12.0,yes,yes,mixed,unknown,residential_mixed,no,第三之一種住宅區,2995.3,2682.3,building_present;footprint_ok;roof_type;landmark,白色鐵皮加蓋
+43,tpe3d:5743,5743,tpe3d:5743,,,,unverified,14.8,yes,yes,metal_sheet,unknown,residential_mixed,no,第三種住宅區,3104.3,2899.4,building_present;footprint_ok;roof_type;landmark,藍灰鐵皮
+44,tpe3d:9872,9872,tpe3d:9872,,,,unverified,11.5,yes,partial,flat_concrete,unknown,residential_mixed,no,第三種住宅區,3059.7,2976.7,building_present;footprint_ok;roof_type;landmark,兩棟合成一塊
+45,tpe3d:5287,5287,tpe3d:5287,,,,unverified,36.3,yes,partial,pitched_tile,no,religious,yes,第三之一種住宅區,2970.8,2793.0,building_present;footprint_ok;roof_type;use_class;landmark,黃橘色琉璃瓦廟宇屋頂；tpe3d 高 36 m 可疑
+46,tpe3d:5658,5658,tpe3d:5658,permit:1881,14,,permit_floors,13.9,yes,no,flat_concrete,unknown,residential_mixed,no,第三之一種住宅區,2926.1,2851.4,floors;building_present;footprint_ok;roof_type;landmark,建照 14 樓新大樓，tpe3d 只有 14 m、輪廓錯位
+47,tpe3d:5396,5396,tpe3d:5396,,,,unverified,22.3,yes,yes,flat_concrete,unknown,residential_mixed,no,第三種住宅區,3077.3,2780.3,building_present;footprint_ok;roof_type;landmark,
+48,tpe3d:5399,5399,tpe3d:5399,,,,unverified,22.9,yes,yes,mixed,unknown,residential_mixed,no,第三種住宅區,3050.8,2774.4,building_present;footprint_ok;roof_type;landmark,紅色鐵皮與平頂
+49,tpe3d:5398,5398,tpe3d:5398,,,,unverified,21.5,yes,partial,metal_sheet,unknown,residential_mixed,no,第三種住宅區,3061.8,2777.3,building_present;footprint_ok;roof_type;landmark,紅色鐵皮

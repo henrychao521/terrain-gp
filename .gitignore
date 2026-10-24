@@ -1,0 +1,4 @@
+ref/*
+!ref/README.md
+!ref/SOURCES.md
+__pycache__/
