@@ -946,13 +946,16 @@ function otherStretchNear(k, x, z, r) {
 const onDeck = k => W.anyElev && k >= 0 && W.elev[k % W.n] > 0;
 const Sq = (x, z, k) => onDeck(k) ? W.deck[k % W.n] : Hq(x, z);
 // how far above Sq the surface under a car at lateral offset lat of sample k is drawn: the asphalt ribbon 0.05 m (so it never
-// z-fights with the ground mesh), road-course kerbs 0.09 m, gravel 0.035 m, city streets 0.03 m. The car (physics height and
-// model) sits on it, so the tyres no longer sink 5 cm into the asphalt; blended over the 0.4 m past the asphalt edge
+// z-fights with the ground mesh), road-course kerbs 0.09 m, gravel 0.035 m. The car (physics height and model) sits on it, so
+// the tyres no longer sink 5 cm into the asphalt. In the city it stays 0.05 m: the car hardly leaves the carriageway there, and
+// stepping down 2 cm onto the street mesh at every side-street opening only shook the car. Smoothstep over the 1 m past the
+// asphalt edge, so crossing it is a slope, not a step
 function surfLift(k, lat) {
   if (!(k >= 0) || !W.n) return 0;
   k %= W.n; const al = Math.abs(lat), sd = lat > 0 ? 1 : -1, hw = sd > 0 ? W.hwL[k] : W.hwR[k];
-  const out = W.city ? 0.03 : al < hw + 1.5 && W.kerb[k] ? 0.09 : al >= hw + 1.5 && al < hw + 17 && W.grav[k] === sd ? 0.035 : 0;
-  const w = clamp((al - hw) / 0.4, 0, 1); // 0 on the asphalt, 1 from 0.4 m past its edge
+  if (W.city) return 0.05;
+  const out = al < hw + 1.5 && W.kerb[k] ? 0.09 : al >= hw + 1.5 && al < hw + 17 && W.grav[k] === sd ? 0.035 : 0;
+  const w = smooth(0, 1, al - hw); // 0 on the asphalt, 1 from 1 m past its edge
   return 0.05 + (out - 0.05) * w;
 }
 function normalS(x, z, k, out) {
