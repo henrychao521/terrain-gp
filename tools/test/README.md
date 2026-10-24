@@ -196,6 +196,9 @@ blender -b --factory-startup --python tools/test/blender_walls.py -- . walls.jso
 - `node/world.js` 在 Node 裡跑複本的 `game.js`（假 DOM、假 WebGL，three.js r128 快取在 `.cache/`），輸出中線、車道半寬、路面高度、用到的區塊。
 - `blender_walls.py` 規則同 `js/walls.js`，另外輸出 4／8 m 高的懸空（`overhang`）與騎樓柱（`columns`）。`TGP_TILE_DIR` 可以指定另一組區塊。
 - `ai`、`envelope` 沒有替代版本（假 DOM 的設定值和瀏覽器不同，envelope 數字對不上）。
+- `world.js` 也能建自訂地形（丘陵練習場）：`'{"terrain": {"preset": "hills", "seed": 7, "track": 20251019}}'`（`track` 是 `randomTrack` 的種子；遊戲的「標準丘陵 A」是 20261024）。
+- `js/height_mesh.js`（`"check": "height_mesh.js"`）：車道內每 0.5 m 比對物理高度 `Sq` 與實際畫出的三角形（地面網格、賽道柏油、臺北街道，讀各網格自己的索引），輸出最大值、p99、平均與最差位置。2026-10-24 的結果見 `docs/高度取樣與地圖模式檢查.md`。
+- `node/geo_test.js`：地圖模式的幾何測試（OSM 經緯度換公尺對照 WGS84 大地線、z_x_y 圖磚的角點與實際大小、Terrarium 跨進位的斜坡解碼），`node tools/test/node/geo_test.js`，失敗時結束代碼 1。
 
 ## 不開瀏覽器的物理稽核（2026-10 加）
 

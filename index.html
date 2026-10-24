@@ -263,7 +263,7 @@ kbd{font-family:var(--f-data);font-size:11px;background:var(--raise);border:1px 
 .howto b{color:var(--fg);font-weight:500}
 body.touch .only-desk,body:not(.touch) .only-touch{display:none!important}
 .textfield{display:grid;grid-template-columns:6.5em minmax(0,1fr);align-items:center;gap:10px;font-size:14px;color:var(--muted)}
-input[type=text]{background:var(--raise);border:1px solid var(--line);color:var(--fg);border-radius:8px;min-height:44px;padding:6px 12px;font:inherit;font-size:16px;min-width:0;width:100%;box-sizing:border-box}
+input[type=text],input[type=number]{background:var(--raise);border:1px solid var(--line);color:var(--fg);border-radius:8px;min-height:44px;padding:6px 12px;font:inherit;font-size:16px;min-width:0;width:100%;box-sizing:border-box}
 .netrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px}
 .roomhead{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}
 .roomhead span{flex:1;min-width:8em}
@@ -519,6 +519,11 @@ body.tut-on .zhint{display:none} /* the card says the same, and needs the room o
               </div>
               <label class="checks"><span style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="invert">反轉高低</span></label>
               <div id="fileInfo">PNG / JPG 皆可。Terrarium 編碼的真實地形圖磚會讀出實際海拔。</div>
+              <div id="realSize" hidden>
+                <div class="field"><label for="realKm">實際寬度</label><input type="number" id="realKm" min="0.1" max="500" step="0.01" placeholder="未知" inputmode="decimal"><output>km</output></div>
+                <div class="field"><label for="tileZ">或縮放層級</label><select id="tileZ" aria-label="圖磚縮放層級"><option value="">—</option><option value="9">z9</option><option value="10">z10</option><option value="11">z11</option><option value="12">z12</option><option value="13">z13</option><option value="14">z14</option><option value="15">z15</option><option value="16">z16</option></select><input type="number" id="tileLat" min="-85" max="85" step="0.1" value="25.0" inputmode="decimal" aria-label="緯度（度）" title="緯度（度）"></div>
+                <p class="hint">知道實際寬度就直接填；圖是單張圖磚時，選縮放層級並填緯度（臺灣約 22–25°）也能換算。地圖邊長最大 6 km，圖比這更大時高度會等比例縮小，坡度仍和實際相同。</p>
+              </div>
             </div>
             <div class="field"><label for="size">地圖邊長</label><input type="range" id="size" min="1000" max="6000" step="100" value="2400"><output id="oSize"></output></div>
             <div class="field"><label for="range">高低差</label><input type="range" id="range" min="0" max="500" step="5" value="90"><output id="oRange"></output></div>

@@ -1,7 +1,7 @@
 (() => {
 'use strict';
 const $ = s => document.querySelector(s);
-const G = 9.81, N = 513, DT = 1 / 240;
+const G = 9.81, N = 513, DT = 1 / 240, GRAVEL_MAX_GRADE = 0.08;
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
 const fmt = t => { if (!(t >= 0) || !isFinite(t)) return '–'; const m = Math.floor(t / 60), s = t - m * 60; return m + ':' + (s < 10 ? '0' : '') + s.toFixed(3); };
@@ -189,42 +189,112 @@ function genPreset(name, seed) {
     else h = fbm(nz, u * 4.5, v * 4.5, 6, 0.5);
     a[j * N + i] = h;
   }
-  normalize01(a); TER.meters = null; TER.source = name;
+  normalize01(a); TER.meters = null; TER.metersRaw = null; TER.realW = null; TER.source = name;
+  const rs = document.getElementById('realSize'); if (rs) rs.hidden = true;
 }
 function applyTerrainScale() {
   const raw = TER.raw;
   if (TER.meters) for (let i = 0; i < raw.length; i++) raw[i] = TER.meters[i];
   else for (let i = 0; i < raw.length; i++) raw[i] = TER.norm[i] * TER.range;
 }
-function loadHeightImage(file) {
-  const url = URL.createObjectURL(file), img = new Image();
-  img.onload = () => {
-    const cv = document.createElement('canvas'); cv.width = N; cv.height = N;
-    const cx = cv.getContext('2d', { willReadFrequently: true }); cx.imageSmoothingEnabled = true; cx.drawImage(img, 0, 0, N, N);
-    const d = cx.getImageData(0, 0, N, N).data, enc = $('#enc').value, inv = $('#invert').checked;
-    if (enc === 'terrarium') {
-      const m = new Float32Array(N * N);
-      for (let i = 0; i < N * N; i++) m[i] = d[i * 4] * 256 + d[i * 4 + 1] + d[i * 4 + 2] / 256 - 32768;
-      blur(m, 1);
-      let lo = Infinity, hi = -Infinity; for (const v of m) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
-      for (let i = 0; i < m.length; i++) m[i] = inv ? hi - m[i] : m[i] - lo;
-      TER.meters = m; TER.base = Math.max(0, Math.round(lo)); TER.range = Math.round(hi - lo);
-      $('#base').value = TER.base; $('#range').value = Math.min(500, TER.range);
-      $('#fileInfo').textContent = `${file.name}：${img.width}×${img.height}，實際海拔 ${Math.round(lo)}–${Math.round(hi)} m（高低差 ${Math.round(hi - lo)} m）。`;
-    } else {
-      const a = TER.norm;
-      for (let i = 0; i < N * N; i++) { const l = (0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]) / 255; a[i] = inv ? 1 - l : l; }
-      blur(a, 3); normalize01(a); TER.meters = null;
-      $('#fileInfo').textContent = `${file.name}：${img.width}×${img.height}，已重新取樣為 ${N}×${N}。高低差由下方滑桿決定。`;
-    }
-    TER.source = 'file';
-    document.querySelectorAll('#presets .btn').forEach(b => b.classList.remove('sel'));
-    URL.revokeObjectURL(url);
-    syncLabels(); mapChanged();
-  };
-  img.onerror = () => { $('#fileInfo').textContent = '無法讀取這個檔案。請使用 PNG 或 JPG 圖片。'; URL.revokeObjectURL(url); };
-  img.src = url;
+// heights from an uploaded image. The encoded bytes are read at the image's own size with no smoothing, no colour
+// management and no premultiplied alpha, decoded to metres, and only then resampled to N×N: blending encoded bytes
+// corrupts Terrarium heights (−1 m = R 127 G 255 next to 0 m = R 128 G 0 blend to R 128 G 128, read as +128 m)
+function decodeHeightPixels(d, w, h, enc) {
+  const m = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) { const r = d[i * 4], g = d[i * 4 + 1], b = d[i * 4 + 2];
+    m[i] = enc === 'terrarium' ? r * 256 + g + b / 256 - 32768 : (0.299 * r + 0.587 * g + 0.114 * b) / 255; }
+  return m;
 }
+// one axis of a w×h grid to n samples over the same extent (pixel centres, as drawImage(img, 0, 0, n, n) maps them);
+// tent filter, widened to the source spacing when shrinking so every source pixel counts
+function resampleAxis(src, w, h, n, alongX) {
+  const L = alongX ? w : h, M = alongX ? h : w, s = L / n, r = Math.max(1, s), out = new Float32Array(alongX ? n * h : w * n);
+  for (let o = 0; o < n; o++) {
+    const c = Math.max(0, Math.min(L - 1, (o + 0.5) * s - 0.5)), i0 = Math.max(0, Math.ceil(c - r + 1e-9)), i1 = Math.min(L - 1, Math.floor(c + r - 1e-9));
+    const wt = []; let sum = 0; for (let i = i0; i <= i1; i++) { const v = 1 - Math.abs(i - c) / r; wt.push(v); sum += v; }
+    for (let q = 0; q < M; q++) { let acc = 0; for (let k = 0; k < wt.length; k++) acc += wt[k] * src[alongX ? q * w + i0 + k : (i0 + k) * w + q]; out[alongX ? q * n + o : o * w + q] = acc / sum; }
+  }
+  return out;
+}
+function resampleGrid(src, w, h, n) { return resampleAxis(resampleAxis(src, w, h, n, true), n, h, n, false); }
+// WGS84 metres per degree of longitude and of latitude at latitude lat
+function degMetres(lat) { const p = lat * Math.PI / 180; return [111412.84 * Math.cos(p) - 93.5 * Math.cos(3 * p) + 0.118 * Math.cos(5 * p), 111132.92 - 559.82 * Math.cos(2 * p) + 1.175 * Math.cos(4 * p) - 0.0023 * Math.cos(6 * p)]; }
+// slippy-map tiles: bounds from the tile's corners, ground size in metres (E–W at the middle latitude, N–S along a meridian)
+function tile2lon(x, z) { return x / 2 ** z * 360 - 180; }
+function tile2lat(y, z) { const t = Math.PI - 2 * Math.PI * y / 2 ** z; return 180 / Math.PI * Math.atan(Math.sinh(t)); }
+function tileGround(z, x, y) {
+  const w = tile2lon(x, z), e = tile2lon(x + 1, z), n = tile2lat(y, z), s = tile2lat(y + 1, z), [kx] = degMetres((n + s) / 2);
+  const p0 = s * Math.PI / 180, p1 = n * Math.PI / 180, ns = 111132.92 * (n - s) - 559.82 / 2 * 180 / Math.PI * (Math.sin(2 * p1) - Math.sin(2 * p0)); // meridian arc
+  return { w, e, n, s, sx: (e - w) * kx, sz: ns };
+}
+// a tile saved as z_x_y.png (also z-x-y, z.x.y, or a z/x/y path when a folder is dropped); null if the name is not one
+function tileFromName(name) {
+  const m = /(?:^|[^0-9])(\d{1,2})[_\-./](\d{1,7})[_\-./](\d{1,7})\.(?:png|webp|jpe?g)$/i.exec(name || ''); if (!m) return null;
+  const z = +m[1], x = +m[2], y = +m[3]; return z >= 1 && z <= 22 && x < 2 ** z && y < 2 ** z ? { z, x, y } : null;
+}
+async function imagePixels(file) {
+  const draw = (src, w, h) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const cx = cv.getContext('2d', { willReadFrequently: true }); cx.imageSmoothingEnabled = false; cx.drawImage(src, 0, 0, w, h); return { w, h, d: cx.getImageData(0, 0, w, h).data }; };
+  const fit = (w, h) => { const k = Math.min(1, 4096 / Math.max(w, h)); return [Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k))]; }; // past 4096 px: nearest pixels, never blended bytes
+  if (typeof createImageBitmap === 'function') {
+    try { const bmp = await createImageBitmap(file, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' }); const [w, h] = fit(bmp.width, bmp.height), px = draw(bmp, w, h); px.srcW = bmp.width; px.srcH = bmp.height; bmp.close && bmp.close(); return px; }
+    catch (e) { /* older browsers: fall back to <img> */ }
+  }
+  const url = URL.createObjectURL(file), img = new Image();
+  try { await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; img.src = url; }); const [w, h] = fit(img.naturalWidth || img.width, img.naturalHeight || img.height), px = draw(img, w, h); px.srcW = img.naturalWidth || img.width; px.srcH = img.naturalHeight || img.height; return px; }
+  finally { URL.revokeObjectURL(url); }
+}
+// E–W ground width of one slippy-map tile at zoom z and latitude lat (WGS84), metres
+function tileWidthM(z, lat) { return 360 / 2 ** z * degMetres(lat)[0]; }
+// real ground width w (m) on a map of side size (m): the heights are scaled by the same factor, so slopes stay real
+const heightScale = (w, size) => (w > 0 ? size / w : 1);
+const fitSize = w => clamp(Math.round(w / 100) * 100, 1000, 6000);
+// TER.metersRaw: the decoded heights (m, N×N); TER.realW: the image's real width (m) or null when unknown
+function applyHeightScale(setSize) {
+  const raw = TER.metersRaw; if (!raw) return;
+  if (TER.realW && setSize) { TER.size = fitSize(TER.realW); $('#size').value = TER.size; }
+  const k = TER.realW ? heightScale(TER.realW, TER.size) : 1, m = new Float32Array(raw.length);
+  let lo = Infinity, hi = -Infinity; for (const v of raw) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  for (let i = 0; i < m.length; i++) m[i] = (TER.inv ? hi - raw[i] : raw[i] - lo) * k;
+  TER.meters = m; TER.base = Math.max(0, Math.round(lo)); TER.range = Math.round((hi - lo) * k);
+  $('#base').value = TER.base; $('#range').value = Math.min(500, TER.range);
+  const km = v => (v / 1000).toFixed(2).replace(/\.?0+$/, '');
+  $('#fileInfo').textContent = `${TER.fileInfo}，實際海拔 ${Math.round(lo)}–${Math.round(hi)} m（高低差 ${Math.round(hi - lo)} m）。` + (TER.realW
+    ? `實際寬度 ${km(TER.realW)} km（${TER.realSrc}），地圖邊長 ${km(TER.size)} km` + (Math.abs(k - 1) > 0.01 ? `，高度一起縮放為 ${k.toFixed(2)} 倍，坡度和實際相同。` : '，坡度和實際相同。')
+    : '實際寬度未知：坡度會隨「地圖邊長」改變。請在下方填入實際寬度或縮放層級。');
+}
+async function loadHeightImage(file) {
+  let px; try { px = await imagePixels(file); } catch (e) { $('#fileInfo').textContent = '無法讀取這個檔案。請使用 PNG 或 JPG 圖片。'; return; }
+  const enc = $('#enc').value, inv = $('#invert').checked, raw = decodeHeightPixels(px.d, px.w, px.h, enc), dims = `${px.srcW}×${px.srcH}`;
+  if (enc === 'terrarium') {
+    const m = resampleGrid(raw, px.w, px.h, N);
+    blur(m, 1);
+    Object.assign(TER, { metersRaw: m, inv, fileInfo: `${file.name}：${dims}`, realW: null, realSrc: '' });
+    // a z_x_y tile: its real ground size from the tile's corners (the map is square; the tile is within 1 %)
+    const t = tileFromName(file.webkitRelativePath || file.name);
+    if (t) { const g = tileGround(t.z, t.x, t.y); TER.realW = (g.sx + g.sz) / 2; TER.realSrc = `檔名 z${t.z}/${t.x}/${t.y}`; $('#tileZ').value = String(t.z); $('#tileLat').value = ((g.n + g.s) / 2).toFixed(2); }
+    else $('#tileZ').value = '';
+    $('#realKm').value = TER.realW ? (TER.realW / 1000).toFixed(2) : '';
+    $('#realSize').hidden = false;
+    applyHeightScale(true);
+  } else {
+    const a = TER.norm; a.set(resampleGrid(raw, px.w, px.h, N));
+    if (inv) for (let i = 0; i < a.length; i++) a[i] = 1 - a[i];
+    blur(a, 3); normalize01(a); TER.meters = null; TER.metersRaw = null; TER.realW = null; $('#realSize').hidden = true;
+    $('#fileInfo').textContent = `${file.name}：${dims}，已重新取樣為 ${N}×${N}。高低差由下方滑桿決定。`;
+  }
+  TER.source = 'file';
+  document.querySelectorAll('#presets .btn').forEach(b => b.classList.remove('sel'));
+  syncLabels(); mapChanged();
+}
+$('#realKm').addEventListener('change', () => { const v = +$('#realKm').value; TER.realW = v > 0 ? v * 1000 : null; TER.realSrc = '手動輸入'; $('#tileZ').value = ''; applyHeightScale(true); syncLabels(); mapChanged(); });
+for (const id of ['tileZ', 'tileLat']) $('#' + id).addEventListener('change', () => {
+  if (!$('#tileZ').value) return;
+  const z = +$('#tileZ').value, lat = clamp(+$('#tileLat').value || 0, -85, 85);
+  TER.realW = tileWidthM(z, lat); TER.realSrc = `一張 z${z} 圖磚、緯度 ${lat}°`; $('#realKm').value = (TER.realW / 1000).toFixed(2);
+  applyHeightScale(true); syncLabels(); mapChanged();
+});
 
 /* ================= City maps (Taipei data file, or an imported .osm) ================= */
 const CITY = { taipei: null, osm: null };
@@ -311,6 +381,9 @@ function loadTaipei() {
     return (CITY.taipei = finishCity({ kind: 'city', id: 'taipei', name: d.name, sx, sz, nx, nz, raw, mask, base: 0, water: 0.35, roads, blds, env, tiles, skyline: sky, credits: d.credits + (o ? '；' + o.credits : '') + (sky ? '；' + sky.note : '') }));
   });
 }
+// lat/lon → metres east (x) / south (z) of (lat0, lon0): local equirectangular with WGS84 metres per degree at lat0
+// (was 111320·cos φ0 and a fixed 110540 m per degree of latitude: −0.21 % north–south at 25°N)
+function lonLatProjector(lat0, lon0) { const [kx, ky] = degMetres(lat0); return ([la, lo]) => [(lo - lon0) * kx, -(la - lat0) * ky]; }
 function parseOSM(text, fileName) {
   const doc = new DOMParser().parseFromString(text, 'application/xml');
   if (doc.getElementsByTagName('parsererror').length) throw new Error('不是有效的 OSM XML 檔。');
@@ -321,10 +394,9 @@ function parseOSM(text, fileName) {
   const bd = doc.getElementsByTagName('bounds')[0];
   if (bd) { la0 = +bd.getAttribute('minlat'); la1 = +bd.getAttribute('maxlat'); lo0 = +bd.getAttribute('minlon'); lo1 = +bd.getAttribute('maxlon'); }
   else for (const [la, lo] of nodes.values()) { la0 = Math.min(la0, la); la1 = Math.max(la1, la); lo0 = Math.min(lo0, lo); lo1 = Math.max(lo1, lo); }
-  const lat0 = (la0 + la1) / 2, lon0 = (lo0 + lo1) / 2, kx = 111320 * Math.cos(lat0 * Math.PI / 180), ky = 110540;
+  const lat0 = (la0 + la1) / 2, lon0 = (lo0 + lo1) / 2, P = lonLatProjector(lat0, lon0), [kx, ky] = degMetres(lat0);
   const sx = Math.max(600, Math.ceil(((lo1 - lo0) * kx + 160) / 10) * 10), sz = Math.max(600, Math.ceil(((la1 - la0) * ky + 160) / 10) * 10);
   if (sx > 12000 || sz > 12000) throw new Error(`範圍 ${(sx / 1000).toFixed(1)} × ${(sz / 1000).toFixed(1)} km 太大，請匯出 10 km 以內的範圍。`);
-  const P = ([la, lo]) => [(lo - lon0) * kx, -(la - lat0) * ky];
   const HW = { motorway: 0, trunk: 0, primary: 1, secondary: 2, tertiary: 3, residential: 4, unclassified: 4, living_street: 4, service: 4, road: 4, motorway_link: 5, trunk_link: 5, primary_link: 5, secondary_link: 5, tertiary_link: 5 };
   const roads = [], blds = [], water = [];
   for (const w of doc.getElementsByTagName('way')) {
@@ -670,7 +742,19 @@ function gridSample(arr, x, z) {
   const p = arr[o], q = arr[o + 1], c = arr[o + W.nx], d = arr[o + W.nx + 1];
   return p + (q - p) * a + (c - p) * b + (p - q - c + d) * a * b;
 }
-const Hq = (x, z) => gridSample(W.H, x, z);
+// the ground as drawn: the ground mesh splits every cell (i, j) along the diagonal (i+1, j)–(i, j+1) (its index buffer in
+// buildMeshes), so heights come from the triangle under (x, z), not a bilinear blend of the four corners (on the steep
+// generated terrain the two differed by up to 0.115 m and the drawn ground poked through the asphalt; tools/test/js/height_mesh.js)
+function gridTri(arr, x, z) {
+  const fx = clamp((x + W.sx / 2) / W.sx * (W.nx - 1), 0, W.nx - 1.0001), fz = clamp((z + W.sz / 2) / W.sz * (W.nz - 1), 0, W.nz - 1.0001);
+  const i = fx | 0, j = fz | 0, a = fx - i, b = fz - j, o = j * W.nx + i;
+  const p = arr[o], q = arr[o + 1], c = arr[o + W.nx], d = arr[o + W.nx + 1];
+  return a + b <= 1 ? p + (q - p) * a + (c - p) * b   // triangle (i, j), (i+1, j), (i, j+1)
+    : d + (d - c) * (a - 1) + (d - q) * (b - 1);        // triangle (i+1, j), (i, j+1), (i+1, j+1)
+}
+const Hq = (x, z) => gridTri(W.H, x, z);
+// the slope of the drawn triangles over the car's footprint (±1.5 m). Not the plane of the single triangle under the
+// car: that normal jumps at every crease (up to 8° per frame on 丘陵, measured), which the car's attitude and grade force follow
 function normalAt(x, z, out) { const e = 1.5; out.set(-(Hq(x + e, z) - Hq(x - e, z)) / (2 * e), 1, -(Hq(x, z + e) - Hq(x, z - e)) / (2 * e)).normalize(); return out; }
 function smoothCirc(a, rad, passes) {
   const n = a.length, tmp = new Float32Array(n);
@@ -861,6 +945,19 @@ function otherStretchNear(k, x, z, r) {
 // surface height for the track at sample k: the deck where the lap is elevated, the ground elsewhere
 const onDeck = k => W.anyElev && k >= 0 && W.elev[k % W.n] > 0;
 const Sq = (x, z, k) => onDeck(k) ? W.deck[k % W.n] : Hq(x, z);
+// how far above Sq the surface under a car at lateral offset lat of sample k is drawn: the asphalt ribbon 0.05 m (so it never
+// z-fights with the ground mesh), road-course kerbs 0.09 m, gravel 0.035 m. The car (physics height and model) sits on it, so
+// the tyres no longer sink 5 cm into the asphalt. In the city it stays 0.05 m: the car hardly leaves the carriageway there, and
+// stepping down 2 cm onto the street mesh at every side-street opening only shook the car. Smoothstep over the 1 m past the
+// asphalt edge, so crossing it is a slope, not a step
+function surfLift(k, lat) {
+  if (!(k >= 0) || !W.n) return 0;
+  k %= W.n; const al = Math.abs(lat), sd = lat > 0 ? 1 : -1, hw = sd > 0 ? W.hwL[k] : W.hwR[k];
+  if (W.city) return 0.05;
+  const out = al < hw + 1.5 && W.kerb[k] ? 0.09 : al >= hw + 1.5 && al < hw + 17 && W.grav[k] === sd ? 0.035 : 0;
+  const w = smooth(0, 1, al - hw); // 0 on the asphalt, 1 from 1 m past its edge
+  return 0.05 + (out - 0.05) * w;
+}
 function normalS(x, z, k, out) {
   if (!onDeck(k)) return normalAt(x, z, out);
   const n = W.n, a = (k - 2 + n) % n, b = (k + 2) % n, g = (W.deck[b] - W.deck[a]) / (4 * W.ds); // the deck is flat across, sloped along
@@ -913,11 +1010,14 @@ function buildWorld() {
   const tgt = new Float32Array(NX * NZ), HW = new Float32Array(NX * NZ), R = W.hwMax + (W.city ? 28 : 48), R2 = R * R, rci = Math.ceil(R / cx), rcj = Math.ceil(R / cz);
   for (let k = 0; k < n; k++) {
     const gi = Math.round((X[k] + W.sx / 2) / cx), gj = Math.round((Z[k] + W.sz / 2) / cz);
+    // grid nodes take the height of their nearest sample k; carry it on along the track at k's grade (the nearest sample is
+    // up to half a sample spacing ahead or behind: without this the carved road steps by grade × ds, which twists the cells)
+    const tx = -LZ[k], tz = LX[k], gr = (TH[(k + 1) % n] - TH[(k - 1 + n) % n]) / (2 * W.ds);
     for (let j = Math.max(0, gj - rcj); j <= Math.min(NZ - 1, gj + rcj); j++) {
       const dz = -W.sz / 2 + j * cz - Z[k];
       for (let i = Math.max(0, gi - rci); i <= Math.min(NX - 1, gi + rci); i++) {
         const dx = -W.sx / 2 + i * cx - X[k], d2 = dx * dx + dz * dz, o = j * NX + i;
-        if (d2 < R2 && d2 < D[o]) { D[o] = d2; HW[o] = Math.max(W.hwL[k], W.hwR[k]); tgt[o] = W.elev[k] > 0 ? NaN : TH[k] + BK[k] * clamp(dx * LX[k] + dz * LZ[k], -HW[o] - 5, HW[o] + 5); }
+        if (d2 < R2 && d2 < D[o]) { D[o] = d2; HW[o] = Math.max(W.hwL[k], W.hwR[k]); tgt[o] = W.elev[k] > 0 ? NaN : TH[k] + gr * (dx * tx + dz * tz) + BK[k] * clamp(dx * LX[k] + dz * LZ[k], -HW[o] - 5, HW[o] + 5); }
       }
     }
   }
@@ -929,19 +1029,35 @@ function buildWorld() {
   for (let k = 0; k < n; k++) TH[k] = W.elev[k] > 0 ? W.deck[k] : Hq(X[k], Z[k]);
   // gravel traps on the outside of tighter corners (and the run-off past the exit); barriers per side
   if (W.wall !== Infinity && W.real) W.wall = W.hwMax + 0.5;
-  W.grav = new Int8Array(n);
+  W.grav = new Int8Array(n); W.runoff = new Int8Array(n); // runoff: the wide run-off (barrier 17 m out) on the outside of corners; grav: the part of it that is gravel
   if (!W.city) {
     const Ks = Float32Array.from(KA); smoothCirc(Ks, 6, 2);
     const g0 = new Int8Array(n); for (let k = 0; k < n; k++) if (Math.abs(Ks[k]) > 1 / 170) g0[k] = Ks[k] > 0 ? -1 : 1;
-    for (let k = 0; k < n; k++) if (g0[k]) for (let o = -4; o <= Math.round(70 / W.ds); o++) { const j = (k + o + n) % n; if (!W.grav[j]) W.grav[j] = g0[k]; }
+    // no gravel where the run-off is steeper than 8 % (along the track or across the trap): on a 11–15 % slope gravel's rolling
+    // drag (0.18) plus the climb asks more than its grip (0.6 on the driven rear axle) can give, so a car that stops there
+    // can never drive out. Real circuits put gravel on flat run-off for the same reason; steep run-off stays grass (same width,
+    // same barrier line: only the surface changes)
+    const steep = (j, sd) => { // steepest ground (gradient magnitude, any direction, over 4 m) across the trap at sample j
+      const hs = sd > 0 ? W.hwL[j] : W.hwR[j]; let g = 0;
+      for (const t of [1.5, 5, 9, 13, 17]) { const x = X[j] + LX[j] * (hs + t) * sd, z = Z[j] + LZ[j] * (hs + t) * sd; g = Math.max(g, Math.hypot(Hq(x + 2, z) - Hq(x - 2, z), Hq(x, z + 2) - Hq(x, z - 2)) / 4); }
+      return g > GRAVEL_MAX_GRADE;
+    };
+    for (let k = 0; k < n; k++) if (g0[k]) for (let o = -4; o <= Math.round(70 / W.ds); o++) { const j = (k + o + n) % n; if (!W.runoff[j]) { W.runoff[j] = g0[k]; if (!steep(j, g0[k])) W.grav[j] = g0[k]; } }
+    for (let k = 0; k < n; ) { if (!W.grav[k]) { k++; continue; } let e = k; while (e < n && W.grav[e] === W.grav[k]) e++; if ((e - k) * W.ds < 20 && k > 0 && e < n) W.grav.fill(0, k, e); k = e; } // no gravel scraps
   }
   W.wallL = new Float32Array(n).fill(Infinity); W.wallR = new Float32Array(n).fill(Infinity);
   if (setup.walls) for (let k = 0; k < n; k++) for (const side of [1, -1]) {
     const hs = side > 0 ? W.hwL[k] : W.hwR[k];
-    let off = W.real ? (W.elev && W.elev[k] > 0 ? hs - 0.2 : hs + 0.5) : W.city ? hs + 3.2 : W.grav[k] === side ? hs + 17 : hs + 13; // Taipei: water barriers on the kerb line, on a viaduct just inside the parapet
+    let off = W.real ? (W.elev && W.elev[k] > 0 ? hs - 0.2 : hs + 0.5) : W.city ? hs + 3.2 : W.runoff[k] === side ? hs + 17 : hs + 13; // Taipei: water barriers on the kerb line, on a viaduct just inside the parapet
     const wx = X[k] + LX[k] * off * side, wz = Z[k] + LZ[k] * off * side;
     if (gridSample(D, wx, wz) < off - 3 && (!W.anyElev || otherStretchNear(k, wx, wz, off - 3))) off = Infinity; // another stretch of track is nearer: leave a gap
     (side > 0 ? W.wallL : W.wallR)[k] = off;
+  }
+  if (!W.city) for (const arr of [W.wallL, W.wallR]) { // where a run-off ends the barrier stepped 4 m (17 → 13 m out) and threw a car
+    // running along it 4 m sideways in one step: taper it at 1 : 5 instead
+    const lim = 0.2 * W.ds;
+    for (let pass = 0; pass < 2; pass++) { for (let i = 0; i < 2 * n; i++) { const k = i % n, p = (k - 1 + n) % n; if (isFinite(arr[k]) && isFinite(arr[p])) arr[k] = Math.max(arr[k], arr[p] - lim); }
+      for (let i = 2 * n - 1; i >= 0; i--) { const k = i % n, q = (k + 1) % n; if (isFinite(arr[k]) && isFinite(arr[q])) arr[k] = Math.max(arr[k], arr[q] - lim); } }
   }
   for (const arr of [W.wallL, W.wallR]) { // drop barrier fragments shorter than 30 m
     let k = 0; while (k < n) { if (!isFinite(arr[k])) { k++; continue; } let e = k; while (e < n && isFinite(arr[e])) e++; if ((e - k) * W.ds < 30 && !(k === 0 || e === n)) for (let j = k; j < e; j++) arr[j] = Infinity; k = e; }
@@ -1594,19 +1710,33 @@ function buildMeshes() {
     grp.add(new THREE.Mesh(wg, new THREE.MeshStandardMaterial({ color: lin(0x2c4650), roughness: 0.12, metalness: 0.15, envMapIntensity: 1.3, normalMap: TEX.waterN, normalScale: new THREE.Vector2(0.35, 0.35) })));
   }
   // --- city streets (not the circuit)
+  // vertices at Hq + 0.03 on the OSM nodes alone used to span tens of metres, and the flat triangles between them rose up to
+  // 0.16 m above the circuit asphalt (Hq + 0.05) where a street runs along or across the lap. Streets near the circuit get a row
+  // every 2 m and a column every ~2 m across (same columns along the whole street, so no T-junction cracks): they then follow
+  // the ground as closely as the asphalt does and stay 0.02 m under it
   if (W.city) defer(() => {
     const g = ribbonGeo((push, I) => {
-      const grey = lin(0x6f6f6f);
+      const grey = lin(0x6f6f6f), nearC = (x, z) => gridSample(D, x, z) < W.hwMax + 25;
       for (const r of M.roads) {
-        const pts = r.p, m = pts.length / 2, hwR = (r.w || ROAD_W[r.c]) / 2; if (m < 2 || r.lay > 0) continue; let s = 0, prevBase = -1;
+        const pts = r.p, m = pts.length / 2, hwR = (r.w || ROAD_W[r.c]) / 2; if (m < 2 || r.lay > 0) continue;
+        let close = false;
+        for (let i = 0; i < m && !close; i++) { close = nearC(pts[i * 2], pts[i * 2 + 1]);
+          if (!close && i + 1 < m) { const L = Math.hypot(pts[i * 2 + 2] - pts[i * 2], pts[i * 2 + 3] - pts[i * 2 + 1]); for (let f = 4; f < L && !close; f += 4) { const t = f / L; close = nearC(pts[i * 2] + (pts[i * 2 + 2] - pts[i * 2]) * t, pts[i * 2 + 1] + (pts[i * 2 + 3] - pts[i * 2 + 1]) * t); } } }
+        const cols = close ? Math.max(1, Math.ceil(hwR)) : 1, rows = []; // [x, z, tx, tz, s]
+        let s = 0;
         for (let i = 0; i < m; i++) {
           const a = Math.max(0, i - 1), b = Math.min(m - 1, i + 1); let tx = pts[b * 2] - pts[a * 2], tz = pts[b * 2 + 1] - pts[a * 2 + 1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
           if (i) s += Math.hypot(pts[i * 2] - pts[i * 2 - 2], pts[i * 2 + 1] - pts[i * 2 - 1]);
-          const x = pts[i * 2], z = pts[i * 2 + 1], lx = tz, lz = -tx;
-          const v0 = push(x + lx * hwR, Hq(x + lx * hwR, z + lz * hwR) + 0.03, z + lz * hwR, 0, s / 8, grey);
-          push(x - lx * hwR, Hq(x - lx * hwR, z - lz * hwR) + 0.03, z - lz * hwR, 1, s / 8, grey);
-          if (prevBase >= 0) I.push(prevBase, v0, prevBase + 1, prevBase + 1, v0, v0 + 1);
-          prevBase = v0;
+          rows.push([pts[i * 2], pts[i * 2 + 1], tx, tz, s]);
+          if (close && i + 1 < m) { const dx = pts[i * 2 + 2] - pts[i * 2], dz = pts[i * 2 + 3] - pts[i * 2 + 1], L = Math.hypot(dx, dz), q = Math.ceil(L / 2);
+            for (let j = 1; j < q; j++) { const t = j / q, x = pts[i * 2] + dx * t, z = pts[i * 2 + 1] + dz * t; if (nearC(x, z)) rows.push([x, z, dx / L, dz / L, s + L * t]); } }
+        }
+        let prevBase = -1;
+        for (const [x, z, tx, tz, sr] of rows) {
+          const lx = tz, lz = -tx, base = push(x + lx * hwR, Hq(x + lx * hwR, z + lz * hwR) + 0.03, z + lz * hwR, 0, sr / 8, grey);
+          for (let q = 1; q <= cols; q++) { const o = hwR - 2 * hwR * q / cols, px = x + lx * o, pz = z + lz * o; push(px, Hq(px, pz) + 0.03, pz, q / cols, sr / 8, grey); }
+          if (prevBase >= 0) for (let q = 0; q < cols; q++) I.push(prevBase + q, base + q, prevBase + q + 1, prevBase + q + 1, base + q, base + q + 1);
+          prevBase = base;
         }
       }
     });
@@ -1791,7 +1921,7 @@ function buildMeshes() {
     let i = 0;
     for (let tries = 0; tries < cnt * 2 && i < cnt; tries++) {
       const k = Math.floor(tr() * n), sd = tr() < 0.5 ? 1 : -1, lat = sd * (hw + 2.5 + Math.pow(tr(), 1.6) * 30);
-      if (W.grav[k] === sd && Math.abs(lat) < hw + 18) continue;
+      if (W.runoff[k] === sd && Math.abs(lat) < hw + 18) continue;
       const wl = (sd > 0 ? W.wallL : W.wallR)[k]; if (Math.abs(Math.abs(lat) - wl) < 1) continue;
       const x = X[k] + W.lx[k] * lat, z = Z[k] + W.lz[k] * lat; if (gridSample(D, x, z) < hw + 2) continue;
       const s2 = 0.5 + tr() * 0.6; sc.set(s2 * 0.9, s2 * 0.38, s2 * 0.9); ps.set(x, Hq(x, z) - 0.03, z); eu.set(0, tr() * Math.PI, 0); q4.setFromEuler(eu); m4.compose(ps, q4, sc);
@@ -2051,7 +2181,7 @@ function placeCar(k, lat = 0, keepTyres = false) {
     thr: 0, brk: 0, aF: 0, aR: 0, Fzf: 0, Fzr: 0, down: 0, drag: 0, rho: 1.2, surf: 0, spin: false, lockF: false, tcAct: false, grade: 0, bankV: 0,
     tf, tr: trr, hit: 0,
   });
-  car.y = Sq(car.x, car.z, car.k);
+  car.y = Sq(car.x, car.z, car.k) + surfLift(car.k, lat);
 }
 
 function physicsStep(dt, inp) {
@@ -2062,7 +2192,7 @@ function physicsStep(dt, inp) {
   const surf = al < hw ? 0 : (al < hw + 1.5 && W.kerb[loc.k]) ? 1 : (gs && Math.sign(loc.lat) === gs && al < hw + 17) ? 3 : 2; c.surf = surf;
   const off = surf === 2 && W.city; // city run-off is pavement, not grass
   const mu0 = [1.9 * ATMO.grip, 1.55 * ATMO.grip, off ? 1.05 : 0.85, 0.6][surf], crr = [0.012, 0.02, off ? 0.02 : 0.06, 0.18][surf];
-  const h = Sq(c.x, c.z, loc.k); c.y = h; normalS(c.x, c.z, loc.k, nrm);
+  const h = Sq(c.x, c.z, loc.k); c.y = h + surfLift(loc.k, loc.lat); normalS(c.x, c.z, loc.k, nrm);
   const cp = Math.cos(c.psi), sn = Math.sin(c.psi);
   fp.set(cp, 0, -sn); fp.addScaledVector(nrm, -fp.dot(nrm)).normalize();
   lp.crossVectors(nrm, fp);
@@ -2174,9 +2304,16 @@ function physicsStep(dt, inp) {
       Vx -= 1.12 * vn * Lx; Vz -= 1.12 * vn * Lz;
       const scrub = 1 - Math.min(0.22, 0.015 * Math.abs(vn)); Vx *= scrub; Vz *= scrub;
       const tf = Math.atan2(-W.lx[loc.k], -W.lz[loc.k]);
-      let dpsi = tf - c.psi; dpsi = Math.atan2(Math.sin(dpsi), Math.cos(dpsi)); if (Math.abs(dpsi) < Math.PI / 2) c.psi += dpsi * 0.35;
+      // the nose is turned back (and the yaw damped) only while it points into the barrier: a car resting against it with the
+      // nose already turned away (sliding into it down a cross slope, or a standing start beside it) must be free to steer
+      // off, or it stays pinned there (丘陵 run-off; 中正 start grid, seed 8; 2026-10-24). On road courses "into" is taken
+      // across the track rather than across the barrier line: where a run-off ends the line closes in at 1 : 5, and a car
+      // running parallel to the track there would count as nosing into it on every step and could never turn away
+      const into = W.city ? (Math.cos(c.psi) * Lx - Math.sin(c.psi) * Lz) * s > 0
+        : (Math.cos(c.psi) * W.lx[loc.k] - Math.sin(c.psi) * W.lz[loc.k]) * (Math.sign(loc.lat + dx * W.lx[loc.k] + dz * W.lz[loc.k]) || 1) > 0;
+      let dpsi = tf - c.psi; dpsi = Math.atan2(Math.sin(dpsi), Math.cos(dpsi)); if (into && Math.abs(dpsi) < Math.PI / 2) c.psi += dpsi * 0.35;
       const cp2 = Math.cos(c.psi), sn2 = Math.sin(c.psi), fx2 = cp2, fz2 = -sn2, lx2 = -sn2, lz2 = -cp2;
-      c.vx = Vx * fx2 + Vz * fz2; c.vy = Vx * lx2 + Vz * lz2; c.r *= 0.3;
+      c.vx = Vx * fx2 + Vz * fz2; c.vy = Vx * lx2 + Vz * lz2; if (into) c.r *= 0.3;
       c.hit = Math.max(c.hit, Math.abs(vn)); c.wallT = state.t; // raceUpdate clears hit every frame; autoRecover reads the time
     }
   }
@@ -2513,7 +2650,7 @@ let camInit = false, shake = 0;
 function updateCarVisual() {
   const c = car, mdl = carModel;
   if (headlight.parent !== mdl.root) mdl.root.add(headlight, headlight.target);
-  c.y = Sq(c.x, c.z, c.k); normalS(c.x, c.z, c.k, nrm);
+  c.y = Sq(c.x, c.z, c.k) + surfLift(c.k, c.lat); normalS(c.x, c.z, c.k, nrm);
   const cp = Math.cos(c.psi), sn = Math.sin(c.psi);
   fp.set(cp, 0, -sn); fp.addScaledVector(nrm, -fp.dot(nrm)).normalize(); rt.crossVectors(fp, nrm);
   m4.makeBasis(fp, nrm, rt); mdl.root.quaternion.setFromRotationMatrix(m4); mdl.root.position.set(c.x, c.y, c.z);
@@ -2723,7 +2860,7 @@ function applyLevel() {
 }
 document.querySelectorAll('#level button').forEach(b => b.onclick = () => { setup.level = b.dataset.l; applyLevel(); readSetup(); });
 function mapChanged() { mapDirty = true; drawEditorBase(); drawEditor(); updateStartBtn(); }
-['size', 'range', 'base'].forEach(id => $('#' + id).addEventListener('input', () => { syncLabels(); readSetup(); mapDirty = true; if (id !== 'base' && setup.map === 'terrain') { drawEditorBase(); drawEditor(); } updateStartBtn(); }));
+['size', 'range', 'base'].forEach(id => $('#' + id).addEventListener('input', () => { syncLabels(); readSetup(); if (id === 'size' && TER.metersRaw && TER.realW && TER.source === 'file') applyHeightScale(false); /* known real width: keep slopes real */ mapDirty = true; if (id !== 'base' && setup.map === 'terrain') { drawEditorBase(); drawEditor(); } updateStartBtn(); }));
 ['width', 'banking', 'walls', 'wideCorners'].forEach(id => $('#' + id).addEventListener('input', () => { syncLabels(); readSetup(); mapDirty = true; updateStartBtn(); }));
 ['aero', 'bias', 'tc', 'abs', 'auto', 'steer', 'assist', 'autogas', 'sound', 'touchOn', 'laps', 'aiCount', 'aiSkill'].forEach(id => $('#' + id).addEventListener('input', () => { syncLabels(); readSetup(); applyControls(); }));
 document.querySelectorAll('#presets .btn').forEach(b => b.onclick = () => {
@@ -3155,7 +3292,7 @@ function poseOpponent(c) {
   for (const w of c.model.wheels) { w.spin.rotation.z = -c.wheel; if (w.front) w.pivot.rotation.y = Math.atan(W.kappa[k] * SPEC.L); }
 }
 function poseModel(mdl, x, z, psi, k = -1) {
-  const y = Sq(x, z, k); normalS(x, z, k, nrm);
+  const y = Sq(x, z, k) + (k >= 0 ? surfLift(k, (x - W.x[k % W.n]) * W.lx[k % W.n] + (z - W.z[k % W.n]) * W.lz[k % W.n]) : 0); normalS(x, z, k, nrm);
   fp.set(Math.cos(psi), 0, -Math.sin(psi)); fp.addScaledVector(nrm, -fp.dot(nrm)).normalize(); rt.crossVectors(fp, nrm);
   m4.makeBasis(fp, nrm, rt); mdl.root.quaternion.setFromRotationMatrix(m4); mdl.root.position.set(x, y, z);
 }
