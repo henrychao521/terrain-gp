@@ -13,6 +13,8 @@ drives it in Google Chrome with Playwright, prints one JSON object on stdout and
   python3 tools/test/run.py quick            walls + line + ai (60 s per preset) + envelope
   python3 tools/test/run.py bench            frame rate (real time, alone on the machine)
   python3 tools/test/run.py novice           keyboard novice bot (real time, alone on the machine)
+  python3 tools/test/run.py phys             physics / clipping audit in Node, no browser (tools/test/physaudit.py)
+  python3 tools/test/run.py quick --no-browser   only the checks that need no Chrome (phys, quick set); lists the skipped ones
 """
 import argparse
 import contextlib
@@ -24,6 +26,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import harness as H  # noqa: E402
 import instrument as I  # noqa: E402
+import physaudit as PA  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(HERE))
 
@@ -275,6 +278,10 @@ def main():
     p = sub.add_parser('quick', help='walls + line + ai (short) + envelope')
     presets(p)
     p.add_argument('--ai-secs', type=float, default=60, help='simulated seconds per ai race (default 60)')
+    p.add_argument('--no-browser', action='store_true', help='run only what needs no Chrome (the Node physics audit) and list the rest as skipped')
+    p = sub.add_parser('phys', help='physics and clipping audit in Node, no browser (tools/test/physaudit.py)')
+    presets(p)
+    p.add_argument('--set', default='full', choices=sorted(PA.SETS))
     p = sub.add_parser('bench', help='frame rate in a Taipei race (real time; run alone)')
     p.add_argument('--preset', type=int, default=0)
     p.add_argument('--quality', default='high', choices=['low', 'mid', 'high'])
@@ -292,6 +299,24 @@ def main():
     H.interruptible()
 
     src = None if a.url else {'path': os.path.realpath(a.src), **H.git_info(a.src)}
+    if a.check == 'phys' or (a.check == 'quick' and a.no_browser):
+        try:
+            out, _ = PA.run(os.path.realpath(a.src), a.presets, getattr(a, 'set', 'quick') if a.check == 'phys' else 'quick', a.out_root)
+        except (I.InstrumentError, OSError) as e:
+            H.dump({'check': a.check, 'ok': False, 'harnessError': str(e), 'src': src})
+            return 2
+        out['src'] = src
+        if a.check == 'quick':
+            import subprocess
+            unit = {}
+            for t in ('opponents_test.js', 'recover_test.js'):  # P1 / P2 regression tests on the game.js code itself
+                r = subprocess.run(['node', os.path.join(HERE, 'node', t), os.path.join(os.path.realpath(a.src), 'game.js')], capture_output=True, text=True, timeout=600)
+                unit[t] = {'ok': r.returncode == 0, 'out': r.stdout.strip().split('\n')}
+                if r.returncode: out['failures'].append(f'{t}: ' + ' / '.join(l for l in r.stdout.split('\n') if 'FAIL' in l)); out['ok'] = False
+            out = {'check': 'quick', 'src': src, 'checks': {'phys': out, 'unit': unit}, 'skipped': ['walls+line（要 Chrome 的 WebGL 射線與行車線）', 'ai（瀏覽器內的電腦車比賽）', 'envelope（瀏覽器內的性能包絡）'],
+                   'ok': out['ok'], 'failures': ['phys: ' + f for f in out['failures']]}
+        H.dump(out)
+        return 0 if out['ok'] else 1
     try:
         with session(a) as (br, url):
             if a.check == 'quick':

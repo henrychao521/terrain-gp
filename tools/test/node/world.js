@@ -2,7 +2,7 @@
 //
 //   node tools/test/node/world.js <instrumented copy dir> <spec json>
 //
-// spec: {"preset": 0}  or  {"loop": [[X, Y], ...]}  (data coordinates, m east / north of TWD97 E 299000 / N 2766400)
+// spec: {"preset": 0}  or  {"loop": [[X, Y], ...]}  or  {"pack": "<track pack file>", "id": "<track id>"}  (data coordinates, m east / north of TWD97 E 299000 / N 2766400)
 //
 // The copy comes from tools/test/instrument.py (window.TGP); this script adds a few more internals (cityPreset,
 // trackPts) and runs the page with a stand-in DOM: every element is a stub that keeps what is written to it and
@@ -113,7 +113,7 @@ T3.TextureLoader.prototype.load = function (url, onLoad, onProgress, onError) { 
 T3.DRACOLoader = function () { return { setDecoderPath: noop, setWorkerLimit: noop, preload: noop, dispose: noop }; };
 
 // ---------------------------------------------------------------- the game
-const EXTRA = "window.TGPX = { cityPreset: (M, i) => cityPreset(M, i), setPts: p => { trackPts = p; }, TP_CIRCUITS, TP_ELEVATED, loadTaipei, TEX };\nwindow.TGP = (() =>";
+const EXTRA = "window.TGPX = { cityPreset: (M, i) => cityPreset(M, i), setPts: p => { trackPts = p; }, TP_CIRCUITS, TP_ELEVATED, loadTaipei, TEX, raceUpdate: () => raceUpdate(), startLap: () => startLap(), trackLocate: (x, z, k) => trackLocate(x, z, k), resetRace: () => resetRace(), runLater: ms => (typeof runLater === 'function' ? runLater(ms) : 0), normalS: (...a) => normalS(...a), RACE, ATMO };\nwindow.TGP = (() =>";
 let src = fs.readFileSync(path.join(copy, 'game.js'), 'utf8');
 if (src.split('window.TGP = (() =>').length !== 2) { console.error('world.js: the copy is not instrumented (run instrument.py first)'); process.exit(2); }
 src = src.replace('window.TGP = (() =>', EXTRA);
@@ -173,16 +173,22 @@ function dumpScene(W, file, R) {
   await X.loadTaipei();
   const M = TGP.CITY.taipei; TGP.setup.map = 'taipei'; TGP.setup.reverse = false;
   let idx = spec.preset;
+  if (spec.pack) { // a track from a track pack file (data/trackpacks), whether or not the game lists the pack
+    const P = JSON.parse(fs.readFileSync(spec.pack, 'utf8')), t = (P.tracks || []).find(t => t.id === spec.id) || (P.tracks || [])[0];
+    if (!t) { origErr('world.js: no track ' + spec.id + ' in ' + spec.pack); process.exit(2); }
+    spec.loop = t.loop; spec.elevated = !!t.elevated; spec.id = t.id;
+  }
   if (spec.loop) { X.TP_CIRCUITS.push(spec.loop); X.TP_ELEVATED.push(!!spec.elevated); idx = X.TP_CIRCUITS.length - 1; }
   if (X.TP_ELEVATED[idx]) TGP.setup.elevated = true;
   X.setPts(X.cityPreset(M, idx));
-  TGP.buildWorld();
+  TGP.buildWorld(); X.runLater(Infinity); // the parts of the build the game leaves for the next frames
   const W = TGP.W, n = W.n, r1 = v => Math.round(v * 1000) / 1000;
   const surf = new Float32Array(n); for (let k = 0; k < n; k++) surf[k] = TGP.Sq(W.x[k], W.z[k], k);
   const seq = []; for (let k = 0; k < n; k++) { const nm = W.rname[k] + (W.elev[k] > 0 ? '^' : ''); if (!seq.length || seq[seq.length - 1][0] !== nm) seq.push([nm, 0]); seq[seq.length - 1][1] += W.ds; }
   const out = {
     spec, n, ds: W.ds, len: Math.round(W.len), sx: W.sx, sz: W.sz,
     x: Array.from(W.x, r1), z: Array.from(W.z, r1), lx: Array.from(W.lx, r1), lz: Array.from(W.lz, r1), hwL: Array.from(W.hwL, r1), hwR: Array.from(W.hwR, r1),
+    wallL: Array.from(W.wallL, v => (isFinite(v) ? r1(v) : null)), wallR: Array.from(W.wallR, v => (isFinite(v) ? r1(v) : null)), // barrier offsets (null: none); the car reaches barrier - 1 m
     surf: Array.from(surf, r1), elev: Array.from(W.elev, r1), rname: Array.from(W.rname), two: Array.from(W.two), lanes: Array.from(W.lanes),
     activeTiles: (W.activeTiles || []).map(t => ({ file: t.file, x0: t.x0, x1: t.x1, z0: t.z0, z1: t.z1 })),
     viaductM: Math.round(Array.from(W.elev).filter(v => v > 0).length * W.ds),
@@ -195,7 +201,7 @@ function dumpScene(W, file, R) {
   // glTF content (Blender tiles, props) does not load in Node; tools/streetview/blender_render.py imports it itself.
   if (spec.dump) out.dump = dumpScene(TGP.W, spec.dump, spec.dumpR || 300);
   // optional: run one of tools/test/js/*.js against this world (the same function Playwright evaluates in the page)
-  if (spec.check) { try { out.check = await vm.runInThisContext('(' + fs.readFileSync(path.join(__dirname, '..', 'js', spec.check), 'utf8') + ')')(spec.arg); } catch (e) { out.check = { error: String(e && e.stack || e).slice(0, 400) }; } }
+  if (spec.check) { try { out.check = await vm.runInThisContext('(' + fs.readFileSync(path.isAbsolute(spec.check) ? spec.check : path.join(__dirname, '..', 'js', spec.check), 'utf8') + ')')(spec.arg); } catch (e) { out.check = { error: String(e && e.stack || e).slice(0, 400) }; } }
   fs.writeSync(1, JSON.stringify(out)); // synchronous: process.exit would cut a piped stdout at 64 KB
   process.exit(0);
 })().catch(e => { origErr('world.js: ' + (e.stack || e)); process.exit(2); });

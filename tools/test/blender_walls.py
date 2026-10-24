@@ -5,7 +5,8 @@
 Each track.json comes from tools/test/node/world.js (centreline, half widths, surface height, tiles). The Blender
 tiles the track passes through (bounds within 20 m) are imported once; from every second centreline sample, 1 m
 above the road, a ray goes sideways to the road edge on each side (hwL / hwR). A hit on a tile's building or
-landmark mesh is a wall. Two extra counts that the browser check does not have: rays at 4 m and 8 m above the road
+landmark mesh is a wall. The rays reach the barrier - 1 m (where the car can actually go; TGP_RAY=kerb for the road edge
+only), the same as js/walls.js. Two extra counts that the browser check does not have: rays at 4 m and 8 m above the road
 (upper floors overhanging the carriageway, which a car does not touch but which look wrong), and rays at 1 m against
 the arcade columns of <tile>.inst.json (instanced in the game, so js/walls.js never sees them). Coordinates: the tiles are glTF in the game's world frame (x east, y up, z south);
 Blender's importer turns that into x, -z, y.
@@ -67,12 +68,20 @@ for f in files:
     c = columns(f)
     if c: cols.append((os.path.basename(f), c))
 
+# how far a ray goes: the band the car can reach, up to its barrier - 1 m (the car's centre is held there; P5), never less than
+# the road edge. TGP_RAY=kerb: only to the road edge (hwL / hwR), as before 2026-10. Tracks without wallL / wallR use the road edge.
+KERB_ONLY = os.environ.get('TGP_RAY') == 'kerb'
+def reach(t, k, sd):
+    hw = t['hwL'][k] if sd > 0 else t['hwR'][k]; wl = (t.get('wallL') if sd > 0 else t.get('wallR')) or None
+    w = wl[k] if wl and not KERB_ONLY else None
+    return max(hw, w - 1.0) if w is not None else hw
+
 results = []
 for t, path in zip(tracks, TRACKS):
     n, at, rays = t['n'], [], 0
     for k in range(0, n, 2):
         for sd in (1, -1):
-            hs = t['hwL'][k] if sd > 0 else t['hwR'][k]
+            hs = reach(t, k, sd)
             o = Vector((t['x'][k], -t['z'][k], t['surf'][k] + 1.0)); d = Vector((t['lx'][k] * sd, -t['lz'][k] * sd, 0.0)).normalized(); rays += 1
             best = None
             for tr, nm in zip(trees, names):
@@ -86,7 +95,7 @@ for t, path in zip(tracks, TRACKS):
     over, colhits, pierhits = [], [], []
     for k in range(0, n, 2):
         for sd in (1, -1):
-            hs = t['hwL'][k] if sd > 0 else t['hwR'][k]; d = Vector((t['lx'][k] * sd, -t['lz'][k] * sd, 0.0)).normalized()
+            hs = reach(t, k, sd); d = Vector((t['lx'][k] * sd, -t['lz'][k] * sd, 0.0)).normalized()
             for hgt in (4.0, 8.0):
                 o = Vector((t['x'][k], -t['z'][k], t['surf'][k] + hgt))
                 hit = min(((tr.ray_cast(o, d, hs)[3] or 1e9, nm) for tr, nm in zip(trees, names)), default=(1e9, None))
