@@ -57,7 +57,7 @@ ZERO_AI = ['aiAiDeep', 'aiStuck']  # computer cars never closer than 1.2 m (P1),
 DROP = ['x', 'z', 'lx', 'lz', 'hwL', 'hwR', 'wallL', 'wallR', 'surf', 'elev', 'rname', 'two', 'lanes', 'activeTiles']
 
 
-def run(src=REPO, presets=(0, 1, 2), set_name='full', out_root=I.DEFAULT_OUT_ROOT, extra_specs=(), judge_ai=True, timeout=1800):
+def run(src=REPO, presets=(0, 1, 2), set_name='full', out_root=I.DEFAULT_OUT_ROOT, extra_specs=(), judge_ai=True, timeout=1800, setup=None):
     """returns (report dict, failures list)"""
     copy = os.path.join(out_root, f'www-phys-{os.getpid()}')
     I.instrument(src, copy, out_root)
@@ -68,7 +68,7 @@ def run(src=REPO, presets=(0, 1, 2), set_name='full', out_root=I.DEFAULT_OUT_ROO
         for spec, label in specs:
             t0 = time.time()
             arg = {'scenarios': SETS[set_name], 'seed': 1}  # seeded: the same checkout always gives the same numbers
-            r = subprocess.run(['node', WORLD, copy, json.dumps({**spec, 'check': CHECK, 'arg': arg})], capture_output=True, text=True, timeout=timeout)
+            r = subprocess.run(['node', WORLD, copy, json.dumps({**spec, **({'setup': setup} if setup else {}), 'check': CHECK, 'arg': arg})], capture_output=True, text=True, timeout=timeout)
             if r.returncode != 0:
                 fails.append(f'{label}: world.js exit {r.returncode}: {r.stderr.strip()[-300:]}')
                 continue
@@ -114,12 +114,13 @@ def main():
     ap.add_argument('--pack', help='also audit a track from a track pack file (see data/trackpacks/README.md)')
     ap.add_argument('--track', help='track id inside --pack')
     ap.add_argument('--loop', help='also audit a loop given as JSON [[X, Y], ...] in data coordinates')
+    ap.add_argument('--setup', help='game setup overrides for every track, e.g. \'{"wideCorners": true}\'')
     ap.add_argument('--no-ai-judge', action='store_true', help='report computer-car overlaps without failing on them')
     a = ap.parse_args()
     extra = [({'pack': os.path.abspath(a.pack), 'id': a.track}, f'pack {a.track}')] if a.pack else []
     if a.loop: extra.append(({'loop': json.loads(a.loop)}, 'loop'))
     try:
-        out, fails = run(os.path.realpath(a.src), a.presets, a.set, a.out_root, extra, not a.no_ai_judge)
+        out, fails = run(os.path.realpath(a.src), a.presets, a.set, a.out_root, extra, not a.no_ai_judge, setup=json.loads(a.setup) if a.setup else None)
     except (I.InstrumentError, subprocess.TimeoutExpired, OSError) as e:
         print(json.dumps({'check': 'phys', 'ok': False, 'harnessError': str(e)}, ensure_ascii=False))
         return 2

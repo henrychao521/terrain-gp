@@ -76,10 +76,10 @@
     T.state.mode = 'race'; T.state.t = 0; T.state.lap = 0; T.state.lapStart = 0; T.state.lastK = car.k; if (!RACE.on) X.startLap();
     for (const k in T.keys) T.keys[k] = false;
     const t = T.touch; t.sActive = true; t.gas = 0; t.brake = 0;
-    const ev = { aiStuck: 0, aiJump: 0, aiJumpMax: 0, maxOverWall: 0, beyondWall: 0, inBuilding: 0, kJump: 0, teleport: 0, spike: 0, spikeWall: 0, jolt: 0, stuck: 0, offTrackSec: 0, aiOverlapDeep: 0, aiContactSec: 0, aiAiDeep: 0 };
+    const ev = { wallHits: 0, aiStuck: 0, aiJump: 0, aiJumpMax: 0, maxOverWall: 0, beyondWall: 0, inBuilding: 0, kJump: 0, teleport: 0, spike: 0, spikeWall: 0, jolt: 0, stuck: 0, offTrackSec: 0, aiOverlapDeep: 0, aiContactSec: 0, aiAiDeep: 0 };
     const samples = {}; const keep = (kind, o) => { (samples[kind] = samples[kind] || []); if (samples[kind].length < 5) samples[kind].push(o); };
     let acc = 0, px = car.x, pz = car.z, pv = 0, pk = car.k, py = car.y, pdy = 0, still = 0, dist = 0, laps = [], lastLap = 0, wasStuck = false, dist60 = null, prog = 0, freedAt = null, resets = 0;
-    const k0 = car.k, x0 = car.x, z0 = car.z, aiPrev = new Map(), aiStill = new Map();
+    let prevHit = 0; const k0 = car.k, x0 = car.x, z0 = car.z, aiPrev = new Map(), aiStill = new Map();
     for (let f = 0; f < frames; f++) {
       // 駕駛：看前方 18 m（或 0.7 秒）的中線點；wall＝往左偏到路寬邊；wrong＝看後方
       const v = Math.hypot(car.vx, car.vy), look = Math.round(Math.max(18, v * 0.7) / ds) * (sc.mode === 'wrong' ? -1 : 1);
@@ -96,14 +96,17 @@
       // 遊戲一格（同 frame() 的比賽分支）
       T.readInput(frameDt); T.gearLogic(frameDt, T.inp);
       acc += frameDt; while (acc >= DT) { T.physicsStep(DT, T.inp); acc -= DT; T.state.t += DT; }
-      const hitNow = car.hit; X.raceUpdate(); if (RACE.on) T.opponentsStep(frameDt);
+      const hitNow = car.hit; if (hitNow > 3 && !(prevHit > 3)) ev.wallHits++; prevHit = hitNow; /* barrier impacts over 3 m/s */ X.raceUpdate(); if (RACE.on) T.opponentsStep(frameDt);
       // 檢查
       const nv = Math.hypot(car.vx, car.vy), mv = Math.hypot(car.x - px, car.z - pz), here = { t: r1(T.state.t), k: car.k, road: road(car.k), kmh: Math.round(nv * 3.6), at: D(car.x, car.z) };
       dist += mv; if (dist60 === null && T.state.t >= 60) dist60 = Math.round(dist);
       { let d = car.k - pk; if (d > n / 2) d -= n; if (d < -n / 2) d += n; prog += d * ds; }
       if (sc.mode === 'perp' && freedAt === null && Math.abs(prog) > 15 && nv > 3) freedAt = r1(T.state.t); // driving on along the track
       if (mv > 3 && Math.hypot(car.x - W.x[car.k], car.z - W.z[car.k]) < 0.6 && nv < 0.1) resets++; // resetToTrack: back on the centreline, standing
-      const lim = (car.lat > 0 ? W.wallL[car.k] : W.wallR[car.k]) - 1.0;
+      // how far the car's centre is past "barrier - 1 m": against the continuous barrier line when the game has one (wallContact),
+      // else against the nearest sample's barrier offset (older game.js; it over-reads at junction corners)
+      const wcl = X.wallContact ? X.wallContact(car.x, car.z, car.k, car.lat) : null;
+      const lim = wcl ? Math.abs(car.lat) + wcl.d - 1.0 : (car.lat > 0 ? W.wallL[car.k] : W.wallR[car.k]) - 1.0;
       if (Math.abs(car.lat) - lim > ev.maxOverWall) { ev.maxOverWall = r1(Math.abs(car.lat) - lim); samples.maxOverWall = [{ ...here, lat: r1(car.lat), lim: r1(lim), hit: r1(hitNow) }]; }
       if (Math.abs(car.lat) > lim + 0.05) { ev.beyondWall++; keep('beyondWall', { ...here, lat: r1(car.lat), lim: r1(lim) }); }
       const fx = Math.cos(car.psi), fz = -Math.sin(car.psi), lx = -Math.sin(car.psi), lz = -Math.cos(car.psi);

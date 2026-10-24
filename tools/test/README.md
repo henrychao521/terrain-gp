@@ -203,6 +203,7 @@ blender -b --factory-startup --python tools/test/blender_walls.py -- . walls.jso
 python3 tools/test/run.py phys [--presets 0,1,2] [--set full|quick]
 python3 tools/test/physaudit.py --loop '[[X,Y],...]'            # 另外加一條環線（資料座標）
 python3 tools/test/physaudit.py --pack data/trackpacks/campus_a.json --track campus_a
+python3 tools/test/physaudit.py --setup '{"wideCorners": true}'   # 遊戲設定，例如初階較寬的轉彎區域
 python3 tools/test/run.py quick --no-browser                     # phys（quick）＋ node/opponents_test.js、recover_test.js
 node tools/test/node/opponents_test.js [game.js]                 # P1 電腦車間距（協作 AI 的四個情境，測 game.js 裡的程式）
 node tools/test/node/recover_test.js [game.js]                   # P2 自動油門脫困
