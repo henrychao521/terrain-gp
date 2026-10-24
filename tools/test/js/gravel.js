@@ -3,7 +3,7 @@
 //
 // escape: the car stands still in the middle of a gravel trap (or at arg.spots [[k, lat], ...]), full throttle, steering
 //   for the centreline 20 m ahead; it has escaped when it is back on the asphalt within arg.secs (default 25 s).
-//   Spots: the arg.worst (default 12) steepest gravel samples (ground gradient under the car), plus arg.spots.
+//   Spots: the arg.worst (default 12) steepest run-off samples, gravel or grass (ground gradient under the car), plus arg.spots.
 // decel: from 100 km/h with no throttle or brake, the speed lost in the first second on asphalt, grass and flat gravel.
 (arg = {}) => {
   const T = window.TGP, X = window.TGPX, W = T.W, car = T.car, n = W.n, DT = 1 / 240, FPS = 60, secs = arg.secs || 25;
@@ -30,10 +30,11 @@
     return { out: false, t: secs, surf0, endLat: r2(car.lat), kmh: Math.round(Math.hypot(car.vx, car.vy) * 3.6) };
   }
   // gravel samples, steepest first
-  const cand = [];
-  for (let k = 0; k < n; k += 2) { const sd = W.grav[k]; if (!sd) continue; const hs = sd > 0 ? W.hwL[k] : W.hwR[k], lat = sd * (hs + 9), [x, z] = spotXZ(k, lat); cand.push({ k, lat: r2(lat), slope: grad(x, z) }); }
-  cand.sort((a, b) => b.slope - a.slope);
-  const spots = cand.slice(0, arg.worst ?? 12).concat((arg.spots || []).map(([k, lat]) => { const [x, z] = spotXZ(k, lat); return { k, lat, slope: grad(x, z), given: true }; }));
+  // the run-off areas (W.runoff since 2026-10-24: steep ones are grass, not gravel); older builds: the gravel itself
+  const RO = W.runoff || W.grav, cand = [], all = [];
+  for (let k = 0; k < n; k += 2) { const sd = RO[k]; if (!sd) continue; const hs = sd > 0 ? W.hwL[k] : W.hwR[k], lat = sd * (hs + 9), [x, z] = spotXZ(k, lat), c = { k, lat: r2(lat), slope: grad(x, z), gravel: W.grav[k] === sd }; all.push(c); if (c.gravel) cand.push(c); }
+  cand.sort((a, b) => b.slope - a.slope); all.sort((a, b) => b.slope - a.slope);
+  const spots = all.slice(0, arg.worst ?? 12).concat((arg.spots || []).map(([k, lat]) => { const [x, z] = spotXZ(k, lat); return { k, lat, slope: grad(x, z), given: true }; }));
   const escape = spots.map(s => ({ k: s.k, lat: s.lat, slopePct: r2(s.slope * 100), given: !!s.given, gravelHere: (W.grav[s.k] === Math.sign(s.lat)), ...drive(s.k, s.lat, 0, 1, 'asphalt') }));
   // deceleration from 100 km/h in the first second
   const v0 = 100 / 3.6, flat = cand.filter(c => c.slope < 0.02);

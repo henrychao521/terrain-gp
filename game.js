@@ -1026,13 +1026,14 @@ function buildWorld() {
   for (let k = 0; k < n; k++) TH[k] = W.elev[k] > 0 ? W.deck[k] : Hq(X[k], Z[k]);
   // gravel traps on the outside of tighter corners (and the run-off past the exit); barriers per side
   if (W.wall !== Infinity && W.real) W.wall = W.hwMax + 0.5;
-  W.grav = new Int8Array(n);
+  W.grav = new Int8Array(n); W.runoff = new Int8Array(n); // runoff: the wide run-off (barrier 17 m out) on the outside of corners; grav: the part of it that is gravel
   if (!W.city) {
     const Ks = Float32Array.from(KA); smoothCirc(Ks, 6, 2);
     const g0 = new Int8Array(n); for (let k = 0; k < n; k++) if (Math.abs(Ks[k]) > 1 / 170) g0[k] = Ks[k] > 0 ? -1 : 1;
     // no gravel where the run-off is steeper than 8 % (along the track or across the trap): on a 11–15 % slope gravel's rolling
     // drag (0.18) plus the climb asks more than its grip (0.6 on the driven rear axle) can give, so a car that stops there
-    // can never drive out. Real circuits put gravel on flat run-off for the same reason; steep run-off stays grass
+    // can never drive out. Real circuits put gravel on flat run-off for the same reason; steep run-off stays grass (same width,
+    // same barrier line: only the surface changes)
     const steep = (j, sd) => {
       const hs = sd > 0 ? W.hwL[j] : W.hwR[j], at = (kk, t) => Hq(X[kk] + LX[kk] * t * sd, Z[kk] + LZ[kk] * t * sd), a = (j - 5 + n) % n, b = (j + 5) % n;
       let g = Math.abs(TH[b] - TH[a]) / (10 * W.ds);
@@ -1040,13 +1041,13 @@ function buildWorld() {
       for (const [t0, t1] of [[hs + 1.5, hs + 6.5], [hs + 6.5, hs + 11.5], [hs + 11.5, hs + 17]]) g = Math.max(g, Math.abs(at(j, t1) - at(j, t0)) / (t1 - t0));
       return g > GRAVEL_MAX_GRADE;
     };
-    for (let k = 0; k < n; k++) if (g0[k]) for (let o = -4; o <= Math.round(70 / W.ds); o++) { const j = (k + o + n) % n; if (!W.grav[j] && !steep(j, g0[k])) W.grav[j] = g0[k]; }
+    for (let k = 0; k < n; k++) if (g0[k]) for (let o = -4; o <= Math.round(70 / W.ds); o++) { const j = (k + o + n) % n; if (!W.runoff[j]) { W.runoff[j] = g0[k]; if (!steep(j, g0[k])) W.grav[j] = g0[k]; } }
     for (let k = 0; k < n; ) { if (!W.grav[k]) { k++; continue; } let e = k; while (e < n && W.grav[e] === W.grav[k]) e++; if ((e - k) * W.ds < 20 && k > 0 && e < n) W.grav.fill(0, k, e); k = e; } // no gravel scraps
   }
   W.wallL = new Float32Array(n).fill(Infinity); W.wallR = new Float32Array(n).fill(Infinity);
   if (setup.walls) for (let k = 0; k < n; k++) for (const side of [1, -1]) {
     const hs = side > 0 ? W.hwL[k] : W.hwR[k];
-    let off = W.real ? (W.elev && W.elev[k] > 0 ? hs - 0.2 : hs + 0.5) : W.city ? hs + 3.2 : W.grav[k] === side ? hs + 17 : hs + 13; // Taipei: water barriers on the kerb line, on a viaduct just inside the parapet
+    let off = W.real ? (W.elev && W.elev[k] > 0 ? hs - 0.2 : hs + 0.5) : W.city ? hs + 3.2 : W.runoff[k] === side ? hs + 17 : hs + 13; // Taipei: water barriers on the kerb line, on a viaduct just inside the parapet
     const wx = X[k] + LX[k] * off * side, wz = Z[k] + LZ[k] * off * side;
     if (gridSample(D, wx, wz) < off - 3 && (!W.anyElev || otherStretchNear(k, wx, wz, off - 3))) off = Infinity; // another stretch of track is nearer: leave a gap
     (side > 0 ? W.wallL : W.wallR)[k] = off;
@@ -1913,7 +1914,7 @@ function buildMeshes() {
     let i = 0;
     for (let tries = 0; tries < cnt * 2 && i < cnt; tries++) {
       const k = Math.floor(tr() * n), sd = tr() < 0.5 ? 1 : -1, lat = sd * (hw + 2.5 + Math.pow(tr(), 1.6) * 30);
-      if (W.grav[k] === sd && Math.abs(lat) < hw + 18) continue;
+      if (W.runoff[k] === sd && Math.abs(lat) < hw + 18) continue;
       const wl = (sd > 0 ? W.wallL : W.wallR)[k]; if (Math.abs(Math.abs(lat) - wl) < 1) continue;
       const x = X[k] + W.lx[k] * lat, z = Z[k] + W.lz[k] * lat; if (gridSample(D, x, z) < hw + 2) continue;
       const s2 = 0.5 + tr() * 0.6; sc.set(s2 * 0.9, s2 * 0.38, s2 * 0.9); ps.set(x, Hq(x, z) - 0.03, z); eu.set(0, tr() * Math.PI, 0); q4.setFromEuler(eu); m4.compose(ps, q4, sc);
