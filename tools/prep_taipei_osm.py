@@ -15,6 +15,8 @@ Tree dir (optional): Taipei City's street and park tree inventory, 政府資料�
   curl -O https://tppkl.blob.core.windows.net/blobfs/TaipeiParkTree.csv
 With it, trees come from the inventory (species, height); OSM only fills wooded areas the inventory doesn't cover.
 Each tree: [x dm, y dm, park 0/1, kind (0 broadleaf, 1 banyan, 2 golden rain tree, 3 palm, 4 tall narrow), height dm].
+
+Last step: data/taipei_overrides.json (official road widths, the 南海路 centreline) is applied by tools/taipei_overrides.py.
 """
 import glob, json, math, random, sys, xml.etree.ElementTree as ET
 from pyproj import Transformer
@@ -211,5 +213,11 @@ print('landmark outlines', len(outlines), 'parts', len(parts), 'styled', sum(1 f
 
 out = {'source': 'OpenStreetMap', 'credits': '道路、號誌、公園與地標：© OpenStreetMap contributors（ODbL）' + ('；行道樹與公園樹木：臺北市政府工務局公園路燈工程管理處（政府資料開放授權條款第1版）' if len(sys.argv) > 2 else '；樹木：OpenStreetMap'),
        'roads': roads, 'bridges': bridges, 'signals': signals, 'crossings': crossings, 'green': green, 'trees': trees, 'landmarks': parts}
+# --- corrections from official Taipei data (data/taipei_overrides.json: road widths, the 南海路 centreline), the same
+# code tools/taipei_overrides.py runs on already built data
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import taipei_overrides
+if os.path.exists(taipei_overrides.OVR): taipei_overrides.apply(out, json.load(open(taipei_overrides.OVR)))
 json.dump(out, open('data/taipei_osm.json', 'w'), ensure_ascii=False, separators=(',', ':'))
 import os; print('wrote data/taipei_osm.json', os.path.getsize('data/taipei_osm.json') // 1024, 'KB')

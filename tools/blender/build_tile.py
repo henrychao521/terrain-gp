@@ -540,6 +540,12 @@ def build_bridges():
     return bld.to_object('bridges')
 
 lm_objs = build_landmarks(); cut_gate_passages(lm_objs); b_objs = build_buildings() + build_bridges()
+# final footprints of the ordinary buildings in this tile (after road clearance, corridor parameters, dropped ones left out):
+# the game draws the minimap and keeps street trees out of buildings with these instead of data/taipei.json inside the tile.
+# tools/blender/footprints.py merges every <tile>.foot.json into models/taipei/footprints.json.
+os.makedirs(os.path.dirname(os.path.abspath(OUT)), exist_ok=True)
+json.dump({'x0': X0, 'x1': X1, 'y0': Y0, 'y1': Y1, 'b': [[round(d['h'] * 10)] + [round(v * 10) for p in d['ring'] for v in p] for d in DUMP if not d.get('dropped')]},
+          open(OUT[:-5] + '.foot.json', 'w'), separators=(',', ':'))
 if os.environ.get('TGP_DUMP'):
     json.dump({'x0': X0, 'x1': X1, 'y0': Y0, 'y1': Y1, 'buildings': DUMP}, open(os.environ['TGP_DUMP'], 'w'))
     if os.environ.get('TGP_DUMP_ONLY') == '1': print('dumped', len(DUMP)); sys.exit(0)

@@ -2,3 +2,4 @@ ref/*
 !ref/README.md
 !ref/SOURCES.md
 __pycache__/
+models/taipei/*.foot.json
