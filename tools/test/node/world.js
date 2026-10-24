@@ -113,7 +113,7 @@ T3.TextureLoader.prototype.load = function (url, onLoad, onProgress, onError) { 
 T3.DRACOLoader = function () { return { setDecoderPath: noop, setWorkerLimit: noop, preload: noop, dispose: noop }; };
 
 // ---------------------------------------------------------------- the game
-const EXTRA = "window.TGPX = { cityPreset: (M, i) => cityPreset(M, i), setPts: p => { trackPts = p; }, TP_CIRCUITS, TP_ELEVATED, loadTaipei, TEX, raceUpdate: () => raceUpdate(), startLap: () => startLap(), trackLocate: (x, z, k) => trackLocate(x, z, k), resetRace: () => resetRace(), runLater: ms => (typeof runLater === 'function' ? runLater(ms) : 0), normalS: (...a) => normalS(...a), newHillTrack: s => (typeof newHillTrack === 'function' ? newHillTrack(s) : null), RACE, ATMO };\nwindow.TGP = (() =>";
+const EXTRA = "window.TGPX = { cityPreset: (M, i) => cityPreset(M, i), setPts: p => { trackPts = p; }, TP_CIRCUITS, TP_ELEVATED, loadTaipei, TEX, raceUpdate: () => raceUpdate(), startLap: () => startLap(), trackLocate: (x, z, k) => trackLocate(x, z, k), resetRace: () => resetRace(), runLater: ms => (typeof runLater === 'function' ? runLater(ms) : 0), normalS: (...a) => normalS(...a), newHillTrack: s => (typeof newHillTrack === 'function' ? newHillTrack(s) : null), wallContact: (x, z, k, lat) => (typeof wallContact === 'function' ? wallContact(x, z, k, lat) : null), RACE, ATMO };\nwindow.TGP = (() =>";
 let src = fs.readFileSync(path.join(copy, 'game.js'), 'utf8');
 if (src.split('window.TGP = (() =>').length !== 2) { console.error('world.js: the copy is not instrumented (run instrument.py first)'); process.exit(2); }
 src = src.replace('window.TGP = (() =>', EXTRA);
@@ -180,6 +180,7 @@ function dumpScene(W, file, R) {
   }
   if (spec.loop) { X.TP_CIRCUITS.push(spec.loop); X.TP_ELEVATED.push(!!spec.elevated); idx = X.TP_CIRCUITS.length - 1; }
   if (X.TP_ELEVATED[idx]) TGP.setup.elevated = true;
+  if (spec.setup) Object.assign(TGP.setup, spec.setup); // e.g. {"wideCorners": true}
   X.setPts(X.cityPreset(M, idx));
   TGP.buildWorld(); X.runLater(Infinity); // the parts of the build the game leaves for the next frames
   const W = TGP.W, n = W.n, r1 = v => Math.round(v * 1000) / 1000;

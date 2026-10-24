@@ -946,6 +946,8 @@ function buildWorld() {
   for (const arr of [W.wallL, W.wallR]) { // drop barrier fragments shorter than 30 m
     let k = 0; while (k < n) { if (!isFinite(arr[k])) { k++; continue; } let e = k; while (e < n && isFinite(arr[e])) e++; if ((e - k) * W.ds < 30 && !(k === 0 || e === n)) for (let j = k; j < e; j++) arr[j] = Infinity; k = e; }
   }
+  W.apronL = W.apronR = null;
+  if (setup.wideCorners && setup.walls) widenCorners();
   W.tid = trackId();
   buildProfile();
   analyzeCorners();
@@ -956,6 +958,32 @@ function buildWorld() {
   $('#hudCredit').textContent = W.city ? '© OpenStreetMap contributors' + (M.id === 'taipei' ? ' · 內政部 DEM · 臺北市 3D 建物' + (W.activeTiles && W.activeTiles.length ? ' · 建物貼圖 AI 生成（Colab SDXL）' : '') + (/公園路燈/.test(M.credits || '') ? ' · 行道樹：臺北市公園處' : '') + (TREE_ATLAS ? ' · 樹木模型 AI 生成（SDXL＋TRELLIS.2）' : '') : '') : '';
 }
 
+// 「初階：較寬的轉彎區域」 (setup.wideCorners): at every sharp corner (radius under 45 m) the barrier on the outside moves out
+// by up to 4 m in the city (6 m elsewhere) from 10 m before the corner to 30 m past it, as far as there is room (no building
+// in the occupancy raster, no other stretch of the track, 2 m kept clear behind the barrier), tapering in and out at 1:4.
+// The gained strip is asphalt (W.apronL / apronR: its width per sample). The track id gets "_wide", so its lap times are kept apart.
+function widenCorners() {
+  const n = W.n, ds = W.ds, occ = W.M.occ, K = Float32Array.from(W.kappa); smoothCirc(K, 2, 2);
+  const L = new Float32Array(n), R = new Float32Array(n), EXTRA = W.city ? 4 : 6, before = Math.round(10 / ds), after = Math.round(30 / ds);
+  for (let k = 0; k < n; k++) if (Math.abs(K[k]) > 1 / 45) { const A = K[k] > 0 ? R : L; for (let o = -before; o <= after; o++) A[(k + o + n) % n] = EXTRA; } // outside of a left bend: the right side
+  const blocked = (x, z) => { if (Math.abs(x) > W.sx / 2 - 10 || Math.abs(z) > W.sz / 2 - 10) return true; if (!occ) return false;
+    const i = Math.floor((x + W.sx / 2) / occ.cs), j = Math.floor((z + W.sz / 2) / occ.cs); return i < 0 || j < 0 || i >= occ.rw || j >= occ.rh || !!occ.a[j * occ.rw + i]; };
+  const sl = 0.25 * ds;
+  for (const [A, sd, wall] of [[L, 1, W.wallL], [R, -1, W.wallR]]) {
+    for (let k = 0; k < n; k++) {
+      if (!A[k] || !(wall[k] < Infinity) || (W.elev && W.elev[k] > 0)) { A[k] = 0; continue; }
+      let e = 0;
+      for (let l = wall[k] + 0.5; l <= wall[k] + A[k] + 2.0; l += 0.5) { const x = W.x[k] + W.lx[k] * l * sd, z = W.z[k] + W.lz[k] * l * sd; if (blocked(x, z) || gridSample(W.dist, x, z) < l - 3) break; e = l - wall[k] - 2.0; }
+      A[k] = Math.max(0, Math.min(A[k], e));
+    }
+    for (let p = 0; p < 2; p++) {
+      for (let k = 1; k <= 2 * n; k++) { const i = k % n, j = (k - 1) % n; if (A[i] > A[j] + sl) A[i] = A[j] + sl; }
+      for (let k = 2 * n - 1; k >= 0; k--) { const i = k % n, j = (k + 1) % n; if (A[i] > A[j] + sl) A[i] = A[j] + sl; }
+    }
+    for (let k = 0; k < n; k++) if (A[k] > 0.05) wall[k] += A[k]; else A[k] = 0;
+  }
+  W.apronL = L; W.apronR = R;
+}
 // ground shader: blends grass / dirt / rock / special by per-vertex weights, sampled in world metres with a low-frequency macro layer to hide tiling
 function splatMaterial(special, lambert) {
   const mat = lambert ? new THREE.MeshLambertMaterial({ vertexColors: true }) : new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96, metalness: 0, envMapIntensity: 0.25 });
@@ -1617,6 +1645,11 @@ function buildMeshes() {
     return tmpC.copy(asph).lerp(asph2, shade[k] * 0.4).multiplyScalar(1 - rub * 0.22 - streak * 0.32 + edge).clone();
   }, 0.05, null, false,
     W.asphalt = new THREE.MeshStandardMaterial({ vertexColors: true, map: TEX.asphalt2, normalMap: TEX.asphaltN, normalScale: new THREE.Vector2(0.55, 0.55), roughness: 0.8, envMapIntensity: 0.5, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }), 6);
+  if (W.apronL) { // beginners' corner apron: plain asphalt from the road edge to the moved barrier, above the sidewalk
+    const apC = lin(0x707074);
+    for (const [A, H, sd] of [[W.apronL, W.hwL, 1], [W.apronR, W.hwR, -1]])
+      ribbon(k => sd * H[k], k => sd * (H[k] + A[k]), 2, () => apC, W.real ? 0.2 : 0.06, r => A[r] > 0.05 || A[(r + 1) % n] > 0.05, false);
+  }
   { // racing-line guide painted over the asphalt: green where the line accelerates, yellow through the corner, red under braking
     const V = RACE.lineProf, la = Math.max(1, Math.round(5 / W.ds)), cG = new THREE.Color(0x2fd05a), cY = new THREE.Color(0xffc21a), cR = new THREE.Color(0xff3b30), ph = new Float32Array(n);
     for (let k = 0; k < n; k++) { const dv = V[(k + la) % n] - V[k]; ph[k] = dv < -0.25 ? -1 : dv > 0.12 || V[k] > 92 ? 1 : 0; }
@@ -2024,7 +2057,7 @@ function placeCar(k, lat = 0, keepTyres = false) {
 function physicsStep(dt, inp) {
   const c = car, sp = SPEC, ae = aeroOf(setup.aero);
   const loc = trackLocate(c.x, c.z, c.k); c.k = loc.k; c.lat = loc.lat;
-  const hw = loc.lat > 0 ? W.hwL[loc.k] : W.hwR[loc.k], al = Math.abs(loc.lat);
+  const hw = (loc.lat > 0 ? W.hwL[loc.k] : W.hwR[loc.k]) + (W.apronL ? (loc.lat > 0 ? W.apronL : W.apronR)[loc.k] : 0), al = Math.abs(loc.lat); // + the beginners' corner apron
   const gs = W.grav[loc.k];
   const surf = al < hw ? 0 : (al < hw + 1.5 && W.kerb[loc.k]) ? 1 : (gs && Math.sign(loc.lat) === gs && al < hw + 17) ? 3 : 2; c.surf = surf;
   const off = surf === 2 && W.city; // city run-off is pavement, not grass
@@ -2127,11 +2160,14 @@ function physicsStep(dt, inp) {
   c.psi += c.r * dt;
   const dx = (c.vx * fp.x + c.vy * lp.x) * dt, dz = (c.vx * fp.z + c.vy * lp.z) * dt;
   c.x += dx; c.z += dz;
-  // barrier contact: reflect the velocity component into the wall, scrub speed
-  const lat = loc.lat + dx * W.lx[loc.k] + dz * W.lz[loc.k], lim = (lat > 0 ? W.wallL[loc.k] : W.wallR[loc.k]) - 1.0;
-  if (Math.abs(lat) > lim) {
-    const s = Math.sign(lat), Lx = W.lx[loc.k], Lz = W.lz[loc.k];
-    c.x -= Lx * (Math.abs(lat) - lim) * s; c.z -= Lz * (Math.abs(lat) - lim) * s;
+  // barrier contact: reflect the velocity component into the wall, scrub speed. The barrier is the continuous line through
+  // the barrier points of consecutive samples (wallContact), measured where the car is now: at a sharp junction corner the
+  // nearest sample's own sideways offset used to jump between the two legs and shove the car 2-4 m in one step
+  // On the inside of a bend that line folds back on itself, so there the nearest sample's sideways offset is used as before.
+  const wc = wallContact(c.x, c.z, loc.k, loc.lat + dx * W.lx[loc.k] + dz * W.lz[loc.k]);
+  if (wc && wc.d < 1.0) {
+    const Lx = -wc.nx, Lz = -wc.nz, s = 1, e = 1.0 - wc.d; // L: outward normal of the barrier line at the contact
+    c.x += wc.nx * e; c.z += wc.nz * e;
     let Vx = c.vx * fp.x + c.vy * lp.x, Vz = c.vx * fp.z + c.vy * lp.z;
     const vn = Vx * Lx + Vz * Lz;
     if (vn * s > 0) { // glancing contact: kill the inward speed, keep most of the speed along the wall, turn the nose back to the track
@@ -2149,6 +2185,36 @@ function physicsStep(dt, inp) {
   c.wheelRot += c.vx / sp.rw * dt;
 }
 
+// Barrier on the side of the track the car is on (lat: its sideways offset from sample k). On the outside of a bend and on
+// straights the barrier is the polyline through the barrier points of consecutive samples (gaps, wallL / wallR = Infinity,
+// break it): continuous, so a car in the wedge outside a sharp junction corner is no longer measured against the wrong leg.
+// On the inside of a bend (|kappa| > 1/150) the offset line folds back, so there it is the nearest sample's barrier offset.
+// Returns { d: clearance from the barrier toward the track (negative: past it), nx / nz: unit normal back to the track,
+// side: 1 left / -1 right } or null (no barrier there).
+function wallContact(x, z, k, lat) {
+  const n = W.n, side = lat >= 0 ? 1 : -1, kap = W.kappa[k];
+  if (Math.sign(kap) === side && Math.abs(kap) > 1 / 150) {
+    const off = side > 0 ? W.wallL[k] : W.wallR[k];
+    return off < Infinity ? { d: off - Math.abs(lat), nx: -W.lx[k] * side, nz: -W.lz[k] * side, side } : null;
+  }
+  let best = null;
+  for (const sd of [side]) {
+    const arr = sd > 0 ? W.wallL : W.wallR;
+    for (let o = -8; o < 8; o++) {
+      const i = (k + o + n) % n, j = (i + 1) % n, a = arr[i], b = arr[j];
+      if (!(a < Infinity) || !(b < Infinity)) continue;
+      const ax = W.x[i] + W.lx[i] * a * sd, az = W.z[i] + W.lz[i] * a * sd, ex = W.x[j] + W.lx[j] * b * sd - ax, ez = W.z[j] + W.lz[j] * b * sd - az;
+      const tx = W.x[j] - W.x[i], tz = W.z[j] - W.z[i];
+      if (ex * tx + ez * tz < 0.3 * (tx * tx + tz * tz)) continue; // the inside of a sharp corner, where the barrier line folds back: its neighbours cover it
+      const L2 = ex * ex + ez * ez || 1e-9, f = clamp(((x - ax) * ex + (z - az) * ez) / L2, 0, 1), qx = ax + ex * f, qz = az + ez * f, dist = Math.hypot(x - qx, z - qz);
+      if (best && dist >= best.dist) continue;
+      let nx = -ez, nz = ex; const ln = Math.hypot(nx, nz) || 1; nx /= ln; nz /= ln;
+      if (nx * (W.x[i] - qx) + nz * (W.z[i] - qz) < 0) { nx = -nx; nz = -nz; } // toward the centreline
+      best = { d: (x - qx) * nx + (z - qz) * nz, nx, nz, dist, side: sd };
+    }
+  }
+  return best;
+}
 function gearLogic(dt, inp) {
   const c = car, sp = SPEC, spd = Math.hypot(c.vx, c.vy);
   if (c.gear >= 1 && spd < 0.6 && inp.brk > 0.5 && inp.thr < 0.05) { c.revT += dt; if (c.revT > 0.6) { c.gear = -1; c.revT = 0; } } else if (c.gear >= 1) c.revT = 0;
@@ -2379,12 +2445,12 @@ function trackId() { // hash of the lap as built (centreline, surface height, wi
   let h = 0x811c9dc5 ^ W.n; const mix = v => { h = Math.imul(h ^ Math.round(v), 16777619); };
   for (let k = 0; k < W.n; k++) { mix(W.x[k] * 10); mix(W.z[k] * 10); mix(W.h[k] * 10); mix(W.hwL[k] * 10); mix(W.hwR[k] * 10); mix(W.bank[k] * 1000); }
   mix(setup.walls ? 1 : 0);
-  const hash = (h >>> 0).toString(36);
+  const hash = (h >>> 0).toString(36), wide = W.apronL ? '_wide' : ''; // beginners' wide corners: lap times kept apart
   if (setup.map === 'terrain' && hillSeed !== null && TER.source === 'hills' && TER.seed === 7 && !TER.meters) { // a seeded hill track: hill_<seed>, plus the hash when the terrain or road settings are not the defaults
     const id = 'hill_' + hillSeed + (setup.reverse ? '_r' : '');
-    return hillSig() === HILL_DEF ? id : id + '_' + hash;
+    return (hillSig() === HILL_DEF ? id : id + '_' + hash) + wide;
   }
-  return setup.map + '-' + W.n + '-' + hash;
+  return setup.map + '-' + W.n + '-' + hash + wide;
 }
 const b64 = a => { const u = new Uint8Array(a.buffer, a.byteOffset, a.byteLength); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
 const unb64 = (s, T) => { const b = atob(s), u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return new T(u.buffer); };
@@ -2414,10 +2480,15 @@ function saveBest() {
     idx.unshift(W.tid); setBestIdx(idx);
   } catch (e) { /* storage unavailable */ }
 }
+// best laps saved under the ids the three Taipei presets had before the 2026-10 road fixes (same number of samples, so the
+// per-sample times and the ghost still fit): read once, then saved under the new id at the next best lap
+const OLD_TID = { 'taipei-2610-1fqdctv': ['taipei-2610-fo6wqn'], 'taipei-1685-1rizzf': ['taipei-1685-1p875b5', 'taipei-1685-1jdwle7'], 'taipei-964-1tiakky': ['taipei-964-xial2w'] };
 function loadBest() {
   if (!W.tid) return;
   try {
-    const r = JSON.parse(localStorage.getItem(BEST_KEY + W.tid) || 'null'); if (!r || r.v !== 1 || r.n !== W.n || !(r.best > 0)) return;
+    let r = JSON.parse(localStorage.getItem(BEST_KEY + W.tid) || 'null');
+    for (const old of OLD_TID[W.tid] || []) { if (r) break; r = JSON.parse(localStorage.getItem(BEST_KEY + old) || 'null'); }
+    if (!r || r.v !== 1 || r.n !== W.n || !(r.best > 0)) return;
     const bt = unb64(r.bt, Float32Array), g = unpackGhost(r.g), sec = [0, 1, 2].map(i => r.sec[i] > 0 ? r.sec[i] : Infinity); if (bt.length !== W.n) return;
     Object.assign(state, { best: r.best, secBest: sec, bestTimes: bt, ghostBest: g });
     setBestIdx([W.tid, ...bestIdx().filter(x => x !== W.tid)]);
@@ -2635,7 +2706,7 @@ function syncLabels() {
 function readSetup() {
   TER.size = +$('#size').value; if (!TER.meters) TER.range = +$('#range').value; TER.base = +$('#base').value;
   setup.elevated = $('#elevated').checked;
-  setup.width = +$('#width').value; setup.banking = $('#banking').checked; setup.walls = $('#walls').checked; setup.aero = +$('#aero').value; setup.bias = +$('#bias').value;
+  setup.width = +$('#width').value; setup.banking = $('#banking').checked; setup.walls = $('#walls').checked; setup.wideCorners = $('#wideCorners').checked; setup.aero = +$('#aero').value; setup.bias = +$('#bias').value;
   setup.tc = $('#tc').checked; setup.abs = $('#abs').checked; setup.auto = $('#auto').checked; setup.esc = $('#esc').checked; setup.brakeAssist = $('#brakeAssist').checked;
   setup.turnHints = $('#turnHints').checked; setup.preview = $('#previewOn').checked; setup.lineGuide = $('#lineGuide').checked;
   setup.steerSens = +$('#steer').value; setup.assist = $('#assist').checked; setup.autogas = $('#autogas').checked; muted = !$('#sound').checked; setVolume(+$('#vol').value / 100, false);
@@ -2653,7 +2724,7 @@ function applyLevel() {
 document.querySelectorAll('#level button').forEach(b => b.onclick = () => { setup.level = b.dataset.l; applyLevel(); readSetup(); });
 function mapChanged() { mapDirty = true; drawEditorBase(); drawEditor(); updateStartBtn(); }
 ['size', 'range', 'base'].forEach(id => $('#' + id).addEventListener('input', () => { syncLabels(); readSetup(); mapDirty = true; if (id !== 'base' && setup.map === 'terrain') { drawEditorBase(); drawEditor(); } updateStartBtn(); }));
-['width', 'banking', 'walls'].forEach(id => $('#' + id).addEventListener('input', () => { syncLabels(); readSetup(); mapDirty = true; updateStartBtn(); }));
+['width', 'banking', 'walls', 'wideCorners'].forEach(id => $('#' + id).addEventListener('input', () => { syncLabels(); readSetup(); mapDirty = true; updateStartBtn(); }));
 ['aero', 'bias', 'tc', 'abs', 'auto', 'steer', 'assist', 'autogas', 'sound', 'touchOn', 'laps', 'aiCount', 'aiSkill'].forEach(id => $('#' + id).addEventListener('input', () => { syncLabels(); readSetup(); applyControls(); }));
 document.querySelectorAll('#presets .btn').forEach(b => b.onclick = () => {
   document.querySelectorAll('#presets .btn').forEach(x => x.classList.toggle('sel', x === b));
@@ -2872,12 +2943,12 @@ document.querySelectorAll('#steerMode button').forEach(b => b.onclick = () => { 
 document.querySelectorAll('#quality button').forEach(b => b.onclick = () => { setup.quality = b.dataset.q; document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x === b)); setQuality(); savePrefs(); });
 if (document.fullscreenEnabled) { $('#btnFull').hidden = false; $('#btnFull').onclick = () => { document.documentElement.requestFullscreen().then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {}); }; }
 // per-viewer preferences
-function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted, level: setup.level, volume, turnHints: setup.turnHints, preview: setup.preview, lineGuide: setup.lineGuide, tod: ATMO.tod, rain: ATMO.rain, tut: TUT.done })); } catch (e) { /* storage unavailable */ } }
+function savePrefs() { try { localStorage.setItem('tgp-prefs', JSON.stringify({ nick: $('#nick').value, steerSens: setup.steerSens, steerMode: setup.steerMode, autogas: setup.autogas, quality: setup.quality, assist: setup.assist, sound: !muted, level: setup.level, volume, turnHints: setup.turnHints, preview: setup.preview, lineGuide: setup.lineGuide, tod: ATMO.tod, rain: ATMO.rain, tut: TUT.done, wideCorners: setup.wideCorners })); } catch (e) { /* storage unavailable */ } }
 function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem('tgp-prefs') || 'null'); if (!p) return;
     if (p.nick) $('#nick').value = p.nick; if (p.steerSens) $('#steer').value = p.steerSens; if (p.steerMode) setup.steerMode = p.steerMode; if (p.quality) setup.quality = p.quality; if (p.level === 'pro' || p.level === 'easy') setup.level = p.level;
-    $('#autogas').checked = !!p.autogas; $('#assist').checked = p.assist !== false; $('#sound').checked = p.sound !== false; if (typeof p.volume === 'number') $('#vol').value = Math.round(p.volume * 100); if (p.turnHints === false) $('#turnHints').checked = false; if (p.preview === false) $('#previewOn').checked = false; if (p.lineGuide === false) $('#lineGuide').checked = false; if (ATMO_P[p.tod]) { ATMO.tod = p.tod; $('#tod').value = p.tod; } if (p.rain) { ATMO.rain = true; $('#weather').value = 'rain'; } TUT.done = !!p.tut;
+    $('#autogas').checked = !!p.autogas; if (typeof p.wideCorners === 'boolean') $('#wideCorners').checked = p.wideCorners; $('#assist').checked = p.assist !== false; $('#sound').checked = p.sound !== false; if (typeof p.volume === 'number') $('#vol').value = Math.round(p.volume * 100); if (p.turnHints === false) $('#turnHints').checked = false; if (p.preview === false) $('#previewOn').checked = false; if (p.lineGuide === false) $('#lineGuide').checked = false; if (ATMO_P[p.tod]) { ATMO.tod = p.tod; $('#tod').value = p.tod; } if (p.rain) { ATMO.rain = true; $('#weather').value = 'rain'; } TUT.done = !!p.tut;
     document.querySelectorAll('#quality button').forEach(x => x.classList.toggle('sel', x.dataset.q === setup.quality));
   } catch (e) { /* storage unavailable */ }
 }
@@ -3272,8 +3343,8 @@ function bump(o) {
     if (vn < 0) { Vx -= 0.7 * vn * nx; Vz -= 0.7 * vn * nz; car.vx = Vx * cf[0] + Vz * cf[1]; car.vy = Vx * cl[0] + Vz * cl[1]; car.r *= 0.7; hit = true; }
   }
   if (hit || d0 !== car.x + car.z) { // a push never moves the player's car through the barrier (it used to, by up to a metre, at the start)
-    const loc = trackLocate(car.x, car.z, car.k), lim = (loc.lat > 0 ? W.wallL[loc.k] : W.wallR[loc.k]) - 1.0;
-    if (Math.abs(loc.lat) > lim) { const sg = Math.sign(loc.lat), e = Math.abs(loc.lat) - lim; car.x -= W.lx[loc.k] * e * sg; car.z -= W.lz[loc.k] * e * sg; }
+    const lc = trackLocate(car.x, car.z, car.k), wc = wallContact(car.x, car.z, lc.k, lc.lat);
+    if (wc && wc.d < 1.0) { car.x += wc.nx * (1.0 - wc.d); car.z += wc.nz * (1.0 - wc.d); }
   }
   return hit;
 }
@@ -3338,7 +3409,7 @@ function netMySlot() { const i = netPlayers().findIndex(p => p.sameTab); return 
 function myTrack() {
   if (setup.map === 'osm' || (setup.map === 'terrain' && (TER.source === 'file' || TER.meters))) return null;
   const pts = setup.map === 'taipei' ? trackPts.map(p => p.node) : trackPts.map(p => [+p.u.toFixed(4), +p.v.toFixed(4)]);
-  return { m: setup.map, hs: setup.map === 'terrain' ? hillSeed : null, ps: TER.source, sd: TER.seed, sz: TER.size, rg: TER.range, bs: TER.base, w: setup.width, wl: setup.walls ? 1 : 0, bk: setup.banking ? 1 : 0, rv: setup.reverse ? 1 : 0, laps: setup.laps, pts };
+  return { m: setup.map, hs: setup.map === 'terrain' ? hillSeed : null, ps: TER.source, sd: TER.seed, sz: TER.size, rg: TER.range, bs: TER.base, w: setup.width, wl: setup.walls ? 1 : 0, wc: setup.wideCorners ? 1 : 0, bk: setup.banking ? 1 : 0, rv: setup.reverse ? 1 : 0, laps: setup.laps, pts };
 }
 const netCanHost = () => !!myTrack() && trackPts.length >= (setup.map === 'terrain' ? 4 : 3);
 function netPresence() {
@@ -3420,7 +3491,7 @@ async function netApplyTrack(trk) {
       document.querySelectorAll('#presets .btn').forEach(x => x.classList.toggle('sel', x.dataset.p === trk.ps));
       trackPts = trk.pts.map(([u, v]) => ({ u: clamp(+u, 0, 1), v: clamp(+v, 0, 1) })); hillSeed = trk.hs > 0 ? trk.hs : null; if (hillSeed) $('#hillSeed').value = hillSeed;
     }
-    $('#width').value = trk.w; $('#walls').checked = !!trk.wl; $('#banking').checked = !!trk.bk; $('#laps').value = trk.laps;
+    $('#width').value = trk.w; $('#walls').checked = !!trk.wl; $('#wideCorners').checked = !!trk.wc; $('#banking').checked = !!trk.bk; $('#laps').value = trk.laps;
     setup.reverse = !!trk.rv; $('#btnRev').classList.toggle('sel', setup.reverse);
     readSetup(); syncLabels(); mapDirty = true; drawEditorBase(); refreshRoute(); drawEditor(); updateStartBtn();
   } catch (e) { $('#busy').hidden = true; }
