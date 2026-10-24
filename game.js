@@ -1,7 +1,7 @@
 (() => {
 'use strict';
 const $ = s => document.querySelector(s);
-const G = 9.81, N = 513, DT = 1 / 240;
+const G = 9.81, N = 513, DT = 1 / 240, GRAVEL_MAX_GRADE = 0.08;
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const smooth = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
 const fmt = t => { if (!(t >= 0) || !isFinite(t)) return '–'; const m = Math.floor(t / 60), s = t - m * 60; return m + ':' + (s < 10 ? '0' : '') + s.toFixed(3); };
@@ -995,7 +995,18 @@ function buildWorld() {
   if (!W.city) {
     const Ks = Float32Array.from(KA); smoothCirc(Ks, 6, 2);
     const g0 = new Int8Array(n); for (let k = 0; k < n; k++) if (Math.abs(Ks[k]) > 1 / 170) g0[k] = Ks[k] > 0 ? -1 : 1;
-    for (let k = 0; k < n; k++) if (g0[k]) for (let o = -4; o <= Math.round(70 / W.ds); o++) { const j = (k + o + n) % n; if (!W.grav[j]) W.grav[j] = g0[k]; }
+    // no gravel where the run-off is steeper than 8 % (along the track or across the trap): on a 11–15 % slope gravel's rolling
+    // drag (0.18) plus the climb asks more than its grip (0.6 on the driven rear axle) can give, so a car that stops there
+    // can never drive out. Real circuits put gravel on flat run-off for the same reason; steep run-off stays grass
+    const steep = (j, sd) => {
+      const hs = sd > 0 ? W.hwL[j] : W.hwR[j], at = (kk, t) => Hq(X[kk] + LX[kk] * t * sd, Z[kk] + LZ[kk] * t * sd), a = (j - 5 + n) % n, b = (j + 5) % n;
+      let g = Math.abs(TH[b] - TH[a]) / (10 * W.ds);
+      for (const t of [hs + 1.5, hs + 9, hs + 17]) g = Math.max(g, Math.abs(at(b, t) - at(a, t)) / (10 * W.ds));
+      for (const [t0, t1] of [[hs + 1.5, hs + 6.5], [hs + 6.5, hs + 11.5], [hs + 11.5, hs + 17]]) g = Math.max(g, Math.abs(at(j, t1) - at(j, t0)) / (t1 - t0));
+      return g > GRAVEL_MAX_GRADE;
+    };
+    for (let k = 0; k < n; k++) if (g0[k]) for (let o = -4; o <= Math.round(70 / W.ds); o++) { const j = (k + o + n) % n; if (!W.grav[j] && !steep(j, g0[k])) W.grav[j] = g0[k]; }
+    for (let k = 0; k < n; ) { if (!W.grav[k]) { k++; continue; } let e = k; while (e < n && W.grav[e] === W.grav[k]) e++; if ((e - k) * W.ds < 20 && k > 0 && e < n) W.grav.fill(0, k, e); k = e; } // no gravel scraps
   }
   W.wallL = new Float32Array(n).fill(Infinity); W.wallR = new Float32Array(n).fill(Infinity);
   if (setup.walls) for (let k = 0; k < n; k++) for (const side of [1, -1]) {
