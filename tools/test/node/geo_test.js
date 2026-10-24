@@ -5,6 +5,7 @@
 // 1. OSM import (parseOSM): lat/lon → local metres. Distances between known points against a WGS84 geodesic
 //    (Vincenty inverse, written out below) must agree within 0.5 %. Taipei (25°N) and 0°, 45°, 60°.
 // 2. Height-map tiles named z_x_y: tile bounds from tile2lon / tile2lat corners; ground size against the geodesic.
+//    Zoom + latitude typed in: tile width against the geodesic, and the slope the game builds against the real slope.
 // 3. Terrarium decoding: a synthetic Terrarium image whose slope crosses the R-channel carry (−1 m = R 127 G 255 B 0,
 //    0 m = R 128 G 0 B 0) and the G-channel carry. The old path (draw the encoded image onto an N×N canvas with
 //    smoothing, then decode) is modelled byte for byte; the new path decodes metres at native size, then resamples.
@@ -24,7 +25,7 @@ function cut(name) {
   for (; j < src.length; j++) { const c = src[j]; if (c === '{') d++; else if (c === '}' && --d === 0) break; }
   return src.slice(i, j + 1);
 }
-const NAMES = ['degMetres', 'lonLatProjector', 'tile2lon', 'tile2lat', 'tileGround', 'tileFromName', 'decodeHeightPixels', 'resampleAxis', 'resampleGrid'];
+const NAMES = ['degMetres', 'lonLatProjector', 'tile2lon', 'tile2lat', 'tileGround', 'tileFromName', 'tileWidthM', 'heightScale', 'fitSize', 'decodeHeightPixels', 'resampleAxis', 'resampleGrid'];
 const ctx = { Math, Float32Array, Float64Array, Uint8ClampedArray, Number, isFinite, clamp: (v, a, b) => Math.max(a, Math.min(b, v)) };
 vm.createContext(ctx);
 vm.runInContext(NAMES.map(cut).join('\n') + '\n;this.F = { ' + NAMES.join(', ') + ' };', ctx);
@@ -92,6 +93,24 @@ projTest('taipei_10km', ring(25.04, 121.53, 5));
   check(inside, 'tile corners do not contain the point the tile was computed from');
   check(Math.abs(t.sx - gEW) / gEW < 0.005 && Math.abs(t.sz - gNS) / gNS < 0.005, 'tile ground size off by ≥ 0.5 %');
   check(parsed && parsed.z === z && parsed.x === x && parsed.y === y && parsed2 && parsed2.x === x && !bad, 'tile file name parsing');
+}
+
+// ---------------------------------------------------------------- 2b. height maps of known real width (file name, zoom + latitude, or km typed in)
+{
+  const rows = [];
+  for (const [z, lat] of [[12, 25.0456], [13, 25.0], [14, 25.0], [10, 23.5], [12, 45], [15, 60]]) {
+    // reference: geodesic E–W width of a tile at that latitude
+    const n = 2 ** z, w = 360 / n, gW = vincenty(lat, 121, lat, 121 + w), mW = F.tileWidthM(z, lat);
+    // a straight ramp rising 100 m across the image: its real slope against the slope the game builds
+    const size = F.fitSize(mW), k = F.heightScale(mW, size), realSlope = 100 / mW, gameSlope = 100 * k / size, unknownSlope = 100 / 2400;
+    rows.push({ z, lat, tileWidth_m: Math.round(mW), geodesic_m: Math.round(gW), widthErrPct: +((mW - gW) / gW * 100).toFixed(4), mapSize_m: size, heightScale: +k.toFixed(4),
+      slopeErrPct: +((gameSlope - realSlope) / realSlope * 100).toFixed(4), slopeIfUnknownAt2400m_x: +(unknownSlope / realSlope).toFixed(2) });
+    check(Math.abs(mW - gW) / gW < 0.005, `tile width z${z} ${lat}°`); check(Math.abs(gameSlope - realSlope) / realSlope < 0.005, `slope kept z${z} ${lat}°`);
+  }
+  // the tile used in section 2: the zoom + latitude path agrees with the corner path
+  const t = report.tile.bounds; check(Math.abs(F.tileWidthM(12, (t.n + t.s) / 2) - t.sx) / t.sx < 0.001, 'tileWidthM vs tileGround');
+  check(F.fitSize(500) === 1000 && F.fitSize(2217) === 2200 && F.fitSize(8869) === 6000 && F.heightScale(0, 2400) === 1, 'fitSize / heightScale limits');
+  report.realWidth = rows;
 }
 
 // ---------------------------------------------------------------- 3. Terrarium

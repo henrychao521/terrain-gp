@@ -189,7 +189,8 @@ function genPreset(name, seed) {
     else h = fbm(nz, u * 4.5, v * 4.5, 6, 0.5);
     a[j * N + i] = h;
   }
-  normalize01(a); TER.meters = null; TER.source = name;
+  normalize01(a); TER.meters = null; TER.metersRaw = null; TER.realW = null; TER.source = name;
+  const rs = document.getElementById('realSize'); if (rs) rs.hidden = true;
 }
 function applyTerrainScale() {
   const raw = TER.raw;
@@ -244,32 +245,56 @@ async function imagePixels(file) {
   try { await new Promise((ok, bad) => { img.onload = ok; img.onerror = bad; img.src = url; }); const [w, h] = fit(img.naturalWidth || img.width, img.naturalHeight || img.height), px = draw(img, w, h); px.srcW = img.naturalWidth || img.width; px.srcH = img.naturalHeight || img.height; return px; }
   finally { URL.revokeObjectURL(url); }
 }
+// E–W ground width of one slippy-map tile at zoom z and latitude lat (WGS84), metres
+function tileWidthM(z, lat) { return 360 / 2 ** z * degMetres(lat)[0]; }
+// real ground width w (m) on a map of side size (m): the heights are scaled by the same factor, so slopes stay real
+const heightScale = (w, size) => (w > 0 ? size / w : 1);
+const fitSize = w => clamp(Math.round(w / 100) * 100, 1000, 6000);
+// TER.metersRaw: the decoded heights (m, N×N); TER.realW: the image's real width (m) or null when unknown
+function applyHeightScale(setSize) {
+  const raw = TER.metersRaw; if (!raw) return;
+  if (TER.realW && setSize) { TER.size = fitSize(TER.realW); $('#size').value = TER.size; }
+  const k = TER.realW ? heightScale(TER.realW, TER.size) : 1, m = new Float32Array(raw.length);
+  let lo = Infinity, hi = -Infinity; for (const v of raw) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  for (let i = 0; i < m.length; i++) m[i] = (TER.inv ? hi - raw[i] : raw[i] - lo) * k;
+  TER.meters = m; TER.base = Math.max(0, Math.round(lo)); TER.range = Math.round((hi - lo) * k);
+  $('#base').value = TER.base; $('#range').value = Math.min(500, TER.range);
+  const km = v => (v / 1000).toFixed(2).replace(/\.?0+$/, '');
+  $('#fileInfo').textContent = `${TER.fileInfo}，實際海拔 ${Math.round(lo)}–${Math.round(hi)} m（高低差 ${Math.round(hi - lo)} m）。` + (TER.realW
+    ? `實際寬度 ${km(TER.realW)} km（${TER.realSrc}），地圖邊長 ${km(TER.size)} km` + (Math.abs(k - 1) > 0.01 ? `，高度一起縮放為 ${k.toFixed(2)} 倍，坡度和實際相同。` : '，坡度和實際相同。')
+    : '實際寬度未知：坡度會隨「地圖邊長」改變。請在下方填入實際寬度或縮放層級。');
+}
 async function loadHeightImage(file) {
   let px; try { px = await imagePixels(file); } catch (e) { $('#fileInfo').textContent = '無法讀取這個檔案。請使用 PNG 或 JPG 圖片。'; return; }
   const enc = $('#enc').value, inv = $('#invert').checked, raw = decodeHeightPixels(px.d, px.w, px.h, enc), dims = `${px.srcW}×${px.srcH}`;
   if (enc === 'terrarium') {
     const m = resampleGrid(raw, px.w, px.h, N);
     blur(m, 1);
-    let lo = Infinity, hi = -Infinity; for (const v of m) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
-    for (let i = 0; i < m.length; i++) m[i] = inv ? hi - m[i] : m[i] - lo;
-    TER.meters = m; TER.base = Math.max(0, Math.round(lo)); TER.range = Math.round(hi - lo);
-    $('#base').value = TER.base; $('#range').value = Math.min(500, TER.range);
-    // a z_x_y tile: its real ground size sets the map size, so slopes stay real (the map is square; the tile is within 1 %)
-    const t = tileFromName(file.webkitRelativePath || file.name); let sizeNote = '水平尺寸由「地圖邊長」決定（檔名若是 z_x_y.png 的圖磚會自動換算實際大小）。';
-    if (t) { const g = tileGround(t.z, t.x, t.y), side = (g.sx + g.sz) / 2, set = clamp(Math.round(side / 100) * 100, 1000, 6000);
-      $('#size').value = set; TER.size = set;
-      sizeNote = `圖磚 z${t.z}/${t.x}/${t.y} 實際約 ${(g.sx / 1000).toFixed(2)} × ${(g.sz / 1000).toFixed(2)} km` + (Math.abs(set - side) / side > 0.03 ? `，超出可用範圍，地圖邊長設為 ${(set / 1000).toFixed(1)} km（坡度是實際的 ${(side / set).toFixed(2)} 倍）。` : `，地圖邊長已設為 ${(set / 1000).toFixed(1)} km。`); }
-    $('#fileInfo').textContent = `${file.name}：${dims}，實際海拔 ${Math.round(lo)}–${Math.round(hi)} m（高低差 ${Math.round(hi - lo)} m）。${sizeNote}`;
+    Object.assign(TER, { metersRaw: m, inv, fileInfo: `${file.name}：${dims}`, realW: null, realSrc: '' });
+    // a z_x_y tile: its real ground size from the tile's corners (the map is square; the tile is within 1 %)
+    const t = tileFromName(file.webkitRelativePath || file.name);
+    if (t) { const g = tileGround(t.z, t.x, t.y); TER.realW = (g.sx + g.sz) / 2; TER.realSrc = `檔名 z${t.z}/${t.x}/${t.y}`; $('#tileZ').value = String(t.z); $('#tileLat').value = ((g.n + g.s) / 2).toFixed(2); }
+    else $('#tileZ').value = '';
+    $('#realKm').value = TER.realW ? (TER.realW / 1000).toFixed(2) : '';
+    $('#realSize').hidden = false;
+    applyHeightScale(true);
   } else {
     const a = TER.norm; a.set(resampleGrid(raw, px.w, px.h, N));
     if (inv) for (let i = 0; i < a.length; i++) a[i] = 1 - a[i];
-    blur(a, 3); normalize01(a); TER.meters = null;
+    blur(a, 3); normalize01(a); TER.meters = null; TER.metersRaw = null; TER.realW = null; $('#realSize').hidden = true;
     $('#fileInfo').textContent = `${file.name}：${dims}，已重新取樣為 ${N}×${N}。高低差由下方滑桿決定。`;
   }
   TER.source = 'file';
   document.querySelectorAll('#presets .btn').forEach(b => b.classList.remove('sel'));
   syncLabels(); mapChanged();
 }
+$('#realKm').addEventListener('change', () => { const v = +$('#realKm').value; TER.realW = v > 0 ? v * 1000 : null; TER.realSrc = '手動輸入'; $('#tileZ').value = ''; applyHeightScale(true); syncLabels(); mapChanged(); });
+for (const id of ['tileZ', 'tileLat']) $('#' + id).addEventListener('change', () => {
+  if (!$('#tileZ').value) return;
+  const z = +$('#tileZ').value, lat = clamp(+$('#tileLat').value || 0, -85, 85);
+  TER.realW = tileWidthM(z, lat); TER.realSrc = `一張 z${z} 圖磚、緯度 ${lat}°`; $('#realKm').value = (TER.realW / 1000).toFixed(2);
+  applyHeightScale(true); syncLabels(); mapChanged();
+});
 
 /* ================= City maps (Taipei data file, or an imported .osm) ================= */
 const CITY = { taipei: null, osm: null };
@@ -2820,7 +2845,7 @@ function applyLevel() {
 }
 document.querySelectorAll('#level button').forEach(b => b.onclick = () => { setup.level = b.dataset.l; applyLevel(); readSetup(); });
 function mapChanged() { mapDirty = true; drawEditorBase(); drawEditor(); updateStartBtn(); }
-['size', 'range', 'base'].forEach(id => $('#' + id).addEventListener('input', () => { syncLabels(); readSetup(); mapDirty = true; if (id !== 'base' && setup.map === 'terrain') { drawEditorBase(); drawEditor(); } updateStartBtn(); }));
+['size', 'range', 'base'].forEach(id => $('#' + id).addEventListener('input', () => { syncLabels(); readSetup(); if (id === 'size' && TER.metersRaw && TER.realW && TER.source === 'file') applyHeightScale(false); /* known real width: keep slopes real */ mapDirty = true; if (id !== 'base' && setup.map === 'terrain') { drawEditorBase(); drawEditor(); } updateStartBtn(); }));
 ['width', 'banking', 'walls', 'wideCorners'].forEach(id => $('#' + id).addEventListener('input', () => { syncLabels(); readSetup(); mapDirty = true; updateStartBtn(); }));
 ['aero', 'bias', 'tc', 'abs', 'auto', 'steer', 'assist', 'autogas', 'sound', 'touchOn', 'laps', 'aiCount', 'aiSkill'].forEach(id => $('#' + id).addEventListener('input', () => { syncLabels(); readSetup(); applyControls(); }));
 document.querySelectorAll('#presets .btn').forEach(b => b.onclick = () => {
