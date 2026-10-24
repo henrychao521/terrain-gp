@@ -670,7 +670,19 @@ function gridSample(arr, x, z) {
   const p = arr[o], q = arr[o + 1], c = arr[o + W.nx], d = arr[o + W.nx + 1];
   return p + (q - p) * a + (c - p) * b + (p - q - c + d) * a * b;
 }
-const Hq = (x, z) => gridSample(W.H, x, z);
+// the ground as drawn: the ground mesh splits every cell (i, j) along the diagonal (i+1, j)–(i, j+1) (its index buffer in
+// buildMeshes), so heights come from the triangle under (x, z), not a bilinear blend of the four corners (on the steep
+// generated terrain the two differed by up to 0.115 m and the drawn ground poked through the asphalt; tools/test/js/height_mesh.js)
+function gridTri(arr, x, z) {
+  const fx = clamp((x + W.sx / 2) / W.sx * (W.nx - 1), 0, W.nx - 1.0001), fz = clamp((z + W.sz / 2) / W.sz * (W.nz - 1), 0, W.nz - 1.0001);
+  const i = fx | 0, j = fz | 0, a = fx - i, b = fz - j, o = j * W.nx + i;
+  const p = arr[o], q = arr[o + 1], c = arr[o + W.nx], d = arr[o + W.nx + 1];
+  return a + b <= 1 ? p + (q - p) * a + (c - p) * b   // triangle (i, j), (i+1, j), (i, j+1)
+    : d + (d - c) * (a - 1) + (d - q) * (b - 1);        // triangle (i+1, j), (i, j+1), (i+1, j+1)
+}
+const Hq = (x, z) => gridTri(W.H, x, z);
+// the slope of the drawn triangles over the car's footprint (±1.5 m). Not the plane of the single triangle under the
+// car: that normal jumps at every crease (up to 8° per frame on 丘陵, measured), which the car's attitude and grade force follow
 function normalAt(x, z, out) { const e = 1.5; out.set(-(Hq(x + e, z) - Hq(x - e, z)) / (2 * e), 1, -(Hq(x, z + e) - Hq(x, z - e)) / (2 * e)).normalize(); return out; }
 function smoothCirc(a, rad, passes) {
   const n = a.length, tmp = new Float32Array(n);
