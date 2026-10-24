@@ -15,6 +15,9 @@ no ids, and a geometric match also survives OSM edits):
             least half of its length lies within "tol" metres (default 4) of it and it runs the same way
   "width_m": new carriageway width (the game's track uses the full width of the way it drives)
   "lanes":   new lane count (optional)
+  "pieces":  [{"to": [X, Y], "width_m": w}, ..., {"width_m": w}] split the matched road at the points "to" (in the
+            direction of travel along "along") and give each piece its own width (null: keep the OSM width); for a road
+            whose kerb distance changes along it (艋舺大道). The pieces share the split nodes, so the street graph stays joined.
   "shift":   [[X, Y, d], ...] move the road d metres to the right of the "along" direction (negative: left), linearly
             between the points and tapering to 0 over "taper_m" beyond the first and the last one. Junction nodes move
             with it in every other road that shares them, so the street graph stays connected; signals and crossings
@@ -71,21 +74,59 @@ def _shift_at(p, o):
     return u[1] * d, -u[0] * d  # right of the direction of travel
 
 
+def _split(r, line, cuts):
+    """split road record r at the arc lengths cuts (along line); returns [(record, arc length of its middle)]"""
+    pts = _pts(r); out = [[]]; mids = []
+    def flush(): pass
+    S = [(_proj(p, line)[1]) for p in pts]
+    for i, p in enumerate(pts):
+        if i:
+            a, b, sa, sb = pts[i - 1], p, S[i - 1], S[i]
+            for c in cuts:
+                if (sa - c) * (sb - c) < 0:  # a cut between these two vertices: new shared vertex
+                    f = (c - sa) / (sb - sa); q = (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f)
+                    out[-1].append(q); out.append([q])
+        out[-1].append(p)
+    recs = []
+    for seg in out:
+        if len(seg) < 2: continue
+        rec = r[:6] + [round(v * 10) for q in seg for v in q]
+        recs.append((rec, _proj(((seg[0][0] + seg[-1][0]) / 2, (seg[0][1] + seg[-1][1]) / 2), line)[1]))
+    return recs
+
+
 def apply(osm, overrides, log=print):
     """modify osm (the taipei_osm.json dict) in place; returns a list of what changed"""
     roads = osm['roads']
+    n0 = (osm.get('overridden') or {}).get('roads0')
+    if n0: del roads[n0:]  # pieces an earlier application split off
     for i, rec in (osm.get('overridden') or {}).get('orig', {}).items():  # undo an earlier application
         roads[int(i)] = rec
     for k in ('signals', 'crossings'):
         if (osm.get('overridden') or {}).get(k): osm[k] = osm['overridden'][k]
     osm.pop('overridden', None)
-    orig, changes = {}, []
+    orig, changes, roads0 = {}, [], len(roads)
     sig0, cr0 = copy.deepcopy(osm.get('signals', [])), copy.deepcopy(osm.get('crossings', []))
     for o in overrides.get('roads', []):
         hit = [i for i, r in enumerate(roads) if _matches(r, o)]
         if not hit:
             log(f"override {o['name']}: no road matched"); changes.append({'name': o['name'], 'roads': 0}); continue
         moved = {}
+        if 'pieces' in o:  # split first; the widths go with the pieces
+            line = o['along']; ends = [_proj(pc['to'], line)[1] for pc in o['pieces'] if 'to' in pc]
+            npieces = 0
+            for i in list(hit):
+                orig.setdefault(str(i), copy.deepcopy(roads[i]))
+                parts = _split(roads[i], line, ends)
+                for j, (rec, mid) in enumerate(parts):
+                    w = o['pieces'][sum(1 for e in ends if mid > e)].get('width_m')
+                    if w: rec[4] = round(w * 10)
+                    if j == 0: roads[i] = rec
+                    else: roads.append(rec)
+                npieces += len(parts)
+            changes.append({'name': o['name'], 'roads': len(hit), 'pieces': npieces, 'widths': [pc.get('width_m') for pc in o['pieces']]})
+            log(f"override {o['name']}: {len(hit)} roads split into {npieces} pieces, widths {[pc.get('width_m') for pc in o['pieces']]}")
+            continue
         for i in hit:
             orig.setdefault(str(i), copy.deepcopy(roads[i])); r = roads[i]
             if 'width_m' in o: r[4] = round(o['width_m'] * 10)
@@ -107,7 +148,7 @@ def apply(osm, overrides, log=print):
         mx = max((math.hypot(*d) / 10 for d in moved.values()), default=0)
         changes.append({'name': o['name'], 'roads': len(hit), 'width_m': o.get('width_m'), 'lanes': o.get('lanes'), 'nodesMoved': len(moved), 'maxShiftM': round(mx, 1)})
         log(f"override {o['name']}: {len(hit)} roads" + (f", width {o['width_m']} m" if 'width_m' in o else '') + (f", {len(moved)} nodes moved up to {mx:.1f} m" if moved else ''))
-    osm['overridden'] = {'file': 'data/taipei_overrides.json', 'changes': changes, 'orig': orig,
+    osm['overridden'] = {'file': 'data/taipei_overrides.json', 'changes': changes, 'orig': orig, 'roads0': roads0,
                          **({'signals': sig0} if osm.get('signals') != sig0 else {}), **({'crossings': cr0} if osm.get('crossings') != cr0 else {})}
     return changes
 
